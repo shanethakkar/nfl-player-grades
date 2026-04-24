@@ -16,7 +16,7 @@ class TestZScore:
         # Sample SD (ddof=1) of 0..4 is sqrt(2.5); mean is 2.
         expected_sd = np.sqrt(2.5)
         assert z.iloc[0] == pytest.approx((0 - 2) / expected_sd)
-        assert z.iloc[2] == pytest.approx(0.0)    # mean
+        assert z.iloc[2] == pytest.approx(0.0)  # mean
         # Mean should be ~0, SD should be 1.
         assert z.mean() == pytest.approx(0.0, abs=1e-12)
         assert z.std(ddof=1) == pytest.approx(1.0)

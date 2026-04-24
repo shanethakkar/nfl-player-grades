@@ -42,52 +42,58 @@ def _make_game_row(
 
 class TestAggregate:
     def test_sums_snaps_across_games(self) -> None:
-        df = pd.DataFrame([
-            _make_game_row(pfr_id="MahoPa00", week=1, off_snaps=70, off_pct=1.0),
-            _make_game_row(pfr_id="MahoPa00", week=2, off_snaps=65, off_pct=1.0),
-            _make_game_row(pfr_id="MahoPa00", week=3, off_snaps=72, off_pct=1.0),
-        ])
+        df = pd.DataFrame(
+            [
+                _make_game_row(pfr_id="MahoPa00", week=1, off_snaps=70, off_pct=1.0),
+                _make_game_row(pfr_id="MahoPa00", week=2, off_snaps=65, off_pct=1.0),
+                _make_game_row(pfr_id="MahoPa00", week=3, off_snaps=72, off_pct=1.0),
+            ]
+        )
         rows, skipped = _aggregate(df, 2024, {"MahoPa00": 100})
         assert skipped == 0
         assert len(rows) == 1
         r = rows[0]
         assert r["player_id"] == 100
         assert r["games"] == 3
-        assert r["games_started"] == 3       # all 100% snap rate -> started all
+        assert r["games_started"] == 3  # all 100% snap rate -> started all
         assert r["snaps_offense"] == 207
         assert r["snaps_defense"] == 0
         assert r["snaps_special"] == 0
 
     def test_started_heuristic_respects_primary_phase(self) -> None:
         # Defensive player with 3 games started (def_pct >= 0.5), 1 cameo.
-        df = pd.DataFrame([
-            _make_game_row(pfr_id="DefGuy00", week=1, def_snaps=60, def_pct=1.00),
-            _make_game_row(pfr_id="DefGuy00", week=2, def_snaps=55, def_pct=0.92),
-            _make_game_row(pfr_id="DefGuy00", week=3, def_snaps=50, def_pct=0.83),
-            _make_game_row(pfr_id="DefGuy00", week=4, def_snaps=10, def_pct=0.15,
-                           st_snaps=5, st_pct=0.25),
-        ])
+        df = pd.DataFrame(
+            [
+                _make_game_row(pfr_id="DefGuy00", week=1, def_snaps=60, def_pct=1.00),
+                _make_game_row(pfr_id="DefGuy00", week=2, def_snaps=55, def_pct=0.92),
+                _make_game_row(pfr_id="DefGuy00", week=3, def_snaps=50, def_pct=0.83),
+                _make_game_row(
+                    pfr_id="DefGuy00", week=4, def_snaps=10, def_pct=0.15, st_snaps=5, st_pct=0.25
+                ),
+            ]
+        )
         rows, _ = _aggregate(df, 2024, {"DefGuy00": 200})
         r = rows[0]
         assert r["games"] == 4
         assert r["games_started"] == 3
 
     def test_specialist_uses_st_phase_for_started(self) -> None:
-        df = pd.DataFrame([
-            _make_game_row(pfr_id="Kicker00", week=w, st_snaps=5, st_pct=0.9)
-            for w in range(1, 4)
-        ])
+        df = pd.DataFrame(
+            [_make_game_row(pfr_id="Kicker00", week=w, st_snaps=5, st_pct=0.9) for w in range(1, 4)]
+        )
         rows, _ = _aggregate(df, 2024, {"Kicker00": 300})
         assert rows[0]["games_started"] == 3
         assert rows[0]["snaps_special"] == 15
 
     def test_unmatched_pfr_is_skipped_and_counted(self) -> None:
-        df = pd.DataFrame([
-            _make_game_row(pfr_id="KnownGuy", week=1, off_snaps=50, off_pct=1.0),
-            _make_game_row(pfr_id="UnknownA", week=1, off_snaps=10, off_pct=0.2),
-            _make_game_row(pfr_id="UnknownA", week=2, off_snaps=12, off_pct=0.2),
-            _make_game_row(pfr_id="UnknownB", week=1, st_snaps=5, st_pct=0.2),
-        ])
+        df = pd.DataFrame(
+            [
+                _make_game_row(pfr_id="KnownGuy", week=1, off_snaps=50, off_pct=1.0),
+                _make_game_row(pfr_id="UnknownA", week=1, off_snaps=10, off_pct=0.2),
+                _make_game_row(pfr_id="UnknownA", week=2, off_snaps=12, off_pct=0.2),
+                _make_game_row(pfr_id="UnknownB", week=1, st_snaps=5, st_pct=0.2),
+            ]
+        )
         rows, skipped = _aggregate(df, 2024, {"KnownGuy": 400})
         assert len(rows) == 1
         # Two distinct unmatched pfr_ids.
@@ -96,11 +102,13 @@ class TestAggregate:
     def test_traded_player_sums_across_teams(self) -> None:
         # Same pfr_id played for two different teams across the season;
         # totals should be combined (we attribute to end-of-season team).
-        df = pd.DataFrame([
-            _make_game_row(pfr_id="Traded00", week=1, off_snaps=50, off_pct=0.8),
-            _make_game_row(pfr_id="Traded00", week=2, off_snaps=55, off_pct=0.85),
-            _make_game_row(pfr_id="Traded00", week=10, off_snaps=60, off_pct=0.90),
-        ])
+        df = pd.DataFrame(
+            [
+                _make_game_row(pfr_id="Traded00", week=1, off_snaps=50, off_pct=0.8),
+                _make_game_row(pfr_id="Traded00", week=2, off_snaps=55, off_pct=0.85),
+                _make_game_row(pfr_id="Traded00", week=10, off_snaps=60, off_pct=0.90),
+            ]
+        )
         rows, _ = _aggregate(df, 2024, {"Traded00": 500})
         r = rows[0]
         assert r["games"] == 3
@@ -133,9 +141,7 @@ def conn():
 
 @pytest.fixture
 def kc_team_id(conn) -> int:
-    row = conn.execute(
-        text("SELECT team_id FROM team_aliases WHERE alias = 'KC'")
-    ).first()
+    row = conn.execute(text("SELECT team_id FROM team_aliases WHERE alias = 'KC'")).first()
     if row is None:
         pytest.skip("team_aliases not seeded")
     return row[0]
@@ -162,11 +168,17 @@ class TestUpdatePlayerSeasons:
             {"p": player_id, "t": kc_team_id},
         )
 
-        agg = [{
-            "player_id": player_id, "season": 1999,
-            "games": 17, "games_started": 16,
-            "snaps_offense": 1100, "snaps_defense": 0, "snaps_special": 0,
-        }]
+        agg = [
+            {
+                "player_id": player_id,
+                "season": 1999,
+                "games": 17,
+                "games_started": 16,
+                "snaps_offense": 1100,
+                "snaps_defense": 0,
+                "snaps_special": 0,
+            }
+        ]
         updated = _update_player_seasons(conn, agg, 1999)
         assert updated == 1
 
@@ -182,9 +194,7 @@ class TestUpdatePlayerSeasons:
     def test_empty_is_noop(self, conn) -> None:
         assert _update_player_seasons(conn, [], 1999) == 0
 
-    def test_no_matching_player_season_row_is_silent(
-        self, conn, kc_team_id: int
-    ) -> None:
+    def test_no_matching_player_season_row_is_silent(self, conn, kc_team_id: int) -> None:
         # Insert a player but NO player_seasons row for 1999.
         player_id = conn.execute(
             text("""
@@ -194,10 +204,16 @@ class TestUpdatePlayerSeasons:
             """),
             {"t": kc_team_id},
         ).scalar_one()
-        agg = [{
-            "player_id": player_id, "season": 1999,
-            "games": 5, "games_started": 3,
-            "snaps_offense": 200, "snaps_defense": 0, "snaps_special": 10,
-        }]
+        agg = [
+            {
+                "player_id": player_id,
+                "season": 1999,
+                "games": 5,
+                "games_started": 3,
+                "snaps_offense": 200,
+                "snaps_defense": 0,
+                "snaps_special": 10,
+            }
+        ]
         updated = _update_player_seasons(conn, agg, 1999)
         assert updated == 0

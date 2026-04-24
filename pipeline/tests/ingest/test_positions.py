@@ -23,11 +23,11 @@ class TestDirectGroups:
         [
             ("QB", "QB", "QB"),
             ("RB", "RB", "RB"),
-            ("RB", "FB", "RB"),     # FB grades as RB in v1
-            ("FB", "FB", "RB"),     # FB-only group also maps to RB
+            ("RB", "FB", "RB"),  # FB grades as RB in v1
+            ("FB", "FB", "RB"),  # FB-only group also maps to RB
             ("WR", "WR", "WR"),
             ("TE", "TE", "TE"),
-            ("OL", "T", "OL"),      # all OL collapses
+            ("OL", "T", "OL"),  # all OL collapses
             ("OL", "G", "OL"),
             ("OL", "C", "OL"),
             ("LB", "ILB", "LB"),
@@ -140,9 +140,18 @@ class TestCanonicalSet:
         # Sample inputs covering every return path; their outputs must all
         # be in the canonical set.
         cases = [
-            ("QB", "QB"), ("RB", "RB"), ("WR", "WR"), ("TE", "TE"),
-            ("OL", "T"), ("DL", "DT"), ("DL", "DE"), ("LB", "ILB"),
-            ("DB", "CB"), ("DB", "FS"), ("SPEC", "K"), ("SPEC", "P"),
+            ("QB", "QB"),
+            ("RB", "RB"),
+            ("WR", "WR"),
+            ("TE", "TE"),
+            ("OL", "T"),
+            ("DL", "DT"),
+            ("DL", "DE"),
+            ("LB", "ILB"),
+            ("DB", "CB"),
+            ("DB", "FS"),
+            ("SPEC", "K"),
+            ("SPEC", "P"),
             ("SPEC", "LS"),
         ]
         outputs = {canonical_position(g, p) for g, p in cases}

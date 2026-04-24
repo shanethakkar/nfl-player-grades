@@ -55,61 +55,103 @@ StatType = Literal["passing", "rushing", "receiving"]
 
 
 _PASSING_METRIC_COLS: tuple[str, ...] = (
-    "avg_time_to_throw", "avg_completed_air_yards", "avg_intended_air_yards",
-    "avg_air_yards_differential", "aggressiveness",
-    "max_completed_air_distance", "avg_air_yards_to_sticks",
-    "attempts", "pass_yards", "pass_touchdowns", "interceptions",
-    "completions", "passer_rating", "completion_percentage",
-    "expected_completion_percentage", "completion_percentage_above_expectation",
-    "avg_air_distance", "max_air_distance",
+    "avg_time_to_throw",
+    "avg_completed_air_yards",
+    "avg_intended_air_yards",
+    "avg_air_yards_differential",
+    "aggressiveness",
+    "max_completed_air_distance",
+    "avg_air_yards_to_sticks",
+    "attempts",
+    "pass_yards",
+    "pass_touchdowns",
+    "interceptions",
+    "completions",
+    "passer_rating",
+    "completion_percentage",
+    "expected_completion_percentage",
+    "completion_percentage_above_expectation",
+    "avg_air_distance",
+    "max_air_distance",
 )
-_PASSING_INT_COLS: frozenset[str] = frozenset({
-    "attempts", "pass_yards", "pass_touchdowns", "interceptions", "completions",
-})
+_PASSING_INT_COLS: frozenset[str] = frozenset(
+    {
+        "attempts",
+        "pass_yards",
+        "pass_touchdowns",
+        "interceptions",
+        "completions",
+    }
+)
 
 _RUSHING_METRIC_COLS: tuple[str, ...] = (
-    "efficiency", "percent_attempts_gte_eight_defenders", "avg_time_to_los",
-    "rush_attempts", "rush_yards", "avg_rush_yards", "rush_touchdowns",
-    "expected_rush_yards", "rush_yards_over_expected",
-    "rush_yards_over_expected_per_att", "rush_pct_over_expected",
+    "efficiency",
+    "percent_attempts_gte_eight_defenders",
+    "avg_time_to_los",
+    "rush_attempts",
+    "rush_yards",
+    "avg_rush_yards",
+    "rush_touchdowns",
+    "expected_rush_yards",
+    "rush_yards_over_expected",
+    "rush_yards_over_expected_per_att",
+    "rush_pct_over_expected",
 )
-_RUSHING_INT_COLS: frozenset[str] = frozenset({
-    "rush_attempts", "rush_yards", "rush_touchdowns",
-})
+_RUSHING_INT_COLS: frozenset[str] = frozenset(
+    {
+        "rush_attempts",
+        "rush_yards",
+        "rush_touchdowns",
+    }
+)
 
 _RECEIVING_METRIC_COLS: tuple[str, ...] = (
-    "avg_cushion", "avg_separation", "avg_intended_air_yards",
+    "avg_cushion",
+    "avg_separation",
+    "avg_intended_air_yards",
     "percent_share_of_intended_air_yards",
-    "receptions", "targets", "catch_percentage", "yards", "rec_touchdowns",
-    "avg_yac", "avg_expected_yac", "avg_yac_above_expectation",
+    "receptions",
+    "targets",
+    "catch_percentage",
+    "yards",
+    "rec_touchdowns",
+    "avg_yac",
+    "avg_expected_yac",
+    "avg_yac_above_expectation",
 )
-_RECEIVING_INT_COLS: frozenset[str] = frozenset({
-    "receptions", "targets", "yards", "rec_touchdowns",
-})
+_RECEIVING_INT_COLS: frozenset[str] = frozenset(
+    {
+        "receptions",
+        "targets",
+        "yards",
+        "rec_touchdowns",
+    }
+)
 
 
 @dataclass(frozen=True)
 class _Spec:
     stat_type: StatType
     table: str
-    source: str                       # key in the cache registry
+    source: str  # key in the cache registry
     metric_cols: tuple[str, ...]
     int_cols: frozenset[str]
 
 
 _SPECS: dict[StatType, _Spec] = {
-    "passing": _Spec("passing", "ngs_passing", "ngs_passing",
-                     _PASSING_METRIC_COLS, _PASSING_INT_COLS),
-    "rushing": _Spec("rushing", "ngs_rushing", "ngs_rushing",
-                     _RUSHING_METRIC_COLS, _RUSHING_INT_COLS),
-    "receiving": _Spec("receiving", "ngs_receiving", "ngs_receiving",
-                       _RECEIVING_METRIC_COLS, _RECEIVING_INT_COLS),
+    "passing": _Spec(
+        "passing", "ngs_passing", "ngs_passing", _PASSING_METRIC_COLS, _PASSING_INT_COLS
+    ),
+    "rushing": _Spec(
+        "rushing", "ngs_rushing", "ngs_rushing", _RUSHING_METRIC_COLS, _RUSHING_INT_COLS
+    ),
+    "receiving": _Spec(
+        "receiving", "ngs_receiving", "ngs_receiving", _RECEIVING_METRIC_COLS, _RECEIVING_INT_COLS
+    ),
 }
 
 
-_PK_COLS: tuple[str, ...] = (
-    "player_id", "season", "season_type", "week", "team_id"
-)
+_PK_COLS: tuple[str, ...] = ("player_id", "season", "season_type", "week", "team_id")
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +250,9 @@ def _transform(
 ) -> tuple[list[dict[str, object]], int, int]:
     """Project + resolve IDs + coerce types. Returns (rows, skipped_player, skipped_team)."""
     # All PK source cols + metric cols must be present.
-    required = {"player_gsis_id", "season", "season_type", "week", "team_abbr"} | set(spec.metric_cols)
+    required = {"player_gsis_id", "season", "season_type", "week", "team_abbr"} | set(
+        spec.metric_cols
+    )
     missing = required - set(df.columns)
     if missing:
         raise RuntimeError(
@@ -237,14 +281,14 @@ def _transform(
 
         row: dict[str, object] = {
             "player_id": player_id,
-            "season": season,       # enforce invariant
+            "season": season,  # enforce invariant
             "season_type": str(rec.season_type),
             "week": int(rec.week),
             "team_id": team_id,
         }
 
         for col in spec.metric_cols:
-            val = getattr(rec, col)    # col name varies per stat type
+            val = getattr(rec, col)  # col name varies per stat type
             row[col] = _coerce_metric(val, is_int=col in spec.int_cols)
         rows.append(row)
 

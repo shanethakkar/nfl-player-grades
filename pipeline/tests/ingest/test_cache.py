@@ -106,9 +106,7 @@ class TestCacheOrFetch:
         with pytest.raises(ValueError, match="season-agnostic"):
             cache_or_fetch("players", season=2024)
 
-    def test_unknown_source(
-        self, tmp_cache: Path, fake_sources: dict[str, list[int]]
-    ) -> None:
+    def test_unknown_source(self, tmp_cache: Path, fake_sources: dict[str, list[int]]) -> None:
         with pytest.raises(ValueError, match="Unknown source"):
             cache_or_fetch("does_not_exist", season=2024)  # type: ignore[arg-type]
 

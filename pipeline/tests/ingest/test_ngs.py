@@ -51,12 +51,19 @@ class TestCoerceMetric:
 def _passing_row(**overrides) -> dict:
     """Source-shape row (NOT target-shape): mirrors what nflreadpy returns."""
     defaults: dict = {
-        "season": 2024, "season_type": "REG", "week": 0,
-        "player_gsis_id": "00-0033873",   # Mahomes
+        "season": 2024,
+        "season_type": "REG",
+        "week": 0,
+        "player_gsis_id": "00-0033873",  # Mahomes
         "team_abbr": "KC",
     }
     for c in _PASSING_METRIC_COLS:
-        defaults[c] = 1.0 if c not in {"attempts", "pass_yards", "pass_touchdowns", "interceptions", "completions"} else 100
+        defaults[c] = (
+            1.0
+            if c
+            not in {"attempts", "pass_yards", "pass_touchdowns", "interceptions", "completions"}
+            else 100
+        )
     defaults.update(overrides)
     return defaults
 
@@ -65,7 +72,8 @@ class TestTransform:
     def test_passing_roundtrip(self) -> None:
         df = pd.DataFrame([_passing_row()])
         rows, sp, st = _transform(
-            df, _SPECS["passing"],
+            df,
+            _SPECS["passing"],
             team_lookup={"KC": 17},
             player_lookup={"00-0033873": 42},
             season=2024,
@@ -84,12 +92,15 @@ class TestTransform:
         assert isinstance(r["attempts"], int)
 
     def test_skips_unknown_player(self) -> None:
-        df = pd.DataFrame([
-            _passing_row(),
-            _passing_row(player_gsis_id="00-9999999"),   # not in lookup
-        ])
+        df = pd.DataFrame(
+            [
+                _passing_row(),
+                _passing_row(player_gsis_id="00-9999999"),  # not in lookup
+            ]
+        )
         rows, sp, st = _transform(
-            df, _SPECS["passing"],
+            df,
+            _SPECS["passing"],
             team_lookup={"KC": 17},
             player_lookup={"00-0033873": 42},
             season=2024,
@@ -100,7 +111,8 @@ class TestTransform:
     def test_skips_unknown_team(self) -> None:
         df = pd.DataFrame([_passing_row(team_abbr="XYZ")])
         rows, sp, st = _transform(
-            df, _SPECS["passing"],
+            df,
+            _SPECS["passing"],
             team_lookup={"KC": 17},
             player_lookup={"00-0033873": 42},
             season=2024,
@@ -113,7 +125,8 @@ class TestTransform:
         # but be defensive).
         df = pd.DataFrame([_passing_row(player_gsis_id=None)])
         rows, sp, st = _transform(
-            df, _SPECS["passing"],
+            df,
+            _SPECS["passing"],
             team_lookup={"KC": 17},
             player_lookup={"00-0033873": 42},
             season=2024,
@@ -131,10 +144,15 @@ class TestTransform:
     def test_rushing_and_receiving_also_work(self) -> None:
         # Rushing
         rushing_row = {
-            "season": 2024, "season_type": "REG", "week": 0,
-            "player_gsis_id": "00-0035700", "team_abbr": "GB",
-            **{c: (1 if c in {"rush_attempts", "rush_yards", "rush_touchdowns"} else 1.0)
-               for c in _RUSHING_METRIC_COLS},
+            "season": 2024,
+            "season_type": "REG",
+            "week": 0,
+            "player_gsis_id": "00-0035700",
+            "team_abbr": "GB",
+            **{
+                c: (1 if c in {"rush_attempts", "rush_yards", "rush_touchdowns"} else 1.0)
+                for c in _RUSHING_METRIC_COLS
+            },
         }
         rows, _, _ = _transform(
             pd.DataFrame([rushing_row]),
@@ -147,10 +165,15 @@ class TestTransform:
 
         # Receiving
         rec_row = {
-            "season": 2024, "season_type": "REG", "week": 0,
-            "player_gsis_id": "00-0034407", "team_abbr": "ATL",
-            **{c: (1 if c in {"receptions", "targets", "yards", "rec_touchdowns"} else 1.0)
-               for c in _RECEIVING_METRIC_COLS},
+            "season": 2024,
+            "season_type": "REG",
+            "week": 0,
+            "player_gsis_id": "00-0034407",
+            "team_abbr": "ATL",
+            **{
+                c: (1 if c in {"receptions", "targets", "yards", "rec_touchdowns"} else 1.0)
+                for c in _RECEIVING_METRIC_COLS
+            },
         }
         rows, _, _ = _transform(
             pd.DataFrame([rec_row]),
@@ -214,7 +237,7 @@ class TestReplaceSeason:
         # Target-shape row for ngs_passing
         r: dict = {
             "player_id": player_id,
-            "season": 1999,   # use a sentinel season so production data isn't touched
+            "season": 1999,  # use a sentinel season so production data isn't touched
             "season_type": "REG",
             "week": 0,
             "team_id": team_id,
@@ -234,21 +257,16 @@ class TestReplaceSeason:
         # Replace with different data
         rows2 = [self._row(player_id, team_id, attempts=600)]
         _replace_season(conn, "ngs_passing", _PASSING_METRIC_COLS, rows2, 1999)
-        count = conn.execute(
-            text("SELECT COUNT(*) FROM ngs_passing WHERE season=1999")
-        ).scalar()
+        count = conn.execute(text("SELECT COUNT(*) FROM ngs_passing WHERE season=1999")).scalar()
         assert count == 1
 
-        attempts = conn.execute(
-            text("SELECT attempts FROM ngs_passing WHERE season=1999")
-        ).scalar()
+        attempts = conn.execute(text("SELECT attempts FROM ngs_passing WHERE season=1999")).scalar()
         assert attempts == 600
 
     def test_empty_rows_wipes_season(self, conn, player_id, team_id) -> None:
-        _replace_season(conn, "ngs_passing", _PASSING_METRIC_COLS,
-                        [self._row(player_id, team_id)], 1999)
+        _replace_season(
+            conn, "ngs_passing", _PASSING_METRIC_COLS, [self._row(player_id, team_id)], 1999
+        )
         _replace_season(conn, "ngs_passing", _PASSING_METRIC_COLS, [], 1999)
-        count = conn.execute(
-            text("SELECT COUNT(*) FROM ngs_passing WHERE season=1999")
-        ).scalar()
+        count = conn.execute(text("SELECT COUNT(*) FROM ngs_passing WHERE season=1999")).scalar()
         assert count == 0

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-DEFAULT_K = 1.15      # slope; chosen so z=+2 maps to ~90
-DEFAULT_Z0 = 0.0      # center; z=0 -> 50
+DEFAULT_K = 1.15  # slope; chosen so z=+2 maps to ~90
+DEFAULT_Z0 = 0.0  # center; z=0 -> 50
 
 
 def to_grade(

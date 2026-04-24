@@ -43,50 +43,126 @@ logger = logging.getLogger(__name__)
 # appear in the DB table. The rename map handles the one name change
 # (nflverse 'desc' -> 'play_desc' because 'desc' is a SQL reserved word).
 _SOURCE_COLUMNS: tuple[str, ...] = (
-    "game_id", "play_id",
-    "season", "season_type", "week", "game_date",
-    "posteam", "defteam", "home_team", "away_team",
-    "qtr", "down", "ydstogo", "yardline_100", "score_differential",
-    "game_seconds_remaining", "half_seconds_remaining", "wp",
-    "play_type", "qb_dropback", "pass_attempt", "rush_attempt",
-    "sack", "qb_scramble", "qb_spike", "qb_kneel", "aborted_play",
-    "two_point_attempt", "penalty",
-    "passer_player_id", "rusher_player_id", "receiver_player_id",
-    "sack_player_id", "interception_player_id",
-    "yards_gained", "epa", "wpa", "cpoe", "success",
-    "air_yards", "yards_after_catch",
-    "complete_pass", "incomplete_pass", "interception",
-    "fumble", "fumble_lost",
-    "pass_touchdown", "rush_touchdown", "touchdown",
+    "game_id",
+    "play_id",
+    "season",
+    "season_type",
+    "week",
+    "game_date",
+    "posteam",
+    "defteam",
+    "home_team",
+    "away_team",
+    "qtr",
+    "down",
+    "ydstogo",
+    "yardline_100",
+    "score_differential",
+    "game_seconds_remaining",
+    "half_seconds_remaining",
+    "wp",
+    "play_type",
+    "qb_dropback",
+    "pass_attempt",
+    "rush_attempt",
+    "sack",
+    "qb_scramble",
+    "qb_spike",
+    "qb_kneel",
+    "aborted_play",
+    "two_point_attempt",
+    "penalty",
+    "passer_player_id",
+    "rusher_player_id",
+    "receiver_player_id",
+    "sack_player_id",
+    "interception_player_id",
+    "yards_gained",
+    "epa",
+    "wpa",
+    "cpoe",
+    "success",
+    "air_yards",
+    "yards_after_catch",
+    "complete_pass",
+    "incomplete_pass",
+    "interception",
+    "fumble",
+    "fumble_lost",
+    "pass_touchdown",
+    "rush_touchdown",
+    "touchdown",
     "xyac_mean_yardage",
-    "desc",          # -> play_desc
+    "desc",  # -> play_desc
 )
 
 _COLUMN_RENAME: dict[str, str] = {"desc": "play_desc"}
 
 # Classification of each column for type coercion. Pandas NaN/NaT
 # handling differs per dtype; we convert explicitly.
-_INT_COLS: frozenset[str] = frozenset({
-    "play_id", "season", "week",
-    "game_seconds_remaining", "half_seconds_remaining",
-    "yards_gained", "air_yards", "yards_after_catch",
-})
-_SMALLINT_COLS: frozenset[str] = frozenset({
-    "qtr", "down", "ydstogo", "yardline_100", "score_differential",
-})
+_INT_COLS: frozenset[str] = frozenset(
+    {
+        "play_id",
+        "season",
+        "week",
+        "game_seconds_remaining",
+        "half_seconds_remaining",
+        "yards_gained",
+        "air_yards",
+        "yards_after_catch",
+    }
+)
+_SMALLINT_COLS: frozenset[str] = frozenset(
+    {
+        "qtr",
+        "down",
+        "ydstogo",
+        "yardline_100",
+        "score_differential",
+    }
+)
 _REAL_COLS: frozenset[str] = frozenset({"wp", "epa", "wpa", "cpoe", "xyac_mean_yardage"})
-_BOOL_COLS: frozenset[str] = frozenset({
-    "qb_dropback", "pass_attempt", "rush_attempt", "sack", "qb_scramble",
-    "qb_spike", "qb_kneel", "aborted_play", "two_point_attempt", "penalty",
-    "success", "complete_pass", "incomplete_pass", "interception",
-    "fumble", "fumble_lost", "pass_touchdown", "rush_touchdown", "touchdown",
-})
+_BOOL_COLS: frozenset[str] = frozenset(
+    {
+        "qb_dropback",
+        "pass_attempt",
+        "rush_attempt",
+        "sack",
+        "qb_scramble",
+        "qb_spike",
+        "qb_kneel",
+        "aborted_play",
+        "two_point_attempt",
+        "penalty",
+        "success",
+        "complete_pass",
+        "incomplete_pass",
+        "interception",
+        "fumble",
+        "fumble_lost",
+        "pass_touchdown",
+        "rush_touchdown",
+        "touchdown",
+    }
+)
 _DATE_COLS: frozenset[str] = frozenset({"game_date"})
-_TEXT_COLS: frozenset[str] = frozenset({
-    "game_id", "season_type", "posteam", "defteam", "home_team", "away_team",
-    "play_type", "passer_player_id", "rusher_player_id", "receiver_player_id",
-    "sack_player_id", "interception_player_id", "play_desc",
-})
+_TEXT_COLS: frozenset[str] = frozenset(
+    {
+        "game_id",
+        "season_type",
+        "posteam",
+        "defteam",
+        "home_team",
+        "away_team",
+        "play_type",
+        "passer_player_id",
+        "rusher_player_id",
+        "receiver_player_id",
+        "sack_player_id",
+        "interception_player_id",
+        "play_desc",
+    }
+)
 
 
 # DB-side target column list (after rename).
@@ -96,9 +172,9 @@ _DB_COLUMNS: tuple[str, ...] = tuple(_COLUMN_RENAME.get(c, c) for c in _SOURCE_C
 @dataclass(frozen=True)
 class RunResult:
     season: int
-    rows_ingested: int          # rows pulled from the source DataFrame
-    rows_written: int           # rows inserted into Postgres (= rows_ingested unless we drop some)
-    rows_skipped_no_pk: int     # rows missing game_id or play_id (shouldn't happen, but defensive)
+    rows_ingested: int  # rows pulled from the source DataFrame
+    rows_written: int  # rows inserted into Postgres (= rows_ingested unless we drop some)
+    rows_skipped_no_pk: int  # rows missing game_id or play_id (shouldn't happen, but defensive)
 
 
 def run(season: int, *, refresh: bool = False) -> RunResult:

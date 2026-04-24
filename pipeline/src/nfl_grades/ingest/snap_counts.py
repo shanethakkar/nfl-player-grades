@@ -59,7 +59,7 @@ class RunResult:
     season: int
     player_seasons_updated: int
     rows_skipped_no_pfr_match: int
-    rows_ingested: int               # rows in the raw snap_counts dataframe (REG-only)
+    rows_ingested: int  # rows in the raw snap_counts dataframe (REG-only)
 
 
 def run(season: int, *, refresh: bool = False) -> RunResult:
@@ -86,9 +86,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     with pipeline_run("ingest:snap_counts", season=season) as handle:
         with engine.begin() as conn:
             pfr_to_player_id = _pfr_to_player_id(conn)
-            agg_rows, skipped_no_match = _aggregate(
-                df_reg, season, pfr_to_player_id
-            )
+            agg_rows, skipped_no_match = _aggregate(df_reg, season, pfr_to_player_id)
             updated = _update_player_seasons(conn, agg_rows, season)
 
         result = RunResult(
@@ -161,22 +159,22 @@ def _aggregate(
         else:
             started = int((sub["st_pct"] >= _STARTED_SNAP_PCT_THRESHOLD).sum())
 
-        rows.append({
-            "player_id": player_id,
-            "season": season,
-            "games": games,
-            "games_started": started,
-            "snaps_offense": off,
-            "snaps_defense": deff,
-            "snaps_special": st,
-        })
+        rows.append(
+            {
+                "player_id": player_id,
+                "season": season,
+                "games": games,
+                "games_started": started,
+                "snaps_offense": off,
+                "snaps_defense": deff,
+                "snaps_special": st,
+            }
+        )
 
     return rows, len(unmatched_pfr_ids)
 
 
-def _update_player_seasons(
-    conn: Connection, rows: list[dict[str, object]], season: int
-) -> int:
+def _update_player_seasons(conn: Connection, rows: list[dict[str, object]], season: int) -> int:
     """Apply aggregated snap totals back to existing player_seasons rows.
 
     Uses a temporary table + UPDATE ... FROM so we don't hit row-at-a-time
@@ -188,8 +186,9 @@ def _update_player_seasons(
     if not rows:
         return 0
 
-    conn.execute(text(
-        """
+    conn.execute(
+        text(
+            """
         CREATE TEMPORARY TABLE _snap_agg (
             player_id     INTEGER PRIMARY KEY,
             season        INTEGER NOT NULL,
@@ -200,7 +199,8 @@ def _update_player_seasons(
             snaps_special INTEGER NOT NULL
         ) ON COMMIT DROP
         """
-    ))
+        )
+    )
 
     conn.execute(
         text(
@@ -218,8 +218,9 @@ def _update_player_seasons(
         rows,
     )
 
-    result = conn.execute(text(
-        """
+    result = conn.execute(
+        text(
+            """
         UPDATE player_seasons ps
            SET games         = a.games,
                games_started = a.games_started,
@@ -230,6 +231,7 @@ def _update_player_seasons(
          WHERE ps.player_id = a.player_id
            AND ps.season    = a.season
         """
-    ))
+        )
+    )
     # rowcount on UPDATE gives the number of rows actually modified.
     return result.rowcount or 0

@@ -274,7 +274,9 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
     df = features.copy()
     df["qualified"] = df["n_targets"] >= TE_V1_QUALIFIED_MIN_TARGETS
-    df["confidence"] = (df["n_targets"].astype(float) / TE_V1_CONFIDENCE_FULL_TARGETS).clip(upper=1.0)
+    df["confidence"] = (df["n_targets"].astype(float) / TE_V1_CONFIDENCE_FULL_TARGETS).clip(
+        upper=1.0
+    )
 
     data_t: list[int] = []
     data_r: list[str | None] = []

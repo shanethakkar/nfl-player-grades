@@ -28,27 +28,43 @@ from typing import Final, Literal
 # Defensive line: split into interior (iDL) vs edge (EDGE) by specific label.
 # Sources: load_players.position values seen for position_group=='DL', plus
 # load_rosters.depth_chart_position values inside DL.
-_DL_INTERIOR: Final[frozenset[str]] = frozenset({
-    "DT", "NT", "DI", "DL",   # defensive tackle, nose tackle, "interior", generic
-})
-_DL_EDGE: Final[frozenset[str]] = frozenset({
-    "DE", "EDGE",             # defensive end, edge rusher (rare modern label)
-})
+_DL_INTERIOR: Final[frozenset[str]] = frozenset(
+    {
+        "DT",
+        "NT",
+        "DI",
+        "DL",  # defensive tackle, nose tackle, "interior", generic
+    }
+)
+_DL_EDGE: Final[frozenset[str]] = frozenset(
+    {
+        "DE",
+        "EDGE",  # defensive end, edge rusher (rare modern label)
+    }
+)
 
 # Defensive backs: CB vs S split.
-_DB_CB: Final[frozenset[str]] = frozenset({
-    "CB", "DB",               # cornerback (DB is rare generic — bucket as CB by default; see note)
-})
-_DB_SAFETY: Final[frozenset[str]] = frozenset({
-    "S", "FS", "SS", "SAF",
-})
+_DB_CB: Final[frozenset[str]] = frozenset(
+    {
+        "CB",
+        "DB",  # cornerback (DB is rare generic — bucket as CB by default; see note)
+    }
+)
+_DB_SAFETY: Final[frozenset[str]] = frozenset(
+    {
+        "S",
+        "FS",
+        "SS",
+        "SAF",
+    }
+)
 
 # Specialists.
 _SPECIALIST_GROUPS: Final[frozenset[str]] = frozenset({"ST", "SPEC", "SPECIALIST"})
 _SPECIALIST_CODES: Final[dict[str, str]] = {
-    "K":  "K",
-    "PK": "K",     # placekicker (rare alt label)
-    "P":  "P",
+    "K": "K",
+    "PK": "K",  # placekicker (rare alt label)
+    "P": "P",
     "LS": "LS",
 }
 
@@ -56,7 +72,7 @@ _SPECIALIST_CODES: Final[dict[str, str]] = {
 _DIRECT_GROUP: Final[dict[str, str]] = {
     "QB": "QB",
     "RB": "RB",
-    "FB": "RB",   # fullback grades as RB in v1; small population
+    "FB": "RB",  # fullback grades as RB in v1; small population
     "WR": "WR",
     "TE": "TE",
     "OL": "OL",
@@ -85,7 +101,19 @@ CanonicalPosition = Literal[
 ]
 
 CANONICAL_POSITIONS: Final[tuple[CanonicalPosition, ...]] = (
-    "QB", "RB", "WR", "TE", "OL", "iDL", "EDGE", "LB", "CB", "S", "K", "P", "LS",
+    "QB",
+    "RB",
+    "WR",
+    "TE",
+    "OL",
+    "iDL",
+    "EDGE",
+    "LB",
+    "CB",
+    "S",
+    "K",
+    "P",
+    "LS",
 )
 
 

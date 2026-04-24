@@ -53,9 +53,9 @@ SNAPSHOT_WEEK = 99
 @dataclass(frozen=True)
 class RunResult:
     season: int
-    source_format: str                    # 'week-keyed' (<=2024) or 'timestamp-keyed' (2025+)
-    source_label: str                     # e.g. 'week=19' or 'dt=2026-03-14T07:32:09Z'
-    rows_inserted: int                    # rows written to depth_charts
+    source_format: str  # 'week-keyed' (<=2024) or 'timestamp-keyed' (2025+)
+    source_label: str  # e.g. 'week=19' or 'dt=2026-03-14T07:32:09Z'
+    rows_inserted: int  # rows written to depth_charts
     skipped_unknown_team: int
     skipped_unknown_player: int
     skipped_non_integer_depth: int
@@ -77,7 +77,10 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     df_snap, source_format, source_label = _select_snapshot(df_all, season)
     logger.info(
         "using %s %s (%d rows) for season %d",
-        source_format, source_label, len(df_snap), season,
+        source_format,
+        source_label,
+        len(df_snap),
+        season,
     )
 
     engine = get_engine()
@@ -115,9 +118,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
 # ---------------------------------------------------------------------------
 
 
-def _select_snapshot(
-    df_all: pd.DataFrame, season: int
-) -> tuple[pd.DataFrame, str, str]:
+def _select_snapshot(df_all: pd.DataFrame, season: int) -> tuple[pd.DataFrame, str, str]:
     """Pick the latest-available snapshot and normalize column names.
 
     Returns (normalized_df, source_format, source_label). The normalized
@@ -148,8 +149,7 @@ def _select_snapshot(
         )
         out = snap.rename(columns={"club_code": "club_code"})[
             ["club_code", "gsis_id", "_position_norm", "_depth_order_raw"]
-        ].rename(columns={"_position_norm": "position",
-                          "_depth_order_raw": "depth_order_raw"})
+        ].rename(columns={"_position_norm": "position", "_depth_order_raw": "depth_order_raw"})
         return out, "week-keyed", f"week={source_week}"
 
     # --- New format (2025+): timestamp-keyed with pos_abb + pos_rank ------
@@ -158,16 +158,17 @@ def _select_snapshot(
             raise RuntimeError(f"no depth-chart rows for season {season}")
         latest_dt = df_all["dt"].max()
         snap = df_all[df_all["dt"] == latest_dt].copy()
-        out = snap.rename(columns={
-            "team": "club_code",
-            "pos_abb": "position",
-            "pos_rank": "depth_order_raw",
-        })[["club_code", "gsis_id", "position", "depth_order_raw"]]
+        out = snap.rename(
+            columns={
+                "team": "club_code",
+                "pos_abb": "position",
+                "pos_rank": "depth_order_raw",
+            }
+        )[["club_code", "gsis_id", "position", "depth_order_raw"]]
         return out, "timestamp-keyed", f"dt={latest_dt}"
 
     raise RuntimeError(
-        f"unrecognized depth-chart schema for season {season}; "
-        f"columns={sorted(df_all.columns)}"
+        f"unrecognized depth-chart schema for season {season}; columns={sorted(df_all.columns)}"
     )
 
 
@@ -214,7 +215,7 @@ def _transform(
     Returns (rows, counters_dict).
     """
     rows: list[dict[str, object]] = []
-    seen: set[tuple[int, str, int]] = set()   # (team_id, position, depth_order)
+    seen: set[tuple[int, str, int]] = set()  # (team_id, position, depth_order)
     skipped = {"team": 0, "player": 0, "depth": 0, "duplicate": 0}
 
     for _, r in df.iterrows():
@@ -256,27 +257,25 @@ def _transform(
             continue
         seen.add(key)
 
-        rows.append({
-            "team_id": team_id,
-            "season": season,
-            "week": SNAPSHOT_WEEK,
-            "position": pos,
-            "depth_order": depth_order,
-            "player_id": player_id,
-        })
+        rows.append(
+            {
+                "team_id": team_id,
+                "season": season,
+                "week": SNAPSHOT_WEEK,
+                "position": pos,
+                "depth_order": depth_order,
+                "player_id": player_id,
+            }
+        )
 
     return rows, skipped
 
 
-def _replace_snapshot(
-    conn: Connection, rows: list[dict[str, object]], season: int
-) -> int:
+def _replace_snapshot(conn: Connection, rows: list[dict[str, object]], season: int) -> int:
     """Delete any existing snapshot rows for (season, week=99) and bulk
     INSERT the new rows. Idempotent."""
     conn.execute(
-        text(
-            "DELETE FROM depth_charts WHERE season = :s AND week = :w"
-        ),
+        text("DELETE FROM depth_charts WHERE season = :s AND week = :w"),
         {"s": season, "w": SNAPSHOT_WEEK},
     )
     if not rows:

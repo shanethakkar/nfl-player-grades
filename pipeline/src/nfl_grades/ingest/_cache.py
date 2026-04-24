@@ -75,16 +75,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SourceName = Literal[
-    "players",          # season-agnostic master
-    "rosters",          # end-of-season per-team rosters
-    "rosters_weekly",   # weekly rosters (trade tracking)
-    "pbp",              # play-by-play
-    "depth_charts",     # depth charts
-    "snap_counts",      # offensive/defensive/ST snaps
+    "players",  # season-agnostic master
+    "rosters",  # end-of-season per-team rosters
+    "rosters_weekly",  # weekly rosters (trade tracking)
+    "pbp",  # play-by-play
+    "depth_charts",  # depth charts
+    "snap_counts",  # offensive/defensive/ST snaps
     "ngs_passing",
     "ngs_rushing",
     "ngs_receiving",
-    "ftn",              # FTN charting
+    "ftn",  # FTN charting
 ]
 
 
@@ -101,7 +101,9 @@ class SourceSpec:
     """
 
     season_keyed: bool
-    fetch: Callable[[int | None], object]   # returns polars.DataFrame; typed loosely to avoid forcing a polars import in every consumer
+    fetch: Callable[
+        [int | None], object
+    ]  # returns polars.DataFrame; typed loosely to avoid forcing a polars import in every consumer
 
 
 _SOURCES_CACHE: dict[str, SourceSpec] | None = None
@@ -270,6 +272,7 @@ def _sha256_file(path: Path) -> str:
 def _nflreadpy_version() -> str:
     try:
         from importlib.metadata import version
+
         return version("nflreadpy")
     except Exception:
         return "unknown"
@@ -287,9 +290,7 @@ def cache_or_fetch(
     """
     sources = _get_sources()
     if source not in sources:
-        raise ValueError(
-            f"Unknown source {source!r}; known: {sorted(sources)}"
-        )
+        raise ValueError(f"Unknown source {source!r}; known: {sorted(sources)}")
     spec = sources[source]
     if spec.season_keyed and season is None:
         raise ValueError(f"source {source!r} requires a season")
@@ -322,9 +323,7 @@ def cache_or_fetch(
     entries = read_manifest()
     entries[entry.manifest_key] = entry
     _write_manifest(entries)
-    logger.info(
-        "wrote %s (%d rows, %.1f KB)", path, entry.row_count, entry.bytes / 1024
-    )
+    logger.info("wrote %s (%d rows, %.1f KB)", path, entry.row_count, entry.bytes / 1024)
     return df
 
 

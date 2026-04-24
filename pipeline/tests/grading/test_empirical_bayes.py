@@ -20,9 +20,7 @@ class TestVolumeWeightedMean:
         raw = pd.Series([0.1, float("nan"), 0.3])
         n = pd.Series([100, 200, 300])
         # Only rows 0 and 2 count.
-        assert volume_weighted_mean(raw, n) == pytest.approx(
-            (0.1 * 100 + 0.3 * 300) / (100 + 300)
-        )
+        assert volume_weighted_mean(raw, n) == pytest.approx((0.1 * 100 + 0.3 * 300) / (100 + 300))
 
     def test_all_nan_returns_zero(self) -> None:
         assert volume_weighted_mean(pd.Series([float("nan")] * 3), pd.Series([1, 1, 1])) == 0.0
@@ -73,7 +71,7 @@ class TestShrinkSeries:
         # n=k should produce 0.5 * raw + 0.5 * mu for each row.
         raw = pd.Series([0.1, 0.5])
         n = pd.Series([100, 100])
-        out = shrink_series(raw, n, k=100)   # mu defaults to vwm = 0.3
-        expected_mu = (0.1 * 100 + 0.5 * 100) / 200    # 0.3
+        out = shrink_series(raw, n, k=100)  # mu defaults to vwm = 0.3
+        expected_mu = (0.1 * 100 + 0.5 * 100) / 200  # 0.3
         assert out.iloc[0] == pytest.approx(0.5 * 0.1 + 0.5 * expected_mu)
         assert out.iloc[1] == pytest.approx(0.5 * 0.5 + 0.5 * expected_mu)

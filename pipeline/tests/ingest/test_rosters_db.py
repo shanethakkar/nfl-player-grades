@@ -45,9 +45,7 @@ def conn():
 
 @pytest.fixture
 def kc_team_id(conn) -> int:
-    row = conn.execute(
-        text("SELECT team_id FROM team_aliases WHERE alias = 'KC'")
-    ).first()
+    row = conn.execute(text("SELECT team_id FROM team_aliases WHERE alias = 'KC'")).first()
     if row is None:
         pytest.skip("team_aliases not seeded; run `nflgrades migrate --seeds`")
     return row[0]
@@ -62,25 +60,27 @@ class TestTeamLookup:
         assert "BAL" in lookup
         assert "PHI" in lookup
         # Historical aliases too.
-        assert "OAK" in lookup     # Raiders pre-2020
-        assert "STL" in lookup     # Rams pre-2016
+        assert "OAK" in lookup  # Raiders pre-2020
+        assert "STL" in lookup  # Rams pre-2016
 
 
 class TestUpsertPlayers:
     def test_insert_then_update(self, conn, kc_team_id: int) -> None:
-        rows = [{
-            "gsis_id": FAKE_GSIS["alpha"],
-            "pfr_id": "TestAl00",
-            "full_name": "Alpha Player",
-            "position": "QB",
-            "birth_date": "1995-01-01",
-            "height_inches": 75,
-            "weight_lbs": 220,
-            "draft_year": 2017,
-            "draft_round": 1,
-            "draft_pick": 10,
-            "current_team_id": kc_team_id,
-        }]
+        rows = [
+            {
+                "gsis_id": FAKE_GSIS["alpha"],
+                "pfr_id": "TestAl00",
+                "full_name": "Alpha Player",
+                "position": "QB",
+                "birth_date": "1995-01-01",
+                "height_inches": 75,
+                "weight_lbs": 220,
+                "draft_year": 2017,
+                "draft_round": 1,
+                "draft_pick": 10,
+                "current_team_id": kc_team_id,
+            }
+        ]
         n = _upsert_players(conn, rows)
         assert n == 1
 
@@ -111,44 +111,61 @@ class TestUpsertPlayers:
         # The bug we're guarding against: pandas turns nullable int columns
         # into float64 with NaN, which Postgres rejects. Make sure passing
         # real None works for every nullable int column.
-        rows = [{
-            "gsis_id": FAKE_GSIS["beta"],
-            "pfr_id": None,
-            "full_name": "Beta Player",
-            "position": "WR",
-            "birth_date": None,
-            "height_inches": None,
-            "weight_lbs": None,
-            "draft_year": None,
-            "draft_round": None,
-            "draft_pick": None,
-            "current_team_id": kc_team_id,
-        }]
+        rows = [
+            {
+                "gsis_id": FAKE_GSIS["beta"],
+                "pfr_id": None,
+                "full_name": "Beta Player",
+                "position": "WR",
+                "birth_date": None,
+                "height_inches": None,
+                "weight_lbs": None,
+                "draft_year": None,
+                "draft_round": None,
+                "draft_pick": None,
+                "current_team_id": kc_team_id,
+            }
+        ]
         n = _upsert_players(conn, rows)
         assert n == 1
 
 
 class TestUpsertPlayerSeasons:
     def test_delete_then_insert(self, conn, kc_team_id: int) -> None:
-        _upsert_players(conn, [{
-            "gsis_id": FAKE_GSIS["alpha"],
-            "pfr_id": None,
-            "full_name": "Alpha", "position": "QB",
-            "birth_date": None, "height_inches": None, "weight_lbs": None,
-            "draft_year": None, "draft_round": None, "draft_pick": None,
-            "current_team_id": kc_team_id,
-        }])
+        _upsert_players(
+            conn,
+            [
+                {
+                    "gsis_id": FAKE_GSIS["alpha"],
+                    "pfr_id": None,
+                    "full_name": "Alpha",
+                    "position": "QB",
+                    "birth_date": None,
+                    "height_inches": None,
+                    "weight_lbs": None,
+                    "draft_year": None,
+                    "draft_round": None,
+                    "draft_pick": None,
+                    "current_team_id": kc_team_id,
+                }
+            ],
+        )
         gsis_to_id = _read_gsis_to_player_id(conn)
         player_id = gsis_to_id[FAKE_GSIS["alpha"]]
 
-        ps = [{
-            "player_id": player_id,
-            "season": 1999,
-            "team_id": kc_team_id,
-            "position_played": "QB",
-            "games": 0, "games_started": 0,
-            "snaps_offense": 0, "snaps_defense": 0, "snaps_special": 0,
-        }]
+        ps = [
+            {
+                "player_id": player_id,
+                "season": 1999,
+                "team_id": kc_team_id,
+                "position_played": "QB",
+                "games": 0,
+                "games_started": 0,
+                "snaps_offense": 0,
+                "snaps_defense": 0,
+                "snaps_special": 0,
+            }
+        ]
         n = _upsert_player_seasons(conn, ps, season=1999)
         assert n == 1
 

@@ -59,9 +59,9 @@ class RunResult:
     """Outcome of one ingest run, used to populate ``pipeline_runs`` and CLI logs."""
 
     season: int
-    players_upserted: int       # rows touched in `players` (insert + update combined)
+    players_upserted: int  # rows touched in `players` (insert + update combined)
     player_seasons_upserted: int
-    rows_skipped_no_gsis: int   # rosters rows dropped because gsis_id was null
+    rows_skipped_no_gsis: int  # rosters rows dropped because gsis_id was null
     rows_skipped_unknown_pos: int  # dropped because canonical_position raised
     rows_skipped_unknown_team: int  # dropped because team abbr didn't resolve via team_aliases
 
@@ -96,10 +96,8 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
 
             gsis_to_player_id = _read_gsis_to_player_id(conn)
 
-            ps_rows, skipped_unknown_pos_r, skipped_unknown_team = (
-                _transform_player_seasons(
-                    df_rosters, season, team_lookup, gsis_to_player_id
-                )
+            ps_rows, skipped_unknown_pos_r, skipped_unknown_team = _transform_player_seasons(
+                df_rosters, season, team_lookup, gsis_to_player_id
             )
             ps_n = _upsert_player_seasons(conn, ps_rows, season)
 
@@ -131,9 +129,7 @@ def _team_abbr_to_id(conn: Connection) -> dict[str, int]:
     """Build alias -> team_id lookup from team_aliases (see ADR 0004)."""
     rows = conn.execute(text("SELECT alias, team_id FROM team_aliases")).all()
     if not rows:
-        raise RuntimeError(
-            "team_aliases is empty; run `nflgrades migrate --seeds` first."
-        )
+        raise RuntimeError("team_aliases is empty; run `nflgrades migrate --seeds` first.")
     return {alias: team_id for alias, team_id in rows}
 
 
@@ -231,19 +227,21 @@ def _transform_players(
             continue
         team_abbr = _to_str_or_none(r.get("latest_team"))
         team_id = team_abbr_to_id.get(team_abbr) if team_abbr else None
-        rows.append({
-            "gsis_id": str(r["gsis_id"]),
-            "pfr_id": _to_str_or_none(r.get("pfr_id")),
-            "full_name": _to_str_or_none(r.get("display_name")) or "Unknown",
-            "position": pos,
-            "birth_date": _to_date_or_none(r.get("birth_date")),
-            "height_inches": _to_int_or_none(r.get("height")),
-            "weight_lbs": _to_int_or_none(r.get("weight")),
-            "draft_year": _to_int_or_none(r.get("draft_year")),
-            "draft_round": _to_int_or_none(r.get("draft_round")),
-            "draft_pick": _to_int_or_none(r.get("draft_pick")),
-            "current_team_id": team_id,
-        })
+        rows.append(
+            {
+                "gsis_id": str(r["gsis_id"]),
+                "pfr_id": _to_str_or_none(r.get("pfr_id")),
+                "full_name": _to_str_or_none(r.get("display_name")) or "Unknown",
+                "position": pos,
+                "birth_date": _to_date_or_none(r.get("birth_date")),
+                "height_inches": _to_int_or_none(r.get("height")),
+                "weight_lbs": _to_int_or_none(r.get("weight")),
+                "draft_year": _to_int_or_none(r.get("draft_year")),
+                "draft_round": _to_int_or_none(r.get("draft_round")),
+                "draft_pick": _to_int_or_none(r.get("draft_pick")),
+                "current_team_id": team_id,
+            }
+        )
 
     # Fallback rows use load_rosters schema — note column-name swap:
     # rosters.position == load_players.position_group;
@@ -255,19 +253,21 @@ def _transform_players(
             continue
         team_abbr = _to_str_or_none(r.get("team"))
         team_id = team_abbr_to_id.get(team_abbr) if team_abbr else None
-        rows.append({
-            "gsis_id": str(r["gsis_id"]),
-            "pfr_id": _to_str_or_none(r.get("pfr_id")),   # rosters has pfr_id too
-            "full_name": _to_str_or_none(r.get("full_name")) or "Unknown",
-            "position": pos,
-            "birth_date": _to_date_or_none(r.get("birth_date")),
-            "height_inches": _to_int_or_none(r.get("height")),
-            "weight_lbs": _to_int_or_none(r.get("weight")),
-            "draft_year": _to_int_or_none(r.get("entry_year")),
-            "draft_round": None,  # rosters has draft_number only
-            "draft_pick": _to_int_or_none(r.get("draft_number")),
-            "current_team_id": team_id,
-        })
+        rows.append(
+            {
+                "gsis_id": str(r["gsis_id"]),
+                "pfr_id": _to_str_or_none(r.get("pfr_id")),  # rosters has pfr_id too
+                "full_name": _to_str_or_none(r.get("full_name")) or "Unknown",
+                "position": pos,
+                "birth_date": _to_date_or_none(r.get("birth_date")),
+                "height_inches": _to_int_or_none(r.get("height")),
+                "weight_lbs": _to_int_or_none(r.get("weight")),
+                "draft_year": _to_int_or_none(r.get("entry_year")),
+                "draft_round": None,  # rosters has draft_number only
+                "draft_pick": _to_int_or_none(r.get("draft_number")),
+                "current_team_id": team_id,
+            }
+        )
 
     return rows, skipped_unknown_pos
 
@@ -317,22 +317,25 @@ def _transform_player_seasons(
             continue
         seen_keys.add(key)
 
-        rows.append({
-            "player_id": player_id,
-            "season": season,
-            "team_id": team_id,
-            "position_played": pos,
-            "games": 0,
-            "games_started": 0,
-            "snaps_offense": 0,
-            "snaps_defense": 0,
-            "snaps_special": 0,
-        })
+        rows.append(
+            {
+                "player_id": player_id,
+                "season": season,
+                "team_id": team_id,
+                "position_played": pos,
+                "games": 0,
+                "games_started": 0,
+                "snaps_offense": 0,
+                "snaps_defense": 0,
+                "snaps_special": 0,
+            }
+        )
 
     if dropped_dupes:
         logger.warning(
             "dropped %d duplicate player_seasons rows for season=%d",
-            dropped_dupes, season,
+            dropped_dupes,
+            season,
         )
     return rows, skipped_unknown_pos, skipped_unknown_team
 
@@ -369,9 +372,7 @@ def _upsert_players(conn: Connection, rows: list[dict[str, object]]) -> int:
     return len(rows)
 
 
-def _upsert_player_seasons(
-    conn: Connection, rows: list[dict[str, object]], season: int
-) -> int:
+def _upsert_player_seasons(conn: Connection, rows: list[dict[str, object]], season: int) -> int:
     """DELETE existing rows for season, then bulk INSERT.
 
     Idempotent and simpler than per-row ON CONFLICT for our PK

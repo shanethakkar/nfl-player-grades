@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 @dataclass
 class KalmanResult:
-    mean: float         # posterior mean (career grade)
-    variance: float     # posterior variance
+    mean: float  # posterior mean (career grade)
+    variance: float  # posterior variance
     n_seasons: int
     last_season: int
 
@@ -17,7 +17,7 @@ def smooth(
     season_grades: list[float],
     season_variances: list[float],
     seasons: list[int],
-    tau_sq: float = 9.0,    # ~3 grade-point drift per off-season
+    tau_sq: float = 9.0,  # ~3 grade-point drift per off-season
 ) -> KalmanResult:
     """Run a 1D Kalman filter over sequential season grades.
 

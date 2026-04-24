@@ -27,8 +27,8 @@ def gsis_lookup() -> dict[str, int]:
     return {
         "00-MAHOMES": 100,
         "00-JACKSON": 101,
-        "00-HURTS":   102,
-        "00-KELCE":   103,
+        "00-HURTS": 102,
+        "00-KELCE": 103,
     }
 
 
@@ -64,17 +64,40 @@ class TestResolveDepth:
 
 class TestSelectSnapshot:
     def test_old_format_picks_latest_reg_week(self) -> None:
-        df = pd.DataFrame([
-            {"season": 2024, "club_code": "KC", "week": 10.0, "game_type": "REG",
-             "depth_team": "1", "gsis_id": "00-MAHOMES",
-             "position": "QB", "depth_position": "QB"},
-            {"season": 2024, "club_code": "KC", "week": 18.0, "game_type": "REG",
-             "depth_team": "1", "gsis_id": "00-MAHOMES",
-             "position": "QB", "depth_position": "QB"},
-            {"season": 2024, "club_code": "KC", "week": 19.0, "game_type": "WC",
-             "depth_team": "1", "gsis_id": "00-MAHOMES",
-             "position": "QB", "depth_position": "QB"},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "season": 2024,
+                    "club_code": "KC",
+                    "week": 10.0,
+                    "game_type": "REG",
+                    "depth_team": "1",
+                    "gsis_id": "00-MAHOMES",
+                    "position": "QB",
+                    "depth_position": "QB",
+                },
+                {
+                    "season": 2024,
+                    "club_code": "KC",
+                    "week": 18.0,
+                    "game_type": "REG",
+                    "depth_team": "1",
+                    "gsis_id": "00-MAHOMES",
+                    "position": "QB",
+                    "depth_position": "QB",
+                },
+                {
+                    "season": 2024,
+                    "club_code": "KC",
+                    "week": 19.0,
+                    "game_type": "WC",
+                    "depth_team": "1",
+                    "gsis_id": "00-MAHOMES",
+                    "position": "QB",
+                    "depth_position": "QB",
+                },
+            ]
+        )
         snap, fmt, label = _select_snapshot(df, 2024)
         assert fmt == "week-keyed"
         assert label == "week=18"
@@ -83,21 +106,42 @@ class TestSelectSnapshot:
         assert snap.iloc[0]["position"] == "QB"
 
     def test_old_format_prefers_depth_position(self) -> None:
-        df = pd.DataFrame([{
-            "season": 2024, "club_code": "KC", "week": 1.0, "game_type": "REG",
-            "depth_team": "1", "gsis_id": "00-MAHOMES",
-            "position": "G", "depth_position": "RG",
-        }])
+        df = pd.DataFrame(
+            [
+                {
+                    "season": 2024,
+                    "club_code": "KC",
+                    "week": 1.0,
+                    "game_type": "REG",
+                    "depth_team": "1",
+                    "gsis_id": "00-MAHOMES",
+                    "position": "G",
+                    "depth_position": "RG",
+                }
+            ]
+        )
         snap, _, _ = _select_snapshot(df, 2024)
         assert snap.iloc[0]["position"] == "RG"
 
     def test_new_format_picks_latest_timestamp(self) -> None:
-        df = pd.DataFrame([
-            {"dt": "2025-09-01T10:00:00Z", "team": "KC",
-             "gsis_id": "00-MAHOMES", "pos_abb": "QB", "pos_rank": 1},
-            {"dt": "2026-03-14T07:00:00Z", "team": "KC",
-             "gsis_id": "00-MAHOMES", "pos_abb": "QB", "pos_rank": 1},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "dt": "2025-09-01T10:00:00Z",
+                    "team": "KC",
+                    "gsis_id": "00-MAHOMES",
+                    "pos_abb": "QB",
+                    "pos_rank": 1,
+                },
+                {
+                    "dt": "2026-03-14T07:00:00Z",
+                    "team": "KC",
+                    "gsis_id": "00-MAHOMES",
+                    "pos_abb": "QB",
+                    "pos_rank": 1,
+                },
+            ]
+        )
         snap, fmt, label = _select_snapshot(df, 2025)
         assert fmt == "timestamp-keyed"
         assert label == "dt=2026-03-14T07:00:00Z"
@@ -111,14 +155,18 @@ class TestSelectSnapshot:
 
 class TestTransform:
     def test_maps_teams_and_players(
-        self, team_lookup: dict[str, int], gsis_lookup: dict[str, int],
+        self,
+        team_lookup: dict[str, int],
+        gsis_lookup: dict[str, int],
     ) -> None:
-        df = pd.DataFrame([
-            _row(),   # Mahomes KC QB1
-            _row(gsis_id="00-KELCE", position="TE", depth_order_raw="1"),
-            _row(club_code="BAL", gsis_id="00-JACKSON"),  # Lamar BAL QB1
-            _row(club_code="PHI", gsis_id="00-HURTS"),    # Hurts PHI QB1
-        ])
+        df = pd.DataFrame(
+            [
+                _row(),  # Mahomes KC QB1
+                _row(gsis_id="00-KELCE", position="TE", depth_order_raw="1"),
+                _row(club_code="BAL", gsis_id="00-JACKSON"),  # Lamar BAL QB1
+                _row(club_code="PHI", gsis_id="00-HURTS"),  # Hurts PHI QB1
+            ]
+        )
         rows, skipped = _transform(df, team_lookup, gsis_lookup, 2024)
         assert skipped == {"team": 0, "player": 0, "depth": 0, "duplicate": 0}
         assert len(rows) == 4
@@ -129,7 +177,8 @@ class TestTransform:
         assert by[(3, "QB")]["player_id"] == 102
 
     def test_unknown_team_skipped(
-        self, gsis_lookup: dict[str, int],
+        self,
+        gsis_lookup: dict[str, int],
     ) -> None:
         df = pd.DataFrame([_row(club_code="XYZ")])
         rows, skipped = _transform(df, {"KC": 1}, gsis_lookup, 2024)
@@ -137,7 +186,8 @@ class TestTransform:
         assert skipped["team"] == 1
 
     def test_unknown_player_skipped(
-        self, team_lookup: dict[str, int],
+        self,
+        team_lookup: dict[str, int],
     ) -> None:
         df = pd.DataFrame([_row(gsis_id="00-UNKNOWN")])
         rows, skipped = _transform(df, team_lookup, {}, 2024)
@@ -145,7 +195,9 @@ class TestTransform:
         assert skipped["player"] == 1
 
     def test_missing_position_skipped(
-        self, team_lookup: dict[str, int], gsis_lookup: dict[str, int],
+        self,
+        team_lookup: dict[str, int],
+        gsis_lookup: dict[str, int],
     ) -> None:
         df = pd.DataFrame([_row(position="")])
         rows, skipped = _transform(df, team_lookup, gsis_lookup, 2024)
@@ -153,7 +205,9 @@ class TestTransform:
         assert skipped["player"] == 1
 
     def test_non_integer_depth_skipped(
-        self, team_lookup: dict[str, int], gsis_lookup: dict[str, int],
+        self,
+        team_lookup: dict[str, int],
+        gsis_lookup: dict[str, int],
     ) -> None:
         df = pd.DataFrame([_row(depth_order_raw="E")])
         rows, skipped = _transform(df, team_lookup, gsis_lookup, 2024)
@@ -161,7 +215,9 @@ class TestTransform:
         assert skipped["depth"] == 1
 
     def test_duplicates_deduped(
-        self, team_lookup: dict[str, int], gsis_lookup: dict[str, int],
+        self,
+        team_lookup: dict[str, int],
+        gsis_lookup: dict[str, int],
     ) -> None:
         # Same (team, position, depth_order) appearing twice — schema PK
         # would reject the second; we keep the first.
@@ -192,18 +248,14 @@ def conn():
 
 @pytest.fixture
 def kc_team_id(conn) -> int:
-    row = conn.execute(
-        text("SELECT team_id FROM team_aliases WHERE alias='KC'")
-    ).first()
+    row = conn.execute(text("SELECT team_id FROM team_aliases WHERE alias='KC'")).first()
     if row is None:
         pytest.skip("team_aliases not seeded")
     return row[0]
 
 
 class TestReplaceSnapshot:
-    def test_insert_then_replace_is_idempotent(
-        self, conn, kc_team_id: int
-    ) -> None:
+    def test_insert_then_replace_is_idempotent(self, conn, kc_team_id: int) -> None:
         player_id = conn.execute(
             text("""
                 INSERT INTO players (gsis_id, full_name, position, current_team_id)
@@ -213,10 +265,16 @@ class TestReplaceSnapshot:
             {"t": kc_team_id},
         ).scalar_one()
 
-        rows = [{
-            "team_id": kc_team_id, "season": 1999, "week": SNAPSHOT_WEEK,
-            "position": "QB", "depth_order": 1, "player_id": player_id,
-        }]
+        rows = [
+            {
+                "team_id": kc_team_id,
+                "season": 1999,
+                "week": SNAPSHOT_WEEK,
+                "position": "QB",
+                "depth_order": 1,
+                "player_id": player_id,
+            }
+        ]
         n1 = _replace_snapshot(conn, rows, 1999)
         assert n1 == 1
 

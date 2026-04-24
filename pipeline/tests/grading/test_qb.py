@@ -43,37 +43,51 @@ def _synth_features(n_qbs: int = 10, seed: int = 0) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     starters = 6
     backups = n_qbs - starters
-    n_dropbacks = np.concatenate([
-        rng.integers(500, 651, size=starters),
-        rng.integers(50, 151, size=backups),
-    ])
+    n_dropbacks = np.concatenate(
+        [
+            rng.integers(500, 651, size=starters),
+            rng.integers(50, 151, size=backups),
+        ]
+    )
     # Give "better" players in the cohort (by player_id) higher true skill
     # so the ordering is deterministic per seed.
-    skill = np.linspace(1.0, -1.0, n_qbs)   # descending skill by player_id
+    skill = np.linspace(1.0, -1.0, n_qbs)  # descending skill by player_id
     epa = 0.05 + 0.10 * skill + rng.normal(scale=0.02, size=n_qbs)
     cpoe = 0.0 + 2.5 * skill + rng.normal(scale=0.5, size=n_qbs)
     success = 0.46 + 0.03 * skill + rng.normal(scale=0.005, size=n_qbs)
-    return pd.DataFrame({
-        "player_id": range(1, n_qbs + 1),
-        "gsis_id": [f"00-{i:07d}" for i in range(n_qbs)],
-        "full_name": [f"QB {i}" for i in range(n_qbs)],
-        "n_dropbacks": n_dropbacks,
-        "n_pass_attempts": (n_dropbacks * 0.93).astype(int),
-        "epa_per_dropback": epa,
-        "cpoe": cpoe,
-        "success_rate": success,
-    })
+    return pd.DataFrame(
+        {
+            "player_id": range(1, n_qbs + 1),
+            "gsis_id": [f"00-{i:07d}" for i in range(n_qbs)],
+            "full_name": [f"QB {i}" for i in range(n_qbs)],
+            "n_dropbacks": n_dropbacks,
+            "n_pass_attempts": (n_dropbacks * 0.93).astype(int),
+            "epa_per_dropback": epa,
+            "cpoe": cpoe,
+            "success_rate": success,
+        }
+    )
 
 
 class TestComputeGrades:
     def test_output_columns_present(self) -> None:
         graded = compute_grades(_synth_features(10))
         expected = {
-            "player_id", "qualified", "confidence", "composite_z",
-            "grade", "percentile",
-            "raw_qb_epa_per_dropback", "adjusted_qb_epa_per_dropback", "z_qb_epa_per_dropback",
-            "raw_qb_cpoe", "adjusted_qb_cpoe", "z_qb_cpoe",
-            "raw_qb_success_rate", "adjusted_qb_success_rate", "z_qb_success_rate",
+            "player_id",
+            "qualified",
+            "confidence",
+            "composite_z",
+            "grade",
+            "percentile",
+            "raw_qb_epa_per_dropback",
+            "adjusted_qb_epa_per_dropback",
+            "z_qb_epa_per_dropback",
+            "raw_qb_cpoe",
+            "adjusted_qb_cpoe",
+            "z_qb_cpoe",
+            "raw_qb_success_rate",
+            "adjusted_qb_success_rate",
+            "z_qb_success_rate",
         }
         assert expected.issubset(graded.columns)
 
@@ -160,9 +174,16 @@ class TestExtractFeatures:
     def test_returns_qbs(self, conn, has_2024_plays) -> None:
         df = extract_features(conn, 2024)
         assert not df.empty
-        assert {"player_id", "gsis_id", "full_name", "n_dropbacks",
-                "n_pass_attempts", "epa_per_dropback", "cpoe",
-                "success_rate"}.issubset(df.columns)
+        assert {
+            "player_id",
+            "gsis_id",
+            "full_name",
+            "n_dropbacks",
+            "n_pass_attempts",
+            "epa_per_dropback",
+            "cpoe",
+            "success_rate",
+        }.issubset(df.columns)
 
     def test_mahomes_appears_with_plausible_stats(self, conn, has_2024_plays) -> None:
         df = extract_features(conn, 2024)

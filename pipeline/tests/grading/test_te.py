@@ -111,9 +111,7 @@ def conn():
 
 @pytest.fixture
 def has_te_data(conn):
-    n = conn.execute(
-        text("SELECT COUNT(*) FROM plays WHERE season=2024 AND pass_attempt")
-    ).scalar()
+    n = conn.execute(text("SELECT COUNT(*) FROM plays WHERE season=2024 AND pass_attempt")).scalar()
     ngs = conn.execute(
         text("SELECT COUNT(*) FROM ngs_receiving WHERE season=2024 AND week=0")
     ).scalar()
@@ -139,6 +137,8 @@ class TestWriteResults:
         assert n_c == 6 * len(g)
         assert n_g == g["grade"].notna().sum()
         bad = conn.execute(
-            text("SELECT COUNT(*) FROM stat_components WHERE season=1994 AND (used_in_composite IS NOT TRUE)")
+            text(
+                "SELECT COUNT(*) FROM stat_components WHERE season=1994 AND (used_in_composite IS NOT TRUE)"
+            )
         ).scalar()
         assert bad == 0
