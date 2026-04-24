@@ -7,9 +7,8 @@ specific choice, each section links out to the relevant ADR.
 
 ## Scope (v1)
 
-- **Time range:** 2024-present in the current build. The grader and ingest
-  support 2016+ (NGS era) but historical backfill of 2016-2023 is still
-  pending work.
+- **Time range:** 2016-present. All ten NGS-era seasons (2016-2025) are
+  ingested and graded in the current build.
 - **Positions graded:** QB, RB, WR, TE (Tier 1). Other positions are v2+
   (see [§Position tiers](#position-tiers)).
 - **Depth charts:** end-of-most-recent-regular-season snapshots (no live
@@ -112,8 +111,9 @@ bump is stored on `season_grades.data_tier_reason`.
 of evolving true skill. Output: posterior mean (grade) and posterior
 standard deviation (uncertainty). Rendered as `93 ± 4`.
 
-Not yet implemented in the current build — season grades ship first;
-career grades need a historical backfill of 2016-2023 to be meaningful.
+Not yet implemented in the current build. Season grades now cover
+2016-2025 (ten seasons), so career grades are unblocked and become the
+next grading workstream.
 
 ## Cross-position comparability
 
@@ -135,7 +135,7 @@ Run on every grading rebuild:
 - **Year-over-year correlation**: expected ~0.5–0.6 for QBs, lower
   for noisier positions. See each grading ADR's §Validation.
 - **Predictive validity**: this-year grades predicting next-year
-  outcomes (pending, needs backfill).
+  outcomes (pending — unblocked by the 2016-2025 backfill).
 - **External benchmarks**: Pro Bowls, All-Pros, public top-100 lists
   (pending).
 

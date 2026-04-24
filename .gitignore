@@ -46,6 +46,10 @@ data/
 !pipeline/tests/fixtures/*.csv
 !pipeline/tests/fixtures/*.parquet
 
+# Pipeline parquet cache + manifest + one-off backfill logs.
+# Per ADR-0009, raw nflverse pulls live on disk here (not in git).
+pipeline/.cache/
+
 # --- Databases ---
 *.sqlite
 *.sqlite3

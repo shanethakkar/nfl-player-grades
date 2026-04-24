@@ -50,6 +50,7 @@ was already considered.
 | Web: `/api/teams` | DONE | Returns from Postgres |
 | Web: `/api/teams/[abbr]` etc. | NOT STARTED | Build step 4 |
 | `pipeline/grading/{qb,rb,wr,te}.py` | DONE (v1) | See ADR 0013–0016; TE blocking path drops earn from composite |
+| Season grades coverage | DONE | 2016–2025 (ten NGS-era seasons) ingested + graded for QB/RB/WR/TE. ~3,570 `season_grades` rows total. |
 | Tests | PARTIAL | Grading + composite + some integration (`pipeline/tests/`) |
 | Env / tooling | DONE | `uv` system-wide; `pipeline/.venv` on Python 3.13; `uv sync --extra ingest --extra dev` clean; `.vscode/settings.json` pins the interpreter |
 | Git | INITIALIZED | Local repo on `main`, one initial commit, no remote yet |
