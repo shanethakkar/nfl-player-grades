@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nfl-grades-pipeline"
+version = "0.1.0"
+description = "Data ingestion and grading pipeline for NFL Player Grades."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Shane" }]
+
+dependencies = [
+    # Core: math, DB, CLI. Works on Python 3.11-3.13.
+    "pandas>=2.2.3",
+    "numpy>=2.1",
+    "scipy>=1.14.1",
+    "scikit-learn>=1.5.2",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-dotenv>=1.0",
+    "click>=8.1",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# Only needed when actually ingesting data. Kept separate because
+# (a) the web/grading halves don't need it, and (b) nflreadpy pulls in
+# polars + pyarrow, which we'd rather not pay for at every `pip install`.
+# nflreadpy is the official nflverse-maintained successor to nfl_data_py;
+# Python 3.13 compatible. See ADR 0010.
+ingest = [
+    "nflreadpy>=0.1.5",
+    "polars>=1.0",
+    "pyarrow>=18.0",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "ipykernel>=6.29",
+    "jupyterlab>=4.2",
+]
+
+[project.scripts]
+nflgrades = "nfl_grades.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",             # isort
+    "B",             # bugbear
+    "UP",            # pyupgrade
+    "SIM",           # simplify
+    "N",             # naming
+]
+ignore = ["E501"]    # line length handled by formatter
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

@@ -1,0 +1,125 @@
+{
+  "entries": {
+    "depth_charts/2024": {
+      "bytes": 486695,
+      "fetched_at": "2026-04-23T02:27:00.383671+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\depth_charts\\2024.parquet",
+      "row_count": 37312,
+      "sha256": "bb8581830167c06de6eb63814437309d33025fcb3c2e25e39593415f120799b5"
+    },
+    "depth_charts/2025": {
+      "bytes": 2585532,
+      "fetched_at": "2026-04-23T02:27:03.608988+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\depth_charts\\2025.parquet",
+      "row_count": 554215,
+      "sha256": "691e321a3f73f4011e16de5b80023ab89e2c8b0209e8f2bdafa2a3623ee3ae7f"
+    },
+    "ngs_passing/2024": {
+      "bytes": 95060,
+      "fetched_at": "2026-04-23T04:05:10.236778+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_passing\\2024.parquet",
+      "row_count": 614,
+      "sha256": "cdf970fe40b1024670636639210e9544b131e26ea819b13b677c60c8db9f6a29"
+    },
+    "ngs_passing/2025": {
+      "bytes": 94250,
+      "fetched_at": "2026-04-23T04:05:13.116395+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_passing\\2025.parquet",
+      "row_count": 605,
+      "sha256": "665451ff2c9ca11dc1ebaa38c9c66cdbaf17cbfb5ec62e19e8d3847a7559dd97"
+    },
+    "ngs_receiving/2024": {
+      "bytes": 131190,
+      "fetched_at": "2026-04-23T04:05:10.696368+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_receiving\\2024.parquet",
+      "row_count": 1435,
+      "sha256": "5858ae282f4d96e70089ecfa2a8f3426c2c5d8cc6d62698fb72b4fa19088a7f6"
+    },
+    "ngs_receiving/2025": {
+      "bytes": 129230,
+      "fetched_at": "2026-04-23T04:05:13.464095+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_receiving\\2025.parquet",
+      "row_count": 1402,
+      "sha256": "61da7bfcd3d1d643497eaeb5de3d0205f57fc15b7e8bec1a4542eaeb7dac8dba"
+    },
+    "ngs_rushing/2024": {
+      "bytes": 58459,
+      "fetched_at": "2026-04-23T04:05:10.504023+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_rushing\\2024.parquet",
+      "row_count": 601,
+      "sha256": "54ee51100df050dafd83e57c071d5c61d0156a85bf44d5673eac48074254c6ad"
+    },
+    "ngs_rushing/2025": {
+      "bytes": 61382,
+      "fetched_at": "2026-04-23T04:05:13.327591+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\ngs_rushing\\2025.parquet",
+      "row_count": 648,
+      "sha256": "56f64f12c49b8dd4c74441352c3175082f606e749e9b26092d6cd1cc8be5021f"
+    },
+    "pbp/2024": {
+      "bytes": 20691733,
+      "fetched_at": "2026-04-23T03:35:30.522589+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\pbp\\2024.parquet",
+      "row_count": 49492,
+      "sha256": "e83f2e4e821ec8e2b9e2ab5aed71b7694e86b8a342c7512cecd9ca7780ec2e80"
+    },
+    "pbp/2025": {
+      "bytes": 20434380,
+      "fetched_at": "2026-04-23T03:35:59.215682+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\pbp\\2025.parquet",
+      "row_count": 48771,
+      "sha256": "9297001782fac10d261290e59e1df9f1466c308a893cf892be9a7f667b277e89"
+    },
+    "players/all": {
+      "bytes": 3319440,
+      "fetched_at": "2026-04-23T01:33:02.495704+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\players\\all.parquet",
+      "row_count": 24377,
+      "sha256": "e6ca1665ef119ab968d56d2f70a257277b94ba781084e169da70ec26ec746cf5"
+    },
+    "rosters/2024": {
+      "bytes": 575441,
+      "fetched_at": "2026-04-23T01:33:02.696609+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\rosters\\2024.parquet",
+      "row_count": 3216,
+      "sha256": "4decc692dac3ef5d3484b5fcf0dd0a0a31f8c9ed3d1d9b3e8399d6c9708b9258"
+    },
+    "rosters/2025": {
+      "bytes": 595290,
+      "fetched_at": "2026-04-23T01:36:57.078008+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\rosters\\2025.parquet",
+      "row_count": 3137,
+      "sha256": "72b9d9d8212196d02ffa2fa5fd137e2f0f3fa5f5e434382b8642d7e528ef425b"
+    },
+    "snap_counts/2024": {
+      "bytes": 244429,
+      "fetched_at": "2026-04-23T02:23:46.917471+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\snap_counts\\2024.parquet",
+      "row_count": 26615,
+      "sha256": "79c78bbda2a275d6d2e37141de9bb22a6c22f17d0b906d1c8ca6ef25eb71bc9c"
+    },
+    "snap_counts/2025": {
+      "bytes": 244120,
+      "fetched_at": "2026-04-23T02:23:50.778860+00:00",
+      "nflreadpy_version": "0.1.5",
+      "path": "C:\\Users\\shane\\Projects\\nfl-player-grades\\pipeline\\.cache\\raw\\snap_counts\\2025.parquet",
+      "row_count": 26612,
+      "sha256": "ed00628adcb2fa7bdaf43be33b274a5694d8dcd8956126e981fd6f5e880dab9f"
+    }
+  },
+  "version": 1
+}
