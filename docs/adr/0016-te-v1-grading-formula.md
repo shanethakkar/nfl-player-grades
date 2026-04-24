@@ -26,9 +26,13 @@ same metric — **downweight, do not drop**.
 | `te_success_rate_per_target` | 0.08 |
 | `te_fumble_rate` | -0.05 |
 
-Sum of magnitudes = 0.95 (composite normalizer uses **sum of absolute
-weights** — see `test_signed_weights_normalize_by_magnitude` and TE tests in
-`test_composite.py`).
+Sum of magnitudes `|w| = 0.92` (signed sum `0.82`; composite normalizer uses
+**sum of absolute weights** — see `test_signed_weights_normalize_by_magnitude`
+and TE tests in `test_composite.py`).
+
+The earlier "0.95" figure in this ADR was a copy-paste artifact from WR v1
+(WR has separation at 0.10 → WR `|w| = 0.95`); TE separation is downweighted
+to 0.07 for NGS-calibration reasons, giving `|w| = 0.92`.
 
 **YAC weight = WR (27%)**: do **not** increase TE YAC weight on intuition alone;
 if TE YAC YoY correlation meaningfully exceeds WR YAC in validation, consider
@@ -41,6 +45,11 @@ composite; redistribute **0.10** to EPA and YAC in proportion **0.35∶0.27**
 (→ **0.406** and **0.314**). Other components unchanged. The component row for
 `te_target_earn_rate` is still written with **raw / shrunk / z**;
 `stat_components.used_in_composite = false` for that row.
+
+Because the redistribution **preserves magnitude**, tier-2 has the same
+`|w| = 0.92` and signed sum `0.82` as tier-1 — on an all-z=1 TE the two
+dicts both produce `0.82 / 0.92 ≈ 0.8913`. The dicts differ by *where the
+earn mass lands*, not by total weight.
 
 ### Filters, features
 

@@ -115,7 +115,7 @@ class TestCombine:
         assert out.iloc[0] == pytest.approx(0.8947, abs=1e-4)
 
     def test_te_v1_weights_example(self) -> None:
-        """ADR-0016: TE tier-1 = WR-aligned with 7% separation. |w| = 0.95."""
+        """ADR-0016: TE tier-1 = WR-aligned with 7% separation. |w| = 0.92."""
         from nfl_grades.grading.weights import TE_V1_WEIGHTS
 
         components = list(TE_V1_WEIGHTS.keys())
@@ -123,11 +123,13 @@ class TestCombine:
         out = combine(df, TE_V1_WEIGHTS)
         expected = sum(TE_V1_WEIGHTS.values()) / sum(abs(w) for w in TE_V1_WEIGHTS.values())
         assert out.iloc[0] == pytest.approx(expected)
-        # 0.35+0.27+0.07+0.10+0.08-0.05 = 0.82
-        assert out.iloc[0] == pytest.approx(0.82 / 0.95, abs=1e-6)
+        # 0.35+0.27+0.07+0.10+0.08-0.05 = 0.82; |w| = 0.92
+        assert out.iloc[0] == pytest.approx(0.82 / 0.92, abs=1e-6)
 
     def test_te_v1_blocking_weights_example(self) -> None:
-        """Blocking TE: earn omitted; EPA/YAC get +0.056/+0.044. |w| = 0.92."""
+        """Blocking TE: earn omitted, redistributed to EPA/YAC. Magnitude-
+        preserving, so |w| = 0.92 and signed sum = 0.82 are unchanged from
+        tier-1 (ADR-0016 §Tier 2)."""
         from nfl_grades.grading.weights import TE_V1_BLOCKING_WEIGHTS
 
         comp = list(TE_V1_BLOCKING_WEIGHTS.keys())
@@ -137,3 +139,5 @@ class TestCombine:
             abs(w) for w in TE_V1_BLOCKING_WEIGHTS.values()
         )
         assert out.iloc[0] == pytest.approx(expected)
+        # 0.406+0.314+0.07+0.08-0.05 = 0.82; |w| = 0.92
+        assert out.iloc[0] == pytest.approx(0.82 / 0.92, abs=1e-6)
