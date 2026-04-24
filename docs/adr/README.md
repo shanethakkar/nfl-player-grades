@@ -55,3 +55,4 @@ ADR. If it took more than 5 minutes of thought, write one.
 | 0014 | RB v1 grading formula                                        | Accepted |
 | 0015 | WR v1 grading formula                                        | Accepted |
 | 0016 | TE v1 grading formula                                        | Accepted |
+| 0017 | v1 face-check: offense-context contamination in high-volume receivers | Accepted |
