@@ -19,6 +19,7 @@ from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import RB_REC_FILTER_SQL
 from nfl_grades.grading.weights import (
+    TE_COMPONENT_TARGET_EARN_RATE,
     TE_ROLE_BALANCED,
     TE_ROLE_BLOCKING,
     TE_ROLE_RECEIVING,
@@ -35,7 +36,6 @@ from nfl_grades.grading.weights import (
     TE_V1_TARGET_RATE_BALANCED_LO,
     TE_V1_TARGET_RATE_RECEIVING,
     TE_V1_WEIGHTS,
-    TE_COMPONENT_TARGET_EARN_RATE,
 )
 
 logger = logging.getLogger(__name__)

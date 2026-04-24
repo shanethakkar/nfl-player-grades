@@ -9,15 +9,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from nfl_grades.db import get_engine
-from nfl_grades.grading.weights import TE_ROLE_BLOCKING
 from nfl_grades.grading.te import (
-    POSITION,
     assign_te_role,
     compute_grades,
     compute_te_data_tier_and_reason,
     extract_features,
     write_results,
 )
+from nfl_grades.grading.weights import TE_ROLE_BLOCKING
 
 
 def _synth_te_cohort(
@@ -42,7 +41,6 @@ def _synth_te_cohort(
     yac_oe = 0.1 * skill
     succ = 0.5 + 0.03 * skill
     sep = 2.5 + 0.2 * skill
-    earn = n_targets / np.maximum(n_team_pass, 1)
     for i in range(n_blocking):
         n_targets[i] = 25
         snaps[i] = 450
@@ -79,19 +77,13 @@ class TestComputeGrades:
         base = _synth_te_cohort(seed=1)
         s = 2024
         a = compute_grades(base, s)
-        # Force first row to blocking: extreme low target / high snap
+        # Same features, forced blocking role -> TE_V1_BLOCKING_WEIGHTS path
         b = base.copy()
-        b.loc[0, "n_targets"] = 20
-        b.loc[0, "n_receptions"] = 15
-        b.loc[0, "n_rec_with_xyac"] = 15
-        b.loc[0, "n_team_pass_att_active"] = 500
-        b.loc[0, "snaps_offense"] = 500
-        b.loc[0, "target_earn_rate"] = 20 / 500
-        b.loc[0, "fumble_rate"] = 0.0
         b.loc[0, "role"] = TE_ROLE_BLOCKING
         g = compute_grades(b, s)
+        assert a.loc[0, "role"] != TE_ROLE_BLOCKING
         assert g.loc[0, "role"] == TE_ROLE_BLOCKING
-        # Pathological but composite must be a finite 0-100
+        assert a.loc[0, "grade"] != g.loc[0, "grade"]
         assert 0 <= g.loc[0, "grade"] <= 100
 
     def test_tier_reason_blocking_modern_era(self) -> None:
