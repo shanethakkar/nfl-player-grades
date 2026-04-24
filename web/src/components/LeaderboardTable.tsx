@@ -5,6 +5,13 @@ import type { LeaderboardEntry } from "@/types";
 
 type Props = {
   entries: LeaderboardEntry[];
+  /**
+   * Position determines which trailing stat columns render. Only QB has
+   * component-level columns wired into the leaderboard query today (EPA/db,
+   * CPOE, Succ%). For non-QB positions we render the position-agnostic
+   * columns only; per-component detail lives on the player page.
+   */
+  position: string;
 };
 
 /**
@@ -18,7 +25,7 @@ type Props = {
  * - EPA / CPOE / Success are shown as **raw** values — the shrunk and
  *   z-scored versions are visible on the player detail page.
  */
-export function LeaderboardTable({ entries }: Props) {
+export function LeaderboardTable({ entries, position }: Props) {
   if (entries.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-neutral-500">
@@ -26,6 +33,8 @@ export function LeaderboardTable({ entries }: Props) {
       </p>
     );
   }
+
+  const showQbColumns = position === "QB";
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-800">
@@ -37,15 +46,24 @@ export function LeaderboardTable({ entries }: Props) {
             <Th className="text-center">Team</Th>
             <Th className="text-right">Grade</Th>
             <Th className="text-right">Pct</Th>
-            <Th className="text-right">Drops</Th>
-            <Th className="text-right">EPA/db</Th>
-            <Th className="text-right">CPOE</Th>
-            <Th className="text-right">Succ%</Th>
+            {showQbColumns && (
+              <>
+                <Th className="text-right">Drops</Th>
+                <Th className="text-right">EPA/db</Th>
+                <Th className="text-right">CPOE</Th>
+                <Th className="text-right">Succ%</Th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           {entries.map((e, idx) => (
-            <Row key={e.player_id} entry={e} rank={idx + 1} />
+            <Row
+              key={e.player_id}
+              entry={e}
+              rank={idx + 1}
+              showQbColumns={showQbColumns}
+            />
           ))}
         </tbody>
       </table>
@@ -53,7 +71,15 @@ export function LeaderboardTable({ entries }: Props) {
   );
 }
 
-function Row({ entry: e, rank }: { entry: LeaderboardEntry; rank: number }) {
+function Row({
+  entry: e,
+  rank,
+  showQbColumns,
+}: {
+  entry: LeaderboardEntry;
+  rank: number;
+  showQbColumns: boolean;
+}) {
   const rowClass = e.qualified
     ? "border-t border-neutral-900 hover:bg-neutral-900/60"
     : "border-t border-neutral-900 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
@@ -82,18 +108,22 @@ function Row({ entry: e, rank }: { entry: LeaderboardEntry; rank: number }) {
       <Td className="text-right font-mono text-neutral-400">
         {e.percentile.toFixed(0)}
       </Td>
-      <Td className="text-right font-mono text-neutral-400">
-        {e.n_dropbacks ?? "—"}
-      </Td>
-      <Td className="text-right font-mono text-neutral-300">
-        {formatSigned(e.epa_per_dropback, 3)}
-      </Td>
-      <Td className="text-right font-mono text-neutral-300">
-        {formatSigned(e.cpoe, 2)}
-      </Td>
-      <Td className="text-right font-mono text-neutral-300">
-        {e.success_rate === null ? "—" : (e.success_rate * 100).toFixed(1)}
-      </Td>
+      {showQbColumns && (
+        <>
+          <Td className="text-right font-mono text-neutral-400">
+            {e.n_dropbacks ?? "—"}
+          </Td>
+          <Td className="text-right font-mono text-neutral-300">
+            {formatSigned(e.epa_per_dropback, 3)}
+          </Td>
+          <Td className="text-right font-mono text-neutral-300">
+            {formatSigned(e.cpoe, 2)}
+          </Td>
+          <Td className="text-right font-mono text-neutral-300">
+            {e.success_rate === null ? "—" : (e.success_rate * 100).toFixed(1)}
+          </Td>
+        </>
+      )}
     </tr>
   );
 }

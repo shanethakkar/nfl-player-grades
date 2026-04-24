@@ -79,9 +79,13 @@ export async function getLeaderboard(
     LEFT JOIN LATERAL (
       SELECT pl.posteam AS team_abbr
       FROM plays pl
-      WHERE pl.passer_player_id = p.gsis_id
-        AND pl.season = sg.season
+      WHERE pl.season = sg.season
         AND pl.posteam IS NOT NULL
+        AND (
+             pl.passer_player_id   = p.gsis_id
+          OR pl.rusher_player_id   = p.gsis_id
+          OR pl.receiver_player_id = p.gsis_id
+        )
       GROUP BY pl.posteam
       ORDER BY COUNT(*) DESC
       LIMIT 1
@@ -164,9 +168,13 @@ export async function getPlayerDetail(
     LEFT JOIN LATERAL (
       SELECT pl.posteam AS team_abbr
       FROM plays pl
-      WHERE pl.passer_player_id = ${meta.gsis_id}
-        AND pl.season = sg.season
+      WHERE pl.season = sg.season
         AND pl.posteam IS NOT NULL
+        AND (
+             pl.passer_player_id   = ${meta.gsis_id}
+          OR pl.rusher_player_id   = ${meta.gsis_id}
+          OR pl.receiver_player_id = ${meta.gsis_id}
+        )
       GROUP BY pl.posteam
       ORDER BY COUNT(*) DESC
       LIMIT 1

@@ -1,58 +1,153 @@
 import { LeaderboardTable } from "@/components/LeaderboardTable";
+import { PositionPicker } from "@/components/PositionPicker";
 import { SeasonPicker } from "@/components/SeasonPicker";
-import { getGradedSeasons, getLeaderboard } from "@/lib/queries";
+import {
+  getGradedPositions,
+  getGradedSeasons,
+  getLeaderboard,
+} from "@/lib/queries";
 
-type SearchParams = Promise<{ season?: string | string[] }>;
+type SearchParams = Promise<{
+  season?: string | string[];
+  position?: string | string[];
+}>;
 
 type Props = { searchParams: SearchParams };
 
-const POSITION = "QB";     // v1: only QB is graded (ADR-0013)
+// Tabs render in this canonical order (not alphabetical) so QB appears first
+// and TE last, matching how the positions were rolled out.
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE"];
+const DEFAULT_POSITION = "QB";
+
+/** Short phrase following "{N} qualified starters · composite of ..." */
+const COMPOSITE_BLURB: Record<string, string> = {
+  QB: "composite of EPA/dropback, CPOE, and success rate",
+  RB: "composite of rushing efficiency (RYOE / EPA / success), receiving value, and ball security",
+  WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, and ball security",
+  TE: "composite of EPA/target, YAC-over-expected, separation, earn rate, and ball security (earn rate dropped for pure blockers — ADR-0016)",
+};
+
+/** Heading + threshold text used for the below-qualification section. */
+const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = {
+  QB: {
+    heading: "Low-volume passers",
+    threshold:
+      "Fewer than 200 qualifying dropbacks. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
+  RB: {
+    heading: "Low-volume backs",
+    threshold:
+      "Fewer than 120 touches. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
+  WR: {
+    heading: "Low-volume receivers",
+    threshold:
+      "Fewer than 50 targets. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
+  TE: {
+    heading: "Low-volume tight ends",
+    threshold:
+      "Fewer than 40 targets. Grades still computed on the same 0-100 scale but treat them as noisy. Pure blocking TEs (<15 targets) are not graded at all.",
+  },
+};
+
+/** Noun used in the "{N} qualified X" header under the title. */
+const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
+  QB: { singular: "qualified starter", plural: "qualified starters" },
+  RB: { singular: "qualified back", plural: "qualified backs" },
+  WR: { singular: "qualified receiver", plural: "qualified receivers" },
+  TE: { singular: "qualified tight end", plural: "qualified tight ends" },
+};
 
 export default async function HomePage({ searchParams }: Props) {
-  const seasons = await getGradedSeasons();
+  const [seasons, gradedPositions] = await Promise.all([
+    getGradedSeasons(),
+    getGradedPositions(),
+  ]);
   if (seasons.length === 0) {
     return <EmptyState />;
   }
 
-  const { season: seasonParam } = await searchParams;
-  const requested = firstOf(seasonParam);
+  const { season: seasonParam, position: positionParam } = await searchParams;
+
+  const requestedSeason = firstOf(seasonParam);
   const activeSeason =
-    requested && seasons.includes(Number(requested))
-      ? Number(requested)
+    requestedSeason && seasons.includes(Number(requestedSeason))
+      ? Number(requestedSeason)
       : seasons[0];
 
-  const entries = await getLeaderboard(activeSeason, POSITION);
+  // Only accept positions that (a) are in our canonical tab order and
+  // (b) have at least one row in season_grades. That way we never show a
+  // tab that would render an empty table — if, say, TE hasn't been graded
+  // yet for any season, we omit it entirely.
+  const availablePositions = POSITION_ORDER.filter((p) =>
+    gradedPositions.includes(p),
+  );
+  const pickerPositions =
+    availablePositions.length > 0 ? availablePositions : [DEFAULT_POSITION];
+
+  const requestedPosition = firstOf(positionParam)?.toUpperCase();
+  const activePosition =
+    requestedPosition && pickerPositions.includes(requestedPosition)
+      ? requestedPosition
+      : pickerPositions.includes(DEFAULT_POSITION)
+        ? DEFAULT_POSITION
+        : pickerPositions[0];
+
+  const entries = await getLeaderboard(activeSeason, activePosition);
   const qualified = entries.filter((e) => e.qualified);
   const unqualified = entries.filter((e) => !e.qualified);
+
+  const noun =
+    QUALIFIED_NOUN[activePosition] ?? QUALIFIED_NOUN[DEFAULT_POSITION];
+  const blurb =
+    COMPOSITE_BLURB[activePosition] ?? COMPOSITE_BLURB[DEFAULT_POSITION];
+  const lowVolume =
+    LOW_VOLUME_COPY[activePosition] ?? LOW_VOLUME_COPY[DEFAULT_POSITION];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">QB Leaderboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {activePosition} Leaderboard
+          </h1>
           <p className="mt-1 text-sm text-neutral-400">
-            {qualified.length} qualified starter{qualified.length === 1 ? "" : "s"}
-            {" \u00B7 "}composite of EPA/dropback, CPOE, and success rate
-            (see <a className="underline" href="/methodology">methodology</a>)
+            {qualified.length}{" "}
+            {qualified.length === 1 ? noun.singular : noun.plural}
+            {" \u00B7 "}
+            {blurb} (see{" "}
+            <a className="underline" href="/methodology">
+              methodology
+            </a>
+            )
           </p>
         </div>
-        <SeasonPicker seasons={seasons} activeSeason={activeSeason} />
+        <div className="flex flex-wrap items-center gap-3">
+          <PositionPicker
+            positions={pickerPositions}
+            activePosition={activePosition}
+            activeSeason={activeSeason}
+          />
+          <SeasonPicker
+            seasons={seasons}
+            activeSeason={activeSeason}
+            activePosition={activePosition}
+          />
+        </div>
       </div>
 
       <section className="mt-6">
-        <LeaderboardTable entries={qualified} />
+        <LeaderboardTable entries={qualified} position={activePosition} />
       </section>
 
       {unqualified.length > 0 && (
         <section className="mt-10">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-            Low-volume passers ({unqualified.length})
+            {lowVolume.heading} ({unqualified.length})
           </h2>
-          <p className="mb-3 text-xs text-neutral-500">
-            Fewer than 200 qualifying dropbacks. Grades still computed on the
-            same 0-100 scale but treat them as noisy.
-          </p>
-          <LeaderboardTable entries={unqualified} />
+          <p className="mb-3 text-xs text-neutral-500">{lowVolume.threshold}</p>
+          <LeaderboardTable entries={unqualified} position={activePosition} />
         </section>
       )}
     </main>
