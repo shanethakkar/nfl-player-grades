@@ -16,7 +16,7 @@ from nfl_grades.grading.te import (
     extract_features,
     write_results,
 )
-from nfl_grades.grading.weights import TE_ROLE_BLOCKING
+from nfl_grades.grading.weights import TE_COMPONENT_TARGET_EARN_RATE, TE_ROLE_BLOCKING
 
 
 def _synth_te_cohort(
@@ -136,9 +136,35 @@ class TestWriteResults:
         n_c, n_g = write_results(conn, g, 1994)
         assert n_c == 6 * len(g)
         assert n_g == g["grade"].notna().sum()
-        bad = conn.execute(
+
+        # ADR-0016: blocking TEs write used_in_composite=FALSE on the
+        # te_target_earn_rate row only. All other components are TRUE, and
+        # non-blocking TEs are TRUE for every component. Use season_grades.role
+        # as the source of truth for the classification we just wrote.
+        n_blocking = conn.execute(
             text(
-                "SELECT COUNT(*) FROM stat_components WHERE season=1994 AND (used_in_composite IS NOT TRUE)"
-            )
+                "SELECT COUNT(*) FROM season_grades "
+                "WHERE season = :s AND position = 'TE' AND role = :r"
+            ),
+            {"s": 1994, "r": TE_ROLE_BLOCKING},
         ).scalar()
-        assert bad == 0
+
+        earn_false = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM stat_components "
+                "WHERE season = :s AND component_name = :c "
+                "AND used_in_composite IS NOT TRUE"
+            ),
+            {"s": 1994, "c": TE_COMPONENT_TARGET_EARN_RATE},
+        ).scalar()
+        assert earn_false == n_blocking
+
+        other_false = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM stat_components "
+                "WHERE season = :s AND component_name <> :c "
+                "AND used_in_composite IS NOT TRUE"
+            ),
+            {"s": 1994, "c": TE_COMPONENT_TARGET_EARN_RATE},
+        ).scalar()
+        assert other_false == 0
