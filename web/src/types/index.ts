@@ -117,7 +117,52 @@ export type SeasonGradeDetail = {
   confidence: number | null;
   data_tier: number;
   team_abbr: string | null;
+  /** TE role string (receiving_te / balanced_te / blocking_te), null otherwise. */
+  role: string | null;
   components: StatComponentDetail[];
+  /**
+   * Offense context for ADR-0017 mitigation. Populated for WR/TE/RB
+   * grades that have a team_abbr; null for QB grades (context would
+   * be circular) or when team lookup failed.
+   */
+  context: TeamContext | null;
+};
+
+/**
+ * Lead QB for a team in a given season (the one with the most dropbacks).
+ * Grade/qualified may be null when the QB didn't meet the grade threshold
+ * — we still surface them so the reader sees the identity and understands
+ * why the grade is missing.
+ */
+export type TopQb = {
+  player_id: number;
+  full_name: string;
+  composite_grade: number | null;
+  qualified: boolean | null;
+  dropbacks: number;
+};
+
+/**
+ * Team offense + QB context attached to a non-QB season grade.
+ * See ADR-0017 for the trigger logic on `player_high_volume` and the
+ * inline note.
+ */
+export type TeamContext = {
+  team_abbr: string;
+  season: number;
+  /** Team offensive EPA/play on standard downs 1-4, pass/run only. */
+  team_epa_per_play: number;
+  /** 1 = best offense in the league that season. */
+  team_epa_rank: number;
+  /** Total teams ranked (usually 32 for a full season). */
+  team_epa_total: number;
+  top_qb: TopQb | null;
+  /**
+   * True when this player is top-15 at their position by volume
+   * (targets for WR/TE, touches for RB) that season. Used together
+   * with a bad top-QB grade to fire the ADR-0017 inline note.
+   */
+  player_high_volume: boolean;
 };
 
 /** Minimal player metadata — enough to render a header. */

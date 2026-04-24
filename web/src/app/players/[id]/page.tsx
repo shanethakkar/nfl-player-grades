@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
-import { DATA_TIER_LABELS } from "@/lib/grades";
+import { TeamContextPanel } from "@/components/TeamContextPanel";
+import { DATA_TIER_LABELS, teRoleLabel } from "@/lib/grades";
 import { getPlayerDetail } from "@/lib/queries";
 import type { DataTier, SeasonGradeDetail } from "@/types";
 
@@ -72,6 +73,7 @@ export default async function PlayerPage({ params }: PageProps) {
 }
 
 function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
+  const roleText = g.position === "TE" ? teRoleLabel(g.role) : null;
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -83,6 +85,11 @@ function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
             {g.team_abbr && (
               <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
                 {g.team_abbr}
+              </span>
+            )}
+            {roleText && (
+              <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400">
+                {roleText}
               </span>
             )}
             <span className="text-[10px] uppercase tracking-wide text-neutral-500">
@@ -113,6 +120,8 @@ function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
           )}
         </div>
       </div>
+
+      {g.context && <TeamContextPanel context={g.context} />}
 
       <div className="mt-5">
         <ComponentBreakdownTable components={g.components} />

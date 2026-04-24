@@ -18,6 +18,8 @@ import type {
   PlayerMeta,
   SeasonGradeDetail,
   StatComponentDetail,
+  TeamContext,
+  TopQb,
 } from "@/types";
 
 /**
@@ -297,6 +299,7 @@ export async function getPlayerDetail(
       qualified: boolean;
       confidence: number | null;
       data_tier: number;
+      role: string | null;
       team_abbr: string | null;
     }[]
   >`
@@ -309,6 +312,7 @@ export async function getPlayerDetail(
       sg.qualified,
       sg.confidence,
       sg.data_tier,
+      sg.role,
       team_lookup.team_abbr
     FROM season_grades sg
     LEFT JOIN LATERAL (
@@ -359,6 +363,18 @@ export async function getPlayerDetail(
     componentsBySeason.set(row.season, bucket);
   }
 
+  // Team/offense context for non-QB grades (ADR-0017). One batch for all
+  // of the player's seasons at once so we avoid N+1 queries.
+  const nonQbGradeKeys = gradeRows
+    .filter((g) => g.position !== "QB" && g.team_abbr)
+    .map((g) => ({
+      player_id: playerId,
+      season: g.season,
+      position: g.position,
+      team_abbr: g.team_abbr as string,
+    }));
+  const contextByKey = await getTeamContexts(nonQbGradeKeys);
+
   const grades: SeasonGradeDetail[] = gradeRows.map((g) => ({
     season: g.season,
     position: g.position,
@@ -368,11 +384,222 @@ export async function getPlayerDetail(
     qualified: g.qualified,
     confidence: coerceNullableNumber(g.confidence),
     data_tier: g.data_tier,
+    role: g.role,
     team_abbr: g.team_abbr,
     components: componentsBySeason.get(g.season) ?? [],
+    context:
+      g.team_abbr && g.position !== "QB"
+        ? contextByKey.get(
+            contextKey({
+              season: g.season,
+              team_abbr: g.team_abbr,
+              position: g.position,
+              player_id: playerId,
+            }),
+          ) ?? null
+        : null,
   }));
 
   return { player: meta, grades };
+}
+
+// ---------------------------------------------------------------------------
+// Team/offense context for ADR-0017 mitigation
+//
+// Given the set of (season, team, position, player) tuples from a player's
+// non-QB grade rows, returns a Map<context-key, TeamContext>. Three
+// underlying queries:
+//   1. Team offense EPA + rank for every season in the set.
+//   2. Lead QB + grade for every (team, season) in the set.
+//   3. Top-15 volume cutoff per (season, position) — used to fire the
+//      ADR-0017 inline note only on high-volume receivers.
+// All three are single queries regardless of how many seasons a player
+// has, so the whole context fetch is 3 roundtrips.
+// ---------------------------------------------------------------------------
+
+type ContextKey = {
+  season: number;
+  team_abbr: string;
+  position: string;
+  player_id: number;
+};
+
+function contextKey(k: ContextKey): string {
+  return `${k.season}:${k.team_abbr}:${k.position}:${k.player_id}`;
+}
+
+async function getTeamContexts(
+  keys: ContextKey[],
+): Promise<Map<string, TeamContext>> {
+  if (keys.length === 0) return new Map();
+
+  const seasons = Array.from(new Set(keys.map((k) => k.season)));
+
+  // --- Query 1: team EPA/play + rank per season ---
+  const epaRows = await sql<
+    {
+      season: number;
+      posteam: string;
+      epa_per_play: number;
+      rk: number;
+      n_teams: number;
+    }[]
+  >`
+    WITH team_epa AS (
+      SELECT
+        pl.season,
+        pl.posteam,
+        AVG(pl.epa)::float AS epa_per_play
+      FROM plays pl
+      WHERE pl.season = ANY(${seasons})
+        AND pl.posteam IS NOT NULL
+        AND pl.down BETWEEN 1 AND 4
+        AND pl.play_type IN ('pass', 'run')
+        AND pl.epa IS NOT NULL
+      GROUP BY pl.season, pl.posteam
+    )
+    SELECT
+      season,
+      posteam,
+      epa_per_play,
+      RANK() OVER (PARTITION BY season ORDER BY epa_per_play DESC)::int AS rk,
+      COUNT(*) OVER (PARTITION BY season)::int AS n_teams
+    FROM team_epa
+  `;
+  const epaByKey = new Map<string, { epa_per_play: number; rk: number; n_teams: number }>();
+  for (const r of epaRows) {
+    epaByKey.set(`${r.season}:${r.posteam}`, {
+      epa_per_play: Number(r.epa_per_play),
+      rk: Number(r.rk),
+      n_teams: Number(r.n_teams),
+    });
+  }
+
+  // --- Query 2: lead QB per (team, season) + their season_grades row ---
+  // Dropback definition: pass attempt OR sack OR QB scramble. Matches
+  // QB v1 feature extraction (ADR-0013).
+  const qbRows = await sql<
+    {
+      season: number;
+      team_abbr: string;
+      player_id: number;
+      full_name: string;
+      n_dropbacks: number;
+      composite_grade: number | null;
+      qualified: boolean | null;
+    }[]
+  >`
+    WITH qb_team_dropbacks AS (
+      SELECT
+        pl.passer_player_id AS gsis_id,
+        pl.posteam          AS team_abbr,
+        pl.season,
+        COUNT(*)::int       AS n_dropbacks
+      FROM plays pl
+      WHERE pl.season = ANY(${seasons})
+        AND pl.posteam IS NOT NULL
+        AND pl.passer_player_id IS NOT NULL
+        AND (pl.pass_attempt = TRUE OR pl.sack = TRUE OR pl.qb_scramble = TRUE)
+      GROUP BY 1, 2, 3
+    ),
+    lead_qb AS (
+      SELECT DISTINCT ON (season, team_abbr)
+        season, team_abbr, gsis_id, n_dropbacks
+      FROM qb_team_dropbacks
+      ORDER BY season, team_abbr, n_dropbacks DESC
+    )
+    SELECT
+      lq.season,
+      lq.team_abbr,
+      p.player_id,
+      p.full_name,
+      lq.n_dropbacks,
+      sg.composite_grade,
+      sg.qualified
+    FROM lead_qb lq
+    JOIN players p ON p.gsis_id = lq.gsis_id
+    LEFT JOIN season_grades sg
+      ON sg.player_id = p.player_id
+     AND sg.season = lq.season
+     AND sg.position = 'QB'
+  `;
+  const qbByKey = new Map<string, TopQb>();
+  for (const r of qbRows) {
+    qbByKey.set(`${r.season}:${r.team_abbr}`, {
+      player_id: Number(r.player_id),
+      full_name: r.full_name,
+      composite_grade:
+        r.composite_grade === null ? null : Number(r.composite_grade),
+      qualified: r.qualified,
+      dropbacks: Number(r.n_dropbacks),
+    });
+  }
+
+  // --- Query 3: top-15 volume per (season, position) ---
+  // Volume proxy = sample_size on the "touches" (RB) or "targets" (WR/TE)
+  // component, pulled from stat_components. RANK, then filter rk <= 15.
+  const volumeRows = await sql<
+    {
+      season: number;
+      position: string;
+      player_id: number;
+    }[]
+  >`
+    WITH volume_components AS (
+      SELECT
+        sc.player_id,
+        sc.season,
+        CASE
+          WHEN sc.component_name = 'rb_fumble_rate'                THEN 'RB'
+          WHEN sc.component_name = 'wr_rec_epa_per_target'         THEN 'WR'
+          WHEN sc.component_name = 'te_rec_epa_per_target'         THEN 'TE'
+        END AS position,
+        sc.sample_size AS volume
+      FROM stat_components sc
+      WHERE sc.season = ANY(${seasons})
+        AND sc.component_name IN (
+          'rb_fumble_rate',
+          'wr_rec_epa_per_target',
+          'te_rec_epa_per_target'
+        )
+        AND sc.sample_size IS NOT NULL
+    ),
+    ranked AS (
+      SELECT
+        player_id, season, position, volume,
+        RANK() OVER (
+          PARTITION BY season, position
+          ORDER BY volume DESC NULLS LAST
+        )::int AS rk
+      FROM volume_components
+    )
+    SELECT player_id, season, position
+    FROM ranked
+    WHERE rk <= 15
+  `;
+  const highVolumeSet = new Set(
+    volumeRows.map((r) => `${r.season}:${r.position}:${r.player_id}`),
+  );
+
+  // --- Assemble ---
+  const out = new Map<string, TeamContext>();
+  for (const k of keys) {
+    const epa = epaByKey.get(`${k.season}:${k.team_abbr}`);
+    const qb = qbByKey.get(`${k.season}:${k.team_abbr}`) ?? null;
+    if (!epa) continue;
+    out.set(contextKey(k), {
+      team_abbr: k.team_abbr,
+      season: k.season,
+      team_epa_per_play: epa.epa_per_play,
+      team_epa_rank: epa.rk,
+      team_epa_total: epa.n_teams,
+      top_qb: qb,
+      player_high_volume: highVolumeSet.has(
+        `${k.season}:${k.position}:${k.player_id}`,
+      ),
+    });
+  }
+  return out;
 }
 
 /**
