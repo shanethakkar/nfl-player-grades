@@ -47,11 +47,21 @@ export type DepthChartEntry = DepthChartsRow;
 // ---------------------------------------------------------------------------
 
 /**
- * One row in the QB leaderboard: a season grade joined with player name,
- * primary team, and the three raw QB-v1 components.
+ * One leaderboard row: a season grade joined with player name, primary
+ * team, and a handful of headline components from stat_components.
  *
- * `n_dropbacks` is the sample_size on the `qb_epa_per_dropback` component,
- * which the QB feature extraction uses as the post-filter dropback count.
+ * Which component fields carry values depends on `position`:
+ *   QB → n_dropbacks, epa_per_dropback, cpoe, success_rate
+ *   RB → n_touches, rb_ryoe_per_attempt, rb_rush_epa_per_attempt,
+ *        rb_rush_success_rate
+ *   WR → n_targets, rec_epa_per_target, yac_over_expected_per_rec,
+ *        target_earn_rate
+ *   TE → same as WR, plus `role` populated from season_grades
+ *
+ * Unused fields are `null` by construction (they come from LEFT JOINs
+ * that didn't match because the component doesn't exist for that
+ * position). Rendering code should look only at the fields relevant
+ * to the position and ignore the rest.
  */
 export type LeaderboardEntry = {
   player_id: number;
@@ -65,10 +75,24 @@ export type LeaderboardEntry = {
   confidence: number | null;
   data_tier: number;
   team_abbr: string | null;
+  /** TE role label (receiving_te / balanced_te / blocking_te); null for QB/RB/WR. */
+  role: string | null;
+  // --- QB columns ---
   n_dropbacks: number | null;
   epa_per_dropback: number | null;
   cpoe: number | null;
   success_rate: number | null;
+  // --- RB columns ---
+  n_touches: number | null;
+  rb_ryoe_per_attempt: number | null;
+  rb_rush_epa_per_attempt: number | null;
+  rb_rush_success_rate: number | null;
+  // --- WR / TE columns (column names are position-agnostic; the
+  // underlying component is wr_* or te_* depending on sg.position) ---
+  n_targets: number | null;
+  rec_epa_per_target: number | null;
+  yac_over_expected_per_rec: number | null;
+  target_earn_rate: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */
