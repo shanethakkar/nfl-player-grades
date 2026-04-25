@@ -92,7 +92,7 @@ export function TeamContextPanel({ context: ctx }: Props) {
           Grade may be suppressed by QB context — v1&apos;s per-target
           efficiency components don&apos;t adjust for the passer (see{" "}
           <Link
-            href="/methodology#adr-0017"
+            href="/about/decisions#adr-0017"
             className="underline decoration-dotted hover:text-neutral-100"
           >
             ADR-0017

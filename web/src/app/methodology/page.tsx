@@ -1,244 +1,447 @@
-import type { ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSlug from "rehype-slug";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import { readAdrs, readMethodology, type AdrDoc } from "@/lib/docs";
+import Link from "next/link";
+
+import { gradeColor } from "@/lib/grades";
+import {
+  getCurrentTopAtPosition,
+  getGradeTierExamples,
+  type CurrentTopEntry,
+  type GradeTierId,
+  type TierBucket,
+  type TierExample,
+} from "@/lib/methodology";
 
 export const metadata = {
-  title: "Methodology — NFL Player Grades",
+  title: "How grades work — NFL Player Grades",
   description:
-    "How the grades are computed: pipeline, weights, validation, limitations, and the architecture decision records behind v1.",
+    "Every NFL player on a 0-100 scale, computed from play-by-play data. Here's what goes into the number, what each tier means, and what we don't measure yet.",
 };
 
-// Server component — `fs` reads happen at render time.
+/**
+ * Consumer-facing methodology page.
+ *
+ * Audience: an NFL fan who clicked the "methodology" link from a player
+ * grade. They want to know what's measured, what the scale means, and
+ * what the limitations are. They don't care about version numbers,
+ * scope language, or design rationale — that lives at /about/decisions.
+ *
+ * Server component: the grade scale and per-position cards pull live
+ * data so they refresh automatically as new seasons come in.
+ */
 export default async function MethodologyPage() {
-  const [methodologyMd, adrs] = await Promise.all([
-    readMethodology(),
-    readAdrs(),
+  const [tiers, qbTop, rbTop, wrTop, teTop] = await Promise.all([
+    getGradeTierExamples(),
+    getCurrentTopAtPosition("QB"),
+    getCurrentTopAtPosition("RB"),
+    getCurrentTopAtPosition("WR"),
+    getCurrentTopAtPosition("TE"),
   ]);
 
+  const positions: PositionCardData[] = [
+    {
+      position: "QB",
+      headline: "Quarterback",
+      description:
+        "Three things — how many points each dropback added, how accurate they were beyond what's expected, and how often the play succeeded.",
+      top: qbTop,
+    },
+    {
+      position: "RB",
+      headline: "Running back",
+      description:
+        "Six factors — yards over expected on each carry, points added per attempt, success rate, receiving value, catch rate, and ball security.",
+      top: rbTop,
+    },
+    {
+      position: "WR",
+      headline: "Wide receiver",
+      description:
+        "Six factors — points per target, yards-after-catch beyond expected, separation from defenders, share of team targets earned, success rate when targeted, and ball security.",
+      top: wrTop,
+    },
+    {
+      position: "TE",
+      headline: "Tight end",
+      description:
+        "Same six as receivers, with one twist — tight ends who are mostly blockers don't get penalized for low target volume. We classify each TE as receiving, balanced, or blocking based on usage.",
+      top: teTop,
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10 lg:flex lg:gap-10">
-      <Toc adrs={adrs} />
-      <article className="min-w-0 flex-1">
-        <h1 className="mb-2 text-3xl font-semibold tracking-tight text-neutral-100">
-          Methodology
-        </h1>
-        <p className="mb-8 text-sm text-neutral-500">
-          How grades are computed, what v1 ships, and the decisions that
-          shaped it. Sourced from{" "}
-          <code className="rounded bg-neutral-900 px-1 py-0.5 text-neutral-300">
-            docs/methodology.md
-          </code>{" "}
-          and{" "}
-          <code className="rounded bg-neutral-900 px-1 py-0.5 text-neutral-300">
-            docs/adr/
-          </code>
-          .
-        </p>
-
-        <section id="methodology-body" className={PROSE_CLASS}>
-          <Markdown>{methodologyMd}</Markdown>
-        </section>
-
-        <section id="design-decisions" className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-neutral-100">
-            Design decisions (ADRs)
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm text-neutral-400">
-            Each ADR captures one significant decision: the situation that
-            forced it, what was picked, and the trade-offs accepted.
-            Append-only and numbered.
-          </p>
-
-          <AdrIndex adrs={adrs} />
-
-          {adrs.map((adr) => (
-            <AdrSection key={adr.num} adr={adr} />
-          ))}
-        </section>
-      </article>
+    <main className="mx-auto max-w-5xl px-6 py-12">
+      <Hero />
+      <GradeScale tiers={tiers} />
+      <PositionGrid positions={positions} />
+      <HowItsBuilt />
+      <Limitations />
+      <DataSource />
+      <Footer />
     </main>
   );
 }
 
-/**
- * Sticky left-side table of contents. On mobile it collapses to a
- * flat list at the top of the page (no sticky behavior, no border).
- */
-function Toc({ adrs }: { adrs: AdrDoc[] }) {
-  return (
-    <aside className="mb-8 shrink-0 text-sm lg:sticky lg:top-6 lg:mb-0 lg:h-[calc(100vh-4rem)] lg:w-64 lg:overflow-y-auto lg:border-r lg:border-neutral-900 lg:pr-4">
-      <div className="mb-2 text-xs uppercase tracking-wider text-neutral-500">
-        On this page
-      </div>
-      <ul className="mb-6 space-y-1 text-neutral-400">
-        <TocLink href="#scope-v1">Scope (v1)</TocLink>
-        <TocLink href="#position-tiers">Position tiers</TocLink>
-        <TocLink href="#per-season-grading-pipeline">
-          Per-season pipeline
-        </TocLink>
-        <TocLink href="#qualification-thresholds">
-          Qualification thresholds
-        </TocLink>
-        <TocLink href="#role-specific-grading-te-only">
-          Role-specific grading
-        </TocLink>
-        <TocLink href="#career-grade">Career grade</TocLink>
-        <TocLink href="#cross-position-comparability">
-          Cross-position comparability
-        </TocLink>
-        <TocLink href="#validation">Validation</TocLink>
-        <TocLink href="#explicit-v1-limitations">
-          Explicit v1 limitations
-        </TocLink>
-        <TocLink href="#deferred-v2">Deferred (v2+)</TocLink>
-      </ul>
+// ---------------------------------------------------------------------------
+// Hero
+// ---------------------------------------------------------------------------
 
-      <div className="mb-2 text-xs uppercase tracking-wider text-neutral-500">
-        ADRs
-      </div>
-      <ul className="space-y-1 text-neutral-400">
-        {adrs.map((adr) => (
-          <li key={adr.num}>
-            <a
-              href={`#adr-${adr.num}`}
-              className="block truncate hover:text-neutral-100"
-              title={`ADR-${adr.num} — ${adr.title}`}
-            >
-              <span className="font-mono text-neutral-500">{adr.num}</span>{" "}
-              {adr.title}
-            </a>
-          </li>
+function Hero() {
+  return (
+    <header className="mb-14">
+      <h1 className="text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
+        How grades work
+      </h1>
+      <p className="mt-4 max-w-2xl text-lg text-neutral-300">
+        Every NFL player on a 0-100 scale, computed from play-by-play
+        data. Here&apos;s what goes into the number.
+      </p>
+    </header>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The grade scale — vertical band of tiers, each with player examples.
+// ---------------------------------------------------------------------------
+
+function GradeScale({ tiers }: { tiers: TierBucket[] }) {
+  return (
+    <section className="mb-16">
+      <SectionHeading eyebrow="The scale" title="What each grade means" />
+      <p className="mb-6 max-w-2xl text-sm text-neutral-400">
+        Examples are real player-seasons from the database. Click any
+        name to see how their grade was built.
+      </p>
+      <div className="overflow-hidden rounded-xl border border-neutral-800">
+        {tiers.map((tier) => (
+          <TierRow key={tier.id} tier={tier} />
         ))}
-      </ul>
-    </aside>
-  );
-}
-
-function TocLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <li>
-      <a href={href} className="block hover:text-neutral-100">
-        {children}
-      </a>
-    </li>
-  );
-}
-
-function AdrIndex({ adrs }: { adrs: AdrDoc[] }) {
-  return (
-    <div className="mt-6 overflow-hidden rounded-lg border border-neutral-800">
-      <table className="w-full text-sm">
-        <thead className="bg-neutral-950 text-left text-xs uppercase tracking-wider text-neutral-500">
-          <tr>
-            <th className="px-4 py-2 font-medium">#</th>
-            <th className="px-4 py-2 font-medium">Title</th>
-            <th className="px-4 py-2 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-900">
-          {adrs.map((adr) => (
-            <tr key={adr.num} className="text-neutral-300">
-              <td className="px-4 py-2 font-mono text-neutral-500">
-                {adr.num}
-              </td>
-              <td className="px-4 py-2">
-                <a
-                  href={`#adr-${adr.num}`}
-                  className="hover:text-neutral-100 hover:underline"
-                >
-                  {adr.title}
-                </a>
-              </td>
-              <td className="px-4 py-2 text-neutral-500">{adr.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/**
- * One rendered ADR. The section carries a stable `id="adr-NNNN"`
- * (independent of rehype-slug's heading slugs) so deep links like
- * `/methodology#adr-0017` resolve even if we rename the ADR title
- * later.
- */
-function AdrSection({ adr }: { adr: AdrDoc }) {
-  return (
-    <section
-      id={`adr-${adr.num}`}
-      className="mt-12 scroll-mt-6 border-t border-neutral-900 pt-8"
-    >
-      <div className="mb-1 text-xs uppercase tracking-wider text-neutral-500">
-        ADR-{adr.num}
-        {adr.date ? <span className="ml-2 normal-case">· {adr.date}</span> : null}
-      </div>
-      <h3 className="text-xl font-semibold tracking-tight text-neutral-100">
-        {adr.title}
-      </h3>
-      <div className="mb-4 text-xs text-neutral-500">Status: {adr.status}</div>
-      <div className={PROSE_CLASS}>
-        <Markdown>{adr.body}</Markdown>
       </div>
     </section>
   );
 }
 
-/**
- * Shared prose class. Tuned for the dark site palette. The inline
- * overrides (`prose-headings:...`) keep headings tight, match the
- * site's tracking, and quiet the default Tailwind-prose colors.
- */
-const PROSE_CLASS =
-  "prose prose-invert max-w-none prose-sm md:prose-base " +
-  "prose-headings:tracking-tight prose-headings:text-neutral-100 " +
-  "prose-h2:mt-10 prose-h2:text-xl prose-h2:font-semibold " +
-  "prose-h3:mt-8 prose-h3:text-lg prose-h3:font-semibold " +
-  "prose-h4:mt-6 prose-h4:text-base prose-h4:font-semibold " +
-  "prose-p:text-neutral-300 prose-li:text-neutral-300 " +
-  "prose-strong:text-neutral-100 " +
-  "prose-a:text-neutral-100 prose-a:underline prose-a:decoration-dotted " +
-  "hover:prose-a:text-white " +
-  "prose-code:text-neutral-200 prose-code:before:content-none prose-code:after:content-none " +
-  "prose-code:rounded prose-code:bg-neutral-900 prose-code:px-1 prose-code:py-0.5 " +
-  "prose-pre:bg-neutral-950 prose-pre:border prose-pre:border-neutral-800 " +
-  "prose-table:text-sm prose-th:text-neutral-200 prose-td:border-neutral-800 " +
-  "prose-hr:border-neutral-900";
+function TierRow({ tier }: { tier: TierBucket }) {
+  const accent = TIER_ACCENT[tier.id];
+  return (
+    <div
+      className={`flex flex-col gap-4 border-b border-neutral-900 px-5 py-5 last:border-b-0 sm:flex-row sm:items-center sm:gap-6 ${accent.borderL}`}
+    >
+      <div className="sm:w-44 sm:shrink-0">
+        <div className={`font-mono text-2xl font-semibold ${accent.text}`}>
+          {tier.range}
+        </div>
+        <div className="mt-1 text-sm text-neutral-400">{tier.label}</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {tier.examples.length === 0 ? (
+          <span className="text-xs text-neutral-600">
+            No qualified seasons in this band yet.
+          </span>
+        ) : (
+          tier.examples.map((ex) => <ExampleChip key={`${ex.player_id}:${ex.season}`} ex={ex} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExampleChip({ ex }: { ex: TierExample }) {
+  return (
+    <Link
+      href={{ pathname: `/players/${ex.player_id}` }}
+      className="group inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-950 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100"
+    >
+      <span className="font-medium">{ex.full_name}</span>
+      <span className="text-neutral-500">
+        {ex.position} · {ex.season}
+      </span>
+      <span className={`font-mono ${gradeColor(ex.composite_grade)}`}>
+        {ex.composite_grade.toFixed(1)}
+      </span>
+    </Link>
+  );
+}
 
 /**
- * `react-markdown` wrapper wired with GFM tables + slugged headings +
- * hover autolink anchors.
- *
- * We intentionally use `remark-gfm` for the pipe tables in the
- * methodology doc and the RB/WR/TE ADRs. `rehype-slug` gives every
- * heading a stable id; `rehype-autolink-headings` adds a hover anchor
- * (the `#` that appears next to a heading on hover) so readers can
- * deep-link into a specific subsection of an ADR.
+ * Per-tier left-border + range-color accents. Kept separate from
+ * `gradeColor()` because the grade-scale tiers don't line up exactly
+ * with the leaderboard's text-color thresholds (e.g. 50-59 there is
+ * yellow on top + orange on bottom).
  */
-function Markdown({ children }: { children: string }) {
+const TIER_ACCENT: Record<
+  GradeTierId,
+  { text: string; borderL: string }
+> = {
+  "tier-90":     { text: "text-emerald-400", borderL: "border-l-4 border-l-emerald-500/60" },
+  "tier-80":     { text: "text-green-400",   borderL: "border-l-4 border-l-green-500/60" },
+  "tier-70":     { text: "text-lime-400",    borderL: "border-l-4 border-l-lime-500/60" },
+  "tier-60":     { text: "text-yellow-400",  borderL: "border-l-4 border-l-yellow-500/60" },
+  "tier-50":     { text: "text-orange-400",  borderL: "border-l-4 border-l-orange-500/60" },
+  "tier-sub-50": { text: "text-red-400",     borderL: "border-l-4 border-l-red-500/60" },
+};
+
+// ---------------------------------------------------------------------------
+// Position cards — what gets measured per position.
+// ---------------------------------------------------------------------------
+
+type PositionCardData = {
+  position: "QB" | "RB" | "WR" | "TE";
+  headline: string;
+  description: string;
+  top: { season: number | null; entries: CurrentTopEntry[] };
+};
+
+function PositionGrid({ positions }: { positions: PositionCardData[] }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[
-        rehypeSlug,
-        [
-          rehypeAutolinkHeadings,
-          {
-            behavior: "append",
-            properties: {
-              className: "ml-2 text-neutral-700 no-underline hover:text-neutral-400",
-              ariaLabel: "Link to this section",
-            },
-            content: { type: "text", value: "#" },
-          },
-        ],
-      ]}
-    >
-      {children}
-    </ReactMarkdown>
+    <section className="mb-16">
+      <SectionHeading
+        eyebrow="What gets measured"
+        title="Each position has its own recipe"
+      />
+      <p className="mb-6 max-w-2xl text-sm text-neutral-400">
+        We measure the things that matter at each position. Plain
+        English here; the exact weights live on the design-decisions
+        page.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {positions.map((p) => (
+          <PositionCard key={p.position} data={p} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PositionCard({ data }: { data: PositionCardData }) {
+  return (
+    <article className="flex flex-col rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="font-mono text-sm uppercase tracking-wider text-neutral-500">
+          {data.position}
+        </div>
+        <h3 className="text-lg font-semibold text-neutral-100">
+          {data.headline}
+        </h3>
+      </div>
+      <p className="text-sm leading-relaxed text-neutral-300">
+        {data.description}
+      </p>
+      <div className="mt-4 border-t border-neutral-900 pt-4">
+        <CurrentTopBlock data={data} />
+      </div>
+    </article>
+  );
+}
+
+function CurrentTopBlock({ data }: { data: PositionCardData }) {
+  if (data.top.season === null || data.top.entries.length === 0) {
+    return (
+      <p className="text-xs text-neutral-500">
+        No qualified {data.position} grades yet.
+      </p>
+    );
+  }
+  return (
+    <div className="text-xs text-neutral-400">
+      <div className="mb-2 uppercase tracking-wider text-neutral-500">
+        Top {data.top.entries.length} this season ({data.top.season})
+      </div>
+      <ol className="space-y-1">
+        {data.top.entries.map((e, i) => (
+          <li key={e.player_id} className="flex items-center gap-2">
+            <span className="w-4 text-neutral-600">{i + 1}.</span>
+            <Link
+              href={{ pathname: `/players/${e.player_id}` }}
+              className="text-neutral-200 hover:text-neutral-100 hover:underline"
+            >
+              {e.full_name}
+            </Link>
+            <span className={`ml-auto font-mono ${gradeColor(e.composite_grade)}`}>
+              {e.composite_grade.toFixed(1)}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <Link
+        href={{
+          pathname: "/",
+          query: { season: data.top.season, position: data.position },
+        }}
+        className="mt-3 inline-block text-neutral-400 hover:text-neutral-100 hover:underline"
+      >
+        See full {data.position} leaderboard →
+      </Link>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// How a grade is built — three plain-language paragraphs.
+// ---------------------------------------------------------------------------
+
+function HowItsBuilt() {
+  return (
+    <section className="mb-16">
+      <SectionHeading
+        eyebrow="The pipeline"
+        title="How a grade is built"
+      />
+      <div className="grid gap-5 sm:grid-cols-3">
+        <Step
+          n={1}
+          title="Pull the raw numbers"
+          body="We take every play of the season — dropbacks, carries, targets — and toss out garbage time so blowouts don't pad the stats."
+        />
+        <Step
+          n={2}
+          title="Give partial credit on small samples"
+          body="A guy with 8 great targets doesn't outrank a guy with 100 good ones. Small-sample numbers get pulled toward the position average until there's enough evidence."
+        />
+        <Step
+          n={3}
+          title="Compare to the field"
+          body="We compare each player to others at the same position that season. Closer to average means closer to a 50. About two standard deviations above the field lands around a 90."
+        />
+      </div>
+    </section>
+  );
+}
+
+function Step({ n, title, body }: { n: number; title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
+      <div className="mb-2 font-mono text-xs uppercase tracking-wider text-neutral-500">
+        Step {n}
+      </div>
+      <h3 className="mb-2 text-base font-semibold text-neutral-100">
+        {title}
+      </h3>
+      <p className="text-sm leading-relaxed text-neutral-300">{body}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Honest limitations — what we don't measure yet.
+// ---------------------------------------------------------------------------
+
+function Limitations() {
+  const items: { title: string; body: string }[] = [
+    {
+      title: "Opponent quality",
+      body: "A great game against the worst defense grades the same as one against the best.",
+    },
+    {
+      title: "QB context for receivers",
+      body: "Great receivers stuck on terrible offenses look worse than the tape suggests. We flag this on the player page when it matters.",
+    },
+    {
+      title: "Linemen and off-ball linebackers",
+      body: "Public play-by-play data isn't there yet. Offensive line, defensive line, and most LB work doesn't show up cleanly in the numbers.",
+    },
+    {
+      title: "Special teams",
+      body: "Kickers, punters, returners, and coverage units are out of scope.",
+    },
+    {
+      title: "Career trajectory smoothing",
+      body: "Each season is graded standalone — no carry-over from prior years and no aging curve baked in.",
+    },
+  ];
+
+  return (
+    <section className="mb-16">
+      <SectionHeading
+        eyebrow="Known gaps"
+        title="What we don't measure (yet)"
+      />
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6">
+        <ul className="space-y-4">
+          {items.map((it) => (
+            <li key={it.title} className="flex gap-3">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-600" />
+              <div>
+                <div className="text-sm font-medium text-neutral-100">
+                  {it.title}
+                </div>
+                <p className="text-sm text-neutral-400">{it.body}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data source.
+// ---------------------------------------------------------------------------
+
+function DataSource() {
+  return (
+    <section className="mb-16">
+      <SectionHeading
+        eyebrow="Where the data comes from"
+        title="Open, reproducible, and the same data the analysts use"
+      />
+      <p className="max-w-2xl text-sm leading-relaxed text-neutral-300">
+        Every number on this site is computed from{" "}
+        <a
+          href="https://nflverse.nflverse.com/"
+          className="underline decoration-dotted hover:text-neutral-100"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          nflverse
+        </a>{" "}
+        — the same public play-by-play and Next Gen Stats feeds used by
+        ESPN charts, academic research, and most football analytics
+        writing. There are no proprietary grades, no scout opinions, and
+        no hidden inputs. If you re-run our pipeline you get the same
+        numbers.
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Discreet footer link to the design-decisions page.
+// ---------------------------------------------------------------------------
+
+function Footer() {
+  return (
+    <footer className="border-t border-neutral-900 pt-8 text-xs text-neutral-500">
+      For the technically curious: see our{" "}
+      <Link
+        href="/about/decisions"
+        className="underline decoration-dotted hover:text-neutral-300"
+      >
+        design decisions
+      </Link>
+      .
+    </footer>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared section header.
+// ---------------------------------------------------------------------------
+
+function SectionHeading({
+  eyebrow,
+  title,
+}: {
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <div className="mb-4">
+      <div className="mb-1 text-xs uppercase tracking-wider text-neutral-500">
+        {eyebrow}
+      </div>
+      <h2 className="text-2xl font-semibold tracking-tight text-neutral-100">
+        {title}
+      </h2>
+    </div>
   );
 }
