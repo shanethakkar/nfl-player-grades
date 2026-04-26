@@ -10,6 +10,8 @@ import {
   type TierExample,
 } from "@/lib/methodology";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "How grades work — NFL Player Grades",
   description:
