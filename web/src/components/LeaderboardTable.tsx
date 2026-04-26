@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import { gradeColor, teRoleLabel } from "@/lib/grades";
 import type { LeaderboardEntry } from "@/types";
@@ -14,20 +17,64 @@ type Props = {
   position: string;
 };
 
+type SortDir = "asc" | "desc";
+type SortState = { key: string; dir: SortDir };
+
 /**
- * Sortable-looking leaderboard table. (Sort is fixed by grade desc at
- * the server; a future client enhancement can swap the order.)
+ * Sortable, mobile-responsive leaderboard table.
  *
- * Design choices:
- * - Entire row is clickable via the name cell (wrapping <Link> inside
- *   every <td> would work but makes the `<tr>` hover state messy).
- * - Component columns are shown as **raw** values. The shrunk,
- *   z-scored, and sample-size breakdown lives on the player detail page.
- * - The column spec is data-driven (see COLUMN_SPECS below) so adding
- *   a new position later is one array entry, not a new conditional
- *   branch through JSX.
+ * - Server passes rows ordered by grade desc, so first paint is
+ *   correct without JS. Client-side `useMemo` re-sorts on header
+ *   click — instant for the ~50-row leaderboards we render.
+ * - Click cycles: numeric columns default to desc on first click
+ *   (best at top), alpha columns default to asc; clicking the
+ *   already-active column flips direction.
+ * - Stat columns hide below `md:`, team/percentile hide below `sm:`,
+ *   so the table stops being a horizontal scroll on phones. Player +
+ *   Grade are always visible.
+ * - `<thead>` is `sticky top-0` so column names stay visible on long
+ *   lists (RB/WR with 70+ rows).
  */
 export function LeaderboardTable({ entries, position }: Props) {
+  // `COLUMN_SPECS[position]` is a module-level constant array per position;
+  // wrapping it in useMemo gives a stable reference for the deps array of
+  // the `allColumns` memo below.
+  const columns = useMemo<SortableColumn[]>(
+    () => COLUMN_SPECS[position] ?? [],
+    [position],
+  );
+  const allColumns = useMemo<SortableColumn[]>(
+    () => [...FIXED_COLUMNS, ...columns],
+    [columns],
+  );
+
+  const [sort, setSort] = useState<SortState>({
+    key: "grade",
+    dir: "desc",
+  });
+
+  const sortedEntries = useMemo(() => {
+    const col = allColumns.find((c) => c.key === sort.key);
+    if (!col) return entries;
+    const sortValue = col.sortValue;
+    const sign = sort.dir === "asc" ? 1 : -1;
+    // Stable sort: copy first; nulls sink to the bottom regardless of dir
+    // so "no value" never wins a sort.
+    return [...entries].sort((a, b) => {
+      const va = sortValue(a);
+      const vb = sortValue(b);
+      const aMissing = va === null || va === undefined;
+      const bMissing = vb === null || vb === undefined;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (typeof va === "string" && typeof vb === "string") {
+        return va.localeCompare(vb) * sign;
+      }
+      return ((va as number) - (vb as number)) * sign;
+    });
+  }, [entries, sort, allColumns]);
+
   if (entries.length === 0) {
     return (
       <p className="py-12 text-center text-sm text-neutral-500">
@@ -36,27 +83,67 @@ export function LeaderboardTable({ entries, position }: Props) {
     );
   }
 
-  const columns = COLUMN_SPECS[position] ?? [];
+  function onSort(col: SortableColumn) {
+    setSort((cur) => {
+      if (cur.key === col.key) {
+        return { key: col.key, dir: cur.dir === "asc" ? "desc" : "asc" };
+      }
+      return { key: col.key, dir: col.defaultDir };
+    });
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-800">
       <table className="min-w-full text-sm">
-        <thead className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
+        <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
           <tr>
             <Th className="w-10 text-center">#</Th>
-            <Th>Player</Th>
-            <Th className="text-center">Team</Th>
-            <Th className="text-right">Grade</Th>
-            <Th className="text-right">Pct</Th>
+            <SortHeader
+              label="Player"
+              align="left"
+              sort={sort}
+              col={FIXED_COLUMNS_BY_KEY.player}
+              onSort={onSort}
+            />
+            <SortHeader
+              label="Team"
+              align="center"
+              sort={sort}
+              col={FIXED_COLUMNS_BY_KEY.team}
+              onSort={onSort}
+              className="hidden sm:table-cell"
+            />
+            <SortHeader
+              label="Grade"
+              align="right"
+              sort={sort}
+              col={FIXED_COLUMNS_BY_KEY.grade}
+              onSort={onSort}
+            />
+            <SortHeader
+              label="Pct"
+              align="right"
+              sort={sort}
+              col={FIXED_COLUMNS_BY_KEY.percentile}
+              onSort={onSort}
+              className="hidden sm:table-cell"
+            />
             {columns.map((c) => (
-              <Th key={c.key} className="text-right" title={c.hoverLabel}>
-                {c.header}
-              </Th>
+              <SortHeader
+                key={c.key}
+                label={c.header}
+                hover={c.hoverLabel}
+                align="right"
+                sort={sort}
+                col={c}
+                onSort={onSort}
+                className="hidden md:table-cell"
+              />
             ))}
           </tr>
         </thead>
         <tbody>
-          {entries.map((e, idx) => (
+          {sortedEntries.map((e, idx) => (
             <Row
               key={e.player_id}
               entry={e}
@@ -72,18 +159,35 @@ export function LeaderboardTable({ entries, position }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Column specs — one per position. Each spec is a thin renderer that pulls
-// its value off the LeaderboardEntry and formats it. Labels are short
-// because the leaderboard is dense; `hoverLabel` gives the fuller name on
-// cell hover (via native `title`).
+// Column specs.
+//
+// FIXED_COLUMNS = the always-visible fixed columns (player/team/grade/pct).
+// COLUMN_SPECS  = per-position headline stat columns; each carries its own
+//                 `render` for the cell and `sortValue` accessor for the sort
+//                 comparator. Adding a new sortable column is one entry, no
+//                 conditional JSX.
 // ---------------------------------------------------------------------------
 
-type ColumnSpec = {
+type SortableColumn = {
   key: string;
   header: string;
-  hoverLabel: string;
-  render: (e: LeaderboardEntry) => string;
+  hoverLabel?: string;
+  defaultDir: SortDir;
+  /** Returns the value used by the sort comparator (number or string). */
+  sortValue: (e: LeaderboardEntry) => number | string | null;
+  /** Cell renderer. Stat columns provide one; fixed columns render in JSX. */
+  render?: (e: LeaderboardEntry) => string;
 };
+
+const FIXED_COLUMNS: SortableColumn[] = [
+  { key: "player", header: "Player", defaultDir: "asc", sortValue: (e) => e.full_name },
+  { key: "team",   header: "Team",   defaultDir: "asc", sortValue: (e) => e.team_abbr ?? "" },
+  { key: "grade",  header: "Grade",  defaultDir: "desc", sortValue: (e) => e.composite_grade },
+  { key: "percentile", header: "Pct", defaultDir: "desc", sortValue: (e) => e.percentile },
+];
+const FIXED_COLUMNS_BY_KEY = Object.fromEntries(
+  FIXED_COLUMNS.map((c) => [c.key, c]),
+) as Record<string, SortableColumn>;
 
 function fmtSigned(v: number | null, digits: number): string {
   if (v === null || !Number.isFinite(v)) return "—";
@@ -100,92 +204,116 @@ function fmtInt(v: number | null): string {
   return v === null || !Number.isFinite(v) ? "—" : String(v);
 }
 
-const QB_COLUMNS: ColumnSpec[] = [
+const QB_COLUMNS: SortableColumn[] = [
   {
     key: "n_dropbacks",
     header: "Drops",
     hoverLabel: "Qualifying dropbacks",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_dropbacks,
     render: (e) => fmtInt(e.n_dropbacks),
   },
   {
     key: "epa_per_dropback",
     header: "EPA/db",
     hoverLabel: "EPA per dropback",
+    defaultDir: "desc",
+    sortValue: (e) => e.epa_per_dropback,
     render: (e) => fmtSigned(e.epa_per_dropback, 3),
   },
   {
     key: "cpoe",
     header: "CPOE",
     hoverLabel: "Completion % over expected",
+    defaultDir: "desc",
+    sortValue: (e) => e.cpoe,
     render: (e) => fmtSigned(e.cpoe, 2),
   },
   {
     key: "success_rate",
     header: "Succ%",
     hoverLabel: "Dropback success rate",
+    defaultDir: "desc",
+    sortValue: (e) => e.success_rate,
     render: (e) => fmtPct(e.success_rate, 1),
   },
 ];
 
-const RB_COLUMNS: ColumnSpec[] = [
+const RB_COLUMNS: SortableColumn[] = [
   {
     key: "n_touches",
     header: "Touches",
     hoverLabel: "Carries + receptions after filters",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_touches,
     render: (e) => fmtInt(e.n_touches),
   },
   {
     key: "ryoe",
     header: "RYOE/att",
     hoverLabel: "Rush yards over expected per attempt (NGS)",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_ryoe_per_attempt,
     render: (e) => fmtSigned(e.rb_ryoe_per_attempt, 2),
   },
   {
     key: "rush_epa",
     header: "EPA/att",
     hoverLabel: "Rush EPA per attempt",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_rush_epa_per_attempt,
     render: (e) => fmtSigned(e.rb_rush_epa_per_attempt, 3),
   },
   {
     key: "rush_succ",
     header: "Rush Succ%",
     hoverLabel: "Rushing success rate",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_rush_success_rate,
     render: (e) => fmtPct(e.rb_rush_success_rate, 1),
   },
 ];
 
-const WR_COLUMNS: ColumnSpec[] = [
+const WR_COLUMNS: SortableColumn[] = [
   {
     key: "n_targets",
     header: "Tgts",
     hoverLabel: "Qualifying targets",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_targets,
     render: (e) => fmtInt(e.n_targets),
   },
   {
     key: "rec_epa",
     header: "EPA/tgt",
     hoverLabel: "Receiving EPA per target",
+    defaultDir: "desc",
+    sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
   },
   {
     key: "yac_oe",
     header: "YAC/rec",
     hoverLabel: "YAC over expected per reception",
+    defaultDir: "desc",
+    sortValue: (e) => e.yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.yac_over_expected_per_rec, 2),
   },
   {
     key: "earn",
     header: "Earn%",
     hoverLabel: "Target earn rate (targets / team pass attempts while active)",
+    defaultDir: "desc",
+    sortValue: (e) => e.target_earn_rate,
     render: (e) => fmtPct(e.target_earn_rate, 1),
   },
 ];
 
 // TEs share WR's columns. Role is shown inline next to the name, not as
 // its own column, to keep table density under control.
-const TE_COLUMNS: ColumnSpec[] = WR_COLUMNS;
+const TE_COLUMNS: SortableColumn[] = WR_COLUMNS;
 
-const COLUMN_SPECS: Record<string, ColumnSpec[]> = {
+const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB: QB_COLUMNS,
   RB: RB_COLUMNS,
   WR: WR_COLUMNS,
@@ -200,7 +328,7 @@ function Row({
 }: {
   entry: LeaderboardEntry;
   rank: number;
-  columns: ColumnSpec[];
+  columns: SortableColumn[];
   position: string;
 }) {
   const rowClass = e.qualified
@@ -209,9 +337,7 @@ function Row({
   const roleText = position === "TE" ? teRoleLabel(e.role) : null;
   return (
     <tr className={rowClass}>
-      <Td className="text-center text-xs text-neutral-500">
-        {e.qualified ? rank : ""}
-      </Td>
+      <Td className="text-center text-xs text-neutral-500">{rank}</Td>
       <Td>
         <Link
           href={{ pathname: `/players/${e.player_id}` }}
@@ -230,21 +356,78 @@ function Row({
           </span>
         )}
       </Td>
-      <Td className="text-center text-neutral-400">{e.team_abbr ?? "—"}</Td>
+      <Td className="hidden text-center text-neutral-400 sm:table-cell">
+        {e.team_abbr ?? "—"}
+      </Td>
       <Td className="text-right font-mono font-semibold">
         <span className={gradeColor(e.composite_grade)}>
           {e.composite_grade.toFixed(1)}
         </span>
       </Td>
-      <Td className="text-right font-mono text-neutral-400">
+      <Td className="hidden text-right font-mono text-neutral-400 sm:table-cell">
         {e.percentile.toFixed(0)}
       </Td>
       {columns.map((c) => (
-        <Td key={c.key} className="text-right font-mono text-neutral-300">
-          {c.render(e)}
+        <Td
+          key={c.key}
+          className="hidden text-right font-mono text-neutral-300 md:table-cell"
+        >
+          {c.render ? c.render(e) : "—"}
         </Td>
       ))}
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Header cells
+// ---------------------------------------------------------------------------
+
+function SortHeader({
+  label,
+  hover,
+  align,
+  sort,
+  col,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  hover?: string;
+  align: "left" | "center" | "right";
+  sort: SortState;
+  col: SortableColumn;
+  onSort: (c: SortableColumn) => void;
+  className?: string;
+}) {
+  const active = sort.key === col.key;
+  const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
+  const alignCls =
+    align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
+  const buttonAlignCls =
+    align === "right"
+      ? "ml-auto"
+      : align === "center"
+        ? "mx-auto"
+        : "";
+  return (
+    <th className={`px-3 py-2 ${alignCls} ${className}`} title={hover}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        className={`flex items-center gap-1 ${buttonAlignCls} ${
+          active ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"
+        }`}
+      >
+        <span>{label}</span>
+        <span
+          aria-hidden
+          className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}
+        >
+          {arrow || "▾"}
+        </span>
+      </button>
+    </th>
   );
 }
 

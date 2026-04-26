@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CareerSummary } from "@/components/CareerSummary";
 import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
@@ -11,6 +13,27 @@ import type { DataTier, SeasonGradeDetail } from "@/types";
 type PageProps = {
   params: Promise<{ id: string }>;
 };
+
+/**
+ * Browser tab title is "{Name} \u2014 NFL Player Grades" so bookmarks,
+ * tab strips, and shared links read clearly. We re-fetch the player
+ * meta inside generateMetadata; Next.js dedupes the underlying DB call
+ * with the page render.
+ */
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const playerId = Number(id);
+  if (!Number.isFinite(playerId) || playerId <= 0) {
+    return { title: "Player" };
+  }
+  const detail = await getPlayerDetail(playerId);
+  if (detail === null) return { title: "Player" };
+  return {
+    title: `${detail.player.full_name} \u2014 NFL Player Grades`,
+  };
+}
 
 export default async function PlayerPage({ params }: PageProps) {
   const { id } = await params;
@@ -62,11 +85,14 @@ export default async function PlayerPage({ params }: PageProps) {
           .)
         </p>
       ) : (
-        <div className="mt-8 space-y-10">
-          {grades.map((g) => (
-            <SeasonGradeCard key={`${g.season}-${g.position}`} grade={g} />
-          ))}
-        </div>
+        <>
+          <CareerSummary grades={grades} />
+          <div className="mt-10 space-y-10">
+            {grades.map((g) => (
+              <SeasonGradeCard key={`${g.season}-${g.position}`} grade={g} />
+            ))}
+          </div>
+        </>
       )}
     </main>
   );
@@ -124,7 +150,10 @@ function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
       {g.context && <TeamContextPanel context={g.context} />}
 
       <div className="mt-5">
-        <ComponentBreakdownTable components={g.components} />
+        <ComponentBreakdownTable
+          components={g.components}
+          position={g.position}
+        />
       </div>
     </section>
   );

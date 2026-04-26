@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { LeaderboardTable } from "@/components/LeaderboardTable";
 import { PositionPicker } from "@/components/PositionPicker";
 import { SeasonPicker } from "@/components/SeasonPicker";
@@ -13,6 +15,39 @@ type SearchParams = Promise<{
 }>;
 
 type Props = { searchParams: SearchParams };
+
+/**
+ * Page title in the browser tab reflects the active season + position so
+ * that bookmarks, history, and pinned tabs are self-describing. When the
+ * URL omits one or both params we resolve the same defaults the page
+ * itself uses (latest season, QB) so the bare landing page still gets
+ * a descriptive title rather than "Leaderboard".
+ */
+export async function generateMetadata({
+  searchParams,
+}: Props): Promise<Metadata> {
+  const { season: seasonParam, position: positionParam } = await searchParams;
+  const seasonRaw = firstOf(seasonParam);
+  const positionRaw = firstOf(positionParam)?.toUpperCase();
+
+  let season: number | null = null;
+  if (seasonRaw && Number.isFinite(Number(seasonRaw))) {
+    season = Number(seasonRaw);
+  } else {
+    const seasons = await getGradedSeasons();
+    season = seasons[0] ?? null;
+  }
+
+  const position =
+    positionRaw && POSITION_ORDER.includes(positionRaw)
+      ? positionRaw
+      : DEFAULT_POSITION;
+
+  if (season !== null) {
+    return { title: `${position} Leaderboard \u2014 ${season}` };
+  }
+  return { title: `${position} Leaderboard` };
+}
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first
 // and TE last, matching how the positions were rolled out.
@@ -143,11 +178,38 @@ export default async function HomePage({ searchParams }: Props) {
 
       {unqualified.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-            {lowVolume.heading} ({unqualified.length})
-          </h2>
-          <p className="mb-3 text-xs text-neutral-500">{lowVolume.threshold}</p>
-          <LeaderboardTable entries={unqualified} position={activePosition} />
+          {/* Collapsed by default. The qualified table is the headline; the
+              low-volume rows are a noisy footnote most readers don't need.
+              Keeping it as native <details> means it works without JS and
+              lets the URL hash (#low-volume) deep-link straight to it. */}
+          <details
+            id="low-volume"
+            className="group rounded-lg border border-neutral-800"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-neutral-400 hover:text-neutral-200">
+              <span>
+                {lowVolume.heading}{" "}
+                <span className="ml-1 font-normal normal-case text-neutral-500">
+                  ({unqualified.length})
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className="text-xs text-neutral-500 transition-transform group-open:rotate-180"
+              >
+                {"\u25BC"}
+              </span>
+            </summary>
+            <div className="border-t border-neutral-800 px-4 py-4">
+              <p className="mb-3 text-xs text-neutral-500">
+                {lowVolume.threshold}
+              </p>
+              <LeaderboardTable
+                entries={unqualified}
+                position={activePosition}
+              />
+            </div>
+          </details>
         </section>
       )}
     </main>

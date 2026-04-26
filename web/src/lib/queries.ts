@@ -258,6 +258,100 @@ const teamLookupLateralForSgP = sql`
 `;
 
 /**
+ * Header autocomplete query.
+ *
+ * Restricted to players who appear in `season_grades` for at least one
+ * season — otherwise the index would be dominated by linemen, kickers,
+ * and the long tail of practice-squad bodies in `players`. Ranking
+ * prefers the player's best-ever composite, with a recency tiebreaker
+ * so an active star outranks a retired one with the same peak.
+ *
+ * `q` is case-insensitive substring match against `full_name`. We also
+ * surface the player's most recent graded position + team so the
+ * dropdown can disambiguate (e.g. "Brian Robinson" the RB vs. anyone
+ * else who shares a name).
+ */
+export type PlayerSearchHit = {
+  player_id: number;
+  full_name: string;
+  position: string;
+  team_abbr: string | null;
+  best_grade: number;
+  latest_season: number;
+};
+
+export async function searchPlayers(
+  q: string,
+  limit = 8,
+): Promise<PlayerSearchHit[]> {
+  const trimmed = q.trim();
+  if (trimmed.length < 2) return [];
+  const pattern = `%${trimmed.replace(/[%_]/g, "\\$&")}%`;
+  const rows = await sql<
+    {
+      player_id: number;
+      full_name: string;
+      position: string;
+      team_abbr: string | null;
+      best_grade: number;
+      latest_season: number;
+    }[]
+  >`
+    WITH matches AS (
+      SELECT
+        p.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        ROW_NUMBER() OVER (
+          PARTITION BY p.player_id
+          ORDER BY sg.season DESC
+        ) AS recency_rank,
+        MAX(sg.composite_grade) OVER (PARTITION BY p.player_id) AS best_grade,
+        MAX(sg.season) OVER (PARTITION BY p.player_id) AS latest_season
+      FROM players p
+      JOIN season_grades sg ON sg.player_id = p.player_id
+      WHERE p.full_name ILIKE ${pattern} ESCAPE '\\'
+    )
+    SELECT
+      m.player_id,
+      m.full_name,
+      m.position,
+      m.best_grade,
+      m.latest_season,
+      team_lookup.team_abbr
+    FROM matches m
+    JOIN players p ON p.player_id = m.player_id
+    LEFT JOIN LATERAL (
+      SELECT pl.posteam AS team_abbr
+      FROM plays pl
+      WHERE pl.season = m.latest_season
+        AND pl.posteam IS NOT NULL
+        AND (
+             pl.passer_player_id   = p.gsis_id
+          OR pl.rusher_player_id   = p.gsis_id
+          OR pl.receiver_player_id = p.gsis_id
+        )
+      GROUP BY pl.posteam
+      ORDER BY COUNT(*) DESC
+      LIMIT 1
+    ) team_lookup ON TRUE
+    WHERE m.recency_rank = 1
+    ORDER BY m.best_grade DESC, m.latest_season DESC, m.full_name ASC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    player_id: Number(r.player_id),
+    full_name: r.full_name,
+    position: r.position,
+    team_abbr: r.team_abbr,
+    best_grade: Number(r.best_grade),
+    latest_season: Number(r.latest_season),
+  }));
+}
+
+/**
  * Player detail: metadata + every season grade they have + each grade's
  * component breakdown. Components are nested inside their season.
  *
