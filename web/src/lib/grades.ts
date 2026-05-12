@@ -17,6 +17,15 @@ export function gradeColor(grade: number): string {
   return "text-red-400";
 }
 
+export function gradeHex(grade: number): string {
+  if (grade >= 90) return "#34d399";
+  if (grade >= 80) return "#4ade80";
+  if (grade >= 70) return "#a3e635";
+  if (grade >= 55) return "#facc15";
+  if (grade >= 40) return "#fb923c";
+  return "#f87171";
+}
+
 export const DATA_TIER_LABELS: Record<1 | 2 | 3, string> = {
   1: "Rich data",
   2: "Decent data",

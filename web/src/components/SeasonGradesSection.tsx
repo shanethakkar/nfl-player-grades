@@ -9,6 +9,7 @@ import {
   componentLabel,
   componentWeight,
   DATA_TIER_LABELS,
+  gradeHex,
   teRoleLabel,
   zToPercentile,
 } from "@/lib/grades";
@@ -119,15 +120,6 @@ function SeasonGradeCard({
   );
 }
 
-function pctHex(pct: number): string {
-  if (pct >= 90) return "#34d399";
-  if (pct >= 80) return "#4ade80";
-  if (pct >= 70) return "#a3e635";
-  if (pct >= 55) return "#facc15";
-  if (pct >= 40) return "#fb923c";
-  return "#f87171";
-}
-
 function ComponentPercentileBars({
   components,
   role,
@@ -150,7 +142,7 @@ function ComponentPercentileBars({
   return (
     <div className="mt-4 space-y-2">
       {rows.map(({ c, displayPct }) => {
-        const color = displayPct !== null ? pctHex(displayPct) : undefined;
+        const color = displayPct !== null ? gradeHex(displayPct) : undefined;
         return (
           <div key={c.component_name} className="flex items-center gap-3">
             <span className="w-32 shrink-0 text-right text-[11px] text-neutral-500">

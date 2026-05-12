@@ -1,13 +1,5 @@
+import { gradeHex } from "@/lib/grades";
 import type { SeasonGradeDetail } from "@/types";
-
-function gradeHex(grade: number): string {
-  if (grade >= 90) return "#34d399";
-  if (grade >= 80) return "#4ade80";
-  if (grade >= 70) return "#a3e635";
-  if (grade >= 55) return "#facc15";
-  if (grade >= 40) return "#fb923c";
-  return "#f87171";
-}
 
 type Props = {
   grades: SeasonGradeDetail[];
