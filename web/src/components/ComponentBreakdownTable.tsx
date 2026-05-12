@@ -7,7 +7,8 @@ import {
   formatSample,
   formatWeight,
   formatZ,
-  zBand,
+  gradeHex,
+  zToPercentile,
 } from "@/lib/grades";
 import type { StatComponentDetail } from "@/types";
 
@@ -87,13 +88,11 @@ function FriendlyView({
         {components.map((c) => {
           const tracked = c.used_in_composite === false;
           const description = componentDescription(c.component_name);
-          const band = zBand(c.z_score);
-          const toneCls =
-            band.tone === "good"
-              ? "text-emerald-400"
-              : band.tone === "bad"
-                ? "text-red-400"
-                : "text-neutral-400";
+          const w = componentWeight(c.component_name, role);
+          const isNegative = w !== null && w < 0;
+          const rawPct = zToPercentile(c.z_score);
+          const displayPct = rawPct === null ? null : isNegative ? 100 - rawPct : rawPct;
+          const pctColor = displayPct !== null ? gradeHex(displayPct) : "#737373";
           return (
             <tr
               key={c.component_name}
@@ -123,7 +122,10 @@ function FriendlyView({
               <td className="px-3 py-2 text-right font-mono text-neutral-100">
                 {formatComponentValue(c.component_name, c.raw_value)}
               </td>
-              <td className={`px-3 py-2 text-right font-mono ${toneCls}`}>
+              <td
+                className="px-3 py-2 text-right font-mono"
+                style={{ color: pctColor }}
+              >
                 {formatPercentile(c.z_score)}
               </td>
               <td className="hidden px-3 py-2 text-right font-mono text-neutral-500 sm:table-cell">
