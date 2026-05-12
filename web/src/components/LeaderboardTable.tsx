@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { TeamLogo } from "@/components/TeamLogo";
 import { gradeColor, teRoleLabel } from "@/lib/grades";
 import type { LeaderboardEntry } from "@/types";
 
@@ -107,7 +108,7 @@ export function LeaderboardTable({ entries, position }: Props) {
             />
             <SortHeader
               label="Team"
-              align="center"
+              align="left"
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.team}
               onSort={onSort}
@@ -356,8 +357,15 @@ function Row({
           </span>
         )}
       </Td>
-      <Td className="hidden text-center text-neutral-400 sm:table-cell">
-        {e.team_abbr ?? "—"}
+      <Td className="hidden sm:table-cell">
+        {e.team_abbr ? (
+          <div className="flex items-center gap-1.5">
+            <TeamLogo abbr={e.team_abbr} size={20} />
+            <span className="text-xs text-neutral-400">{e.team_abbr}</span>
+          </div>
+        ) : (
+          <span className="text-neutral-500">—</span>
+        )}
       </Td>
       <Td className="text-right font-mono font-semibold">
         <span className={gradeColor(e.composite_grade)}>

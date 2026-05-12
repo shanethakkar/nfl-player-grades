@@ -7,6 +7,7 @@ import { BackLink } from "@/components/BackLink";
 import { CareerGradeChart } from "@/components/CareerGradeChart";
 import { CareerSummary } from "@/components/CareerSummary";
 import { SeasonGradesSection } from "@/components/SeasonGradesSection";
+import { TeamLogo } from "@/components/TeamLogo";
 import { getPlayerDetail } from "@/lib/queries";
 
 type PageProps = {
@@ -51,20 +52,21 @@ export default async function PlayerPage({ params }: PageProps) {
       <header className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{player.full_name}</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            {player.position}
+          <div className="mt-1 flex items-center gap-2 text-sm text-neutral-400">
+            <span>{player.position}</span>
             {player.current_team_abbr && (
               <>
-                {" · "}
+                <span className="text-neutral-600">·</span>
+                <TeamLogo abbr={player.current_team_abbr} size={22} />
                 <span className="text-neutral-300">{player.current_team_abbr}</span>
               </>
             )}
             {player.gsis_id && (
-              <span className="ml-3 text-xs text-neutral-600">
+              <span className="text-xs text-neutral-600">
                 gsis {player.gsis_id}
               </span>
             )}
-          </p>
+          </div>
         </div>
       </header>
 

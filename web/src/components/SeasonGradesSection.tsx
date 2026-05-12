@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
+import { TeamLogo } from "@/components/TeamLogo";
 import {
   componentLabel,
   componentWeight,
@@ -63,7 +64,8 @@ function SeasonGradeCard({
               {g.season} {g.position}
             </h2>
             {g.team_abbr && (
-              <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+              <span className="flex items-center gap-1 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+                <TeamLogo abbr={g.team_abbr} size={14} />
                 {g.team_abbr}
               </span>
             )}
