@@ -135,7 +135,8 @@ export async function getLeaderboard(
         sc_fumble.sample_size   AS n_touches,
         sc_ryoe.raw_value       AS rb_ryoe_per_attempt,
         sc_epa.raw_value        AS rb_rush_epa_per_attempt,
-        sc_succ.raw_value       AS rb_rush_success_rate
+        sc_succ.raw_value       AS rb_rush_success_rate,
+        sc_rec_epa.raw_value    AS rec_epa_per_target
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -155,6 +156,10 @@ export async function getLeaderboard(
         ON sc_succ.player_id = sg.player_id
        AND sc_succ.season = sg.season
        AND sc_succ.component_name = 'rb_rush_success_rate'
+      LEFT JOIN stat_components sc_rec_epa
+        ON sc_rec_epa.player_id = sg.player_id
+       AND sc_rec_epa.season = sg.season
+       AND sc_rec_epa.component_name = 'rb_rec_epa_per_target'
       WHERE sg.season = ${season}
         AND sg.position = 'RB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
