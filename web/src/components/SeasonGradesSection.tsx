@@ -10,7 +10,6 @@ import {
   componentWeight,
   DATA_TIER_LABELS,
   teRoleLabel,
-  zBand,
   zToPercentile,
 } from "@/lib/grades";
 import type { DataTier, SeasonGradeDetail, StatComponentDetail } from "@/types";
@@ -120,6 +119,15 @@ function SeasonGradeCard({
   );
 }
 
+function pctHex(pct: number): string {
+  if (pct >= 90) return "#34d399";
+  if (pct >= 80) return "#4ade80";
+  if (pct >= 70) return "#a3e635";
+  if (pct >= 55) return "#facc15";
+  if (pct >= 40) return "#fb923c";
+  return "#f87171";
+}
+
 function ComponentPercentileBars({
   components,
   role,
@@ -134,29 +142,15 @@ function ComponentPercentileBars({
       const isNegative = w !== null && w < 0;
       const pct = zToPercentile(c.z_score);
       const displayPct = pct === null ? null : isNegative ? 100 - pct : pct;
-      const band = zBand(c.z_score);
-      const tone =
-        isNegative
-          ? band.tone === "good"
-            ? "bad"
-            : band.tone === "bad"
-              ? "good"
-              : "neutral"
-          : band.tone;
-      return { c, displayPct, tone };
+      return { c, displayPct };
     });
 
   if (rows.length === 0) return null;
 
   return (
     <div className="mt-4 space-y-2">
-      {rows.map(({ c, displayPct, tone }) => {
-        const barCls =
-          tone === "good"
-            ? "bg-emerald-500/60"
-            : tone === "bad"
-              ? "bg-red-500/60"
-              : "bg-neutral-500/40";
+      {rows.map(({ c, displayPct }) => {
+        const color = displayPct !== null ? pctHex(displayPct) : undefined;
         return (
           <div key={c.component_name} className="flex items-center gap-3">
             <span className="w-32 shrink-0 text-right text-[11px] text-neutral-500">
@@ -165,12 +159,15 @@ function ComponentPercentileBars({
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
               {displayPct !== null && (
                 <div
-                  className={`h-full rounded-full ${barCls}`}
-                  style={{ width: `${displayPct}%` }}
+                  className="h-full rounded-full"
+                  style={{ width: `${displayPct}%`, backgroundColor: color }}
                 />
               )}
             </div>
-            <span className="w-10 text-right font-mono text-[11px] text-neutral-500">
+            <span
+              className="w-10 text-right font-mono text-[11px]"
+              style={{ color: color ?? "#737373" }}
+            >
               {displayPct !== null ? `${displayPct}th` : "—"}
             </span>
           </div>
