@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-
 import {
   componentDescription,
   componentLabel,
@@ -17,6 +13,7 @@ import type { StatComponentDetail } from "@/types";
 
 type Props = {
   components: StatComponentDetail[];
+  advanced: boolean;
   /**
    * Player's position. Currently informational only — kept on the prop so
    * future per-position layouts (e.g. grouping TE blocking-related fields)
@@ -30,23 +27,19 @@ type Props = {
 /**
  * Per-season component breakdown shown on the player page.
  *
- * Two views, toggle on the right:
- *   - **Friendly** (default): the stat name with a hover description, the
- *     headline value (raw, in the metric's natural units), and a plain
- *     "above/below average" label coloured green/red. No jargon, no
- *     variable names, no z-scores.
- *   - **Advanced**: the original four-column dump — Raw, Shrunk
- *     (empirical-Bayes-adjusted), Z, Sample — with the underlying
- *     variable name (e.g. `qb_cpoe`) shown beside the label so analysts
- *     and developers can map back to the pipeline.
+ * Controlled by the `advanced` prop — the toggle lives one level up in
+ * SeasonGradesSection so a single button switches all seasons at once.
  *
- * Components stored for audit but excluded from the composite (currently
- * only `te_target_earn_rate` for blocking TEs, see ADR-0016) get a small
- * "tracked, not graded" tag and a muted row colour in both views.
+ * Two views:
+ *   - **Friendly**: stat name (hover for definition), value, percentile,
+ *     weight, sample size. No jargon or variable names.
+ *   - **Advanced**: component variable name, raw value, shrunk
+ *     (empirical-Bayes-adjusted), z-score, weight, sample size.
+ *
+ * Components excluded from the composite (blocking-TE earn rate, ADR-0016)
+ * get a "tracked, not graded" tag and a muted row colour in both views.
  */
-export function ComponentBreakdownTable({ components, role }: Props) {
-  const [advanced, setAdvanced] = useState(false);
-
+export function ComponentBreakdownTable({ components, advanced, role }: Props) {
   if (components.length === 0) {
     return (
       <p className="text-sm text-neutral-500">
@@ -56,38 +49,14 @@ export function ComponentBreakdownTable({ components, role }: Props) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setAdvanced((v) => !v)}
-          className="text-xs text-neutral-500 underline-offset-2 hover:text-neutral-300 hover:underline"
-        >
-          {advanced ? "Hide advanced" : "Show advanced"}
-        </button>
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-neutral-800">
-        <table className="min-w-full text-sm">
-          {advanced ? (
-            <AdvancedView components={components} />
-          ) : (
-            <FriendlyView components={components} role={role} />
-          )}
-        </table>
-      </div>
-      {!advanced && (
-        <p className="text-[11px] text-neutral-600">
-          Hover a stat name for a quick definition. {" "}
-          <button
-            type="button"
-            className="underline-offset-2 hover:text-neutral-400 hover:underline"
-            onClick={() => setAdvanced(true)}
-          >
-            Show advanced
-          </button>{" "}
-          for raw, shrunk, and z-score columns.
-        </p>
-      )}
+    <div className="overflow-x-auto rounded-lg border border-neutral-800">
+      <table className="min-w-full text-sm">
+        {advanced ? (
+          <AdvancedView components={components} role={role} />
+        ) : (
+          <FriendlyView components={components} role={role} />
+        )}
+      </table>
     </div>
   );
 }
@@ -137,7 +106,9 @@ function FriendlyView({
               <td className="px-3 py-2 text-neutral-200">
                 <span
                   className={
-                    description ? "decoration-dotted underline-offset-4 hover:underline cursor-help" : ""
+                    description
+                      ? "cursor-help decoration-dotted underline-offset-4 hover:underline"
+                      : ""
                   }
                   title={description ?? undefined}
                 >
@@ -169,7 +140,13 @@ function FriendlyView({
   );
 }
 
-function AdvancedView({ components }: { components: StatComponentDetail[] }) {
+function AdvancedView({
+  components,
+  role,
+}: {
+  components: StatComponentDetail[];
+  role?: string;
+}) {
   return (
     <>
       <thead className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
@@ -178,6 +155,7 @@ function AdvancedView({ components }: { components: StatComponentDetail[] }) {
           <th className="px-3 py-2 text-right">Raw</th>
           <th className="px-3 py-2 text-right">Shrunk</th>
           <th className="px-3 py-2 text-right">Z</th>
+          <th className="px-3 py-2 text-right">Weight</th>
           <th className="px-3 py-2 text-right">Sample</th>
         </tr>
       </thead>
@@ -213,8 +191,11 @@ function AdvancedView({ components }: { components: StatComponentDetail[] }) {
               <td className="px-3 py-2 text-right font-mono text-neutral-300">
                 {formatZ(c.z_score)}
               </td>
+              <td className="px-3 py-2 text-right font-mono text-neutral-500">
+                {formatWeight(componentWeight(c.component_name, role))}
+              </td>
               <td className="px-3 py-2 text-right font-mono text-neutral-400">
-                {c.sample_size ?? "\u2014"}
+                {c.sample_size ?? "—"}
               </td>
             </tr>
           );

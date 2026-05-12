@@ -2,20 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CareerGradeChart } from "@/components/CareerGradeChart";
 import { CareerSummary } from "@/components/CareerSummary";
-import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
-import { GradeBadge } from "@/components/GradeBadge";
-import { TeamContextPanel } from "@/components/TeamContextPanel";
-import { DATA_TIER_LABELS, teRoleLabel } from "@/lib/grades";
+import { SeasonGradesSection } from "@/components/SeasonGradesSection";
 import { getPlayerDetail } from "@/lib/queries";
-import type { DataTier, SeasonGradeDetail } from "@/types";
 
 type PageProps = {
   params: Promise<{ id: string }>;
 };
 
 /**
- * Browser tab title is "{Name} \u2014 NFL Player Grades" so bookmarks,
+ * Browser tab title is "{Name} — NFL Player Grades" so bookmarks,
  * tab strips, and shared links read clearly. We re-fetch the player
  * meta inside generateMetadata; Next.js dedupes the underlying DB call
  * with the page render.
@@ -31,7 +28,7 @@ export async function generateMetadata({
   const detail = await getPlayerDetail(playerId);
   if (detail === null) return { title: "Player" };
   return {
-    title: `${detail.player.full_name} \u2014 NFL Player Grades`,
+    title: `${detail.player.full_name} — NFL Player Grades`,
   };
 }
 
@@ -61,7 +58,7 @@ export default async function PlayerPage({ params }: PageProps) {
             {player.position}
             {player.current_team_abbr && (
               <>
-                {" \u00B7 "}
+                {" · "}
                 <span className="text-neutral-300">{player.current_team_abbr}</span>
               </>
             )}
@@ -87,80 +84,10 @@ export default async function PlayerPage({ params }: PageProps) {
       ) : (
         <>
           <CareerSummary grades={grades} />
-          <div className="mt-10 space-y-10">
-            {grades.map((g) => (
-              <SeasonGradeCard key={`${g.season}-${g.position}`} grade={g} />
-            ))}
-          </div>
+          <CareerGradeChart grades={grades} />
+          <SeasonGradesSection grades={grades} />
         </>
       )}
     </main>
   );
-}
-
-function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
-  const roleText = g.position === "TE" ? teRoleLabel(g.role) : null;
-  return (
-    <section className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">
-              {g.season} {g.position}
-            </h2>
-            {g.team_abbr && (
-              <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-                {g.team_abbr}
-              </span>
-            )}
-            {roleText && (
-              <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400">
-                {roleText}
-              </span>
-            )}
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
-              {DATA_TIER_LABELS[g.data_tier as DataTier]}
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-neutral-500">
-            {g.qualified
-              ? `${g.percentile.toFixed(0)}th percentile among qualified ${g.position}s`
-              : "Below volume threshold — grade shown for reference"}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <GradeBadge
-            grade={g.composite_grade}
-            tier={g.data_tier as DataTier}
-            qualified={g.qualified}
-          />
-          {g.qualified && (
-            <div className="text-right text-xs text-neutral-500">
-              <div className="font-mono text-neutral-300">
-                z = {formatSignedZ(g.composite_z)}
-              </div>
-              {g.confidence !== null && (
-                <div>confidence {Math.round(g.confidence * 100)}%</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {g.context && <TeamContextPanel context={g.context} />}
-
-      <div className="mt-5">
-        <ComponentBreakdownTable
-          components={g.components}
-          position={g.position}
-          role={g.role ?? undefined}
-        />
-      </div>
-    </section>
-  );
-}
-
-function formatSignedZ(z: number): string {
-  const sign = z > 0 ? "+" : z < 0 ? "-" : "";
-  return `${sign}${Math.abs(z).toFixed(2)}`;
 }

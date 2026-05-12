@@ -136,10 +136,6 @@ function Hero() {
       <h1 className="text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
         How grades work
       </h1>
-      <p className="mt-4 max-w-2xl text-lg text-neutral-300">
-        Every NFL player on a 0–100 scale, computed from play-by-play
-        data. Here&apos;s what goes into the number.
-      </p>
     </header>
   );
 }
@@ -487,10 +483,10 @@ function DataSource() {
     <section className="mb-16">
       <SectionHeading
         eyebrow="Where the data comes from"
-        title="Open, reproducible, and the same data the analysts use"
+        title="Built on nflverse"
       />
-      <p className="max-w-2xl text-sm leading-relaxed text-neutral-300">
-        Every number on this site is computed from{" "}
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6 text-sm leading-relaxed text-neutral-300">
+        Grades are computed from{" "}
         <a
           href="https://nflverse.nflverse.com/"
           className="underline decoration-dotted hover:text-neutral-100"
@@ -498,13 +494,12 @@ function DataSource() {
           rel="noopener noreferrer"
         >
           nflverse
-        </a>{" "}
-        — the same public play-by-play and Next Gen Stats feeds used by
-        ESPN charts, academic research, and most football analytics
-        writing. There are no proprietary grades, no scout opinions, and
-        no hidden inputs. If you re-run our pipeline you get the same
-        numbers.
-      </p>
+        </a>
+        {" "}— the community-maintained play-by-play and Next Gen Stats
+        dataset that most public football analytics research runs on.
+        No proprietary feeds, no subjective inputs. The pipeline is
+        fully reproducible: the same data always produces the same grades.
+      </div>
     </section>
   );
 }

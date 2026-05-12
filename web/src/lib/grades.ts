@@ -346,6 +346,13 @@ function ordinalSuffix(n: number): string {
   }
 }
 
+/** Raw numeric percentile from a z-score, clamped to [1, 99]. */
+export function zToPercentile(z: number | null): number | null {
+  if (z === null || !Number.isFinite(z)) return null;
+  const raw = Math.round(normalCDF(z) * 100);
+  return Math.max(1, Math.min(99, raw));
+}
+
 /** Converts a component z-score to a percentile string, e.g. "94th". */
 export function formatPercentile(z: number | null): string {
   if (z === null || !Number.isFinite(z)) return "—";
