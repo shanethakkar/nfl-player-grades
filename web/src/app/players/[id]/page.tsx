@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+
+import { BackLink } from "@/components/BackLink";
 import { CareerGradeChart } from "@/components/CareerGradeChart";
 import { CareerSummary } from "@/components/CareerSummary";
 import { SeasonGradesSection } from "@/components/SeasonGradesSection";
@@ -44,12 +46,7 @@ export default async function PlayerPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <Link
-        href="/"
-        className="text-sm text-neutral-400 hover:text-neutral-100"
-      >
-        ← back to leaderboard
-      </Link>
+      <BackLink />
 
       <header className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div>
