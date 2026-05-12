@@ -1,6 +1,7 @@
+import type React from "react";
 import Link from "next/link";
 
-import { gradeColor } from "@/lib/grades";
+import { componentDescription, componentLabel, gradeColor } from "@/lib/grades";
 import {
   getCurrentTopAtPosition,
   getGradeTierExamples,
@@ -18,16 +19,62 @@ export const metadata = {
     "Every NFL player on a 0-100 scale, computed from play-by-play data. Here's what goes into the number, what each tier means, and what we don't measure yet.",
 };
 
+// ---------------------------------------------------------------------------
+// Per-position component lists (mirrors pipeline/grading/weights.py).
+// Negative weights penalize the grade (e.g. fumble rate).
+// ---------------------------------------------------------------------------
+
+type ComponentEntry = { name: string; weight: number };
+
+const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
+  QB: [
+    { name: "qb_epa_per_dropback", weight: 0.50 },
+    { name: "qb_cpoe",             weight: 0.25 },
+    { name: "qb_success_rate",     weight: 0.25 },
+  ],
+  RB: [
+    { name: "rb_ryoe_per_attempt",         weight:  0.28 },
+    { name: "rb_rush_epa_per_attempt",     weight:  0.18 },
+    { name: "rb_rush_success_rate",        weight:  0.14 },
+    { name: "rb_rec_epa_per_target",       weight:  0.18 },
+    { name: "rb_yac_over_expected_per_rec",weight:  0.12 },
+    { name: "rb_catch_pct",                weight:  0.05 },
+    { name: "rb_fumble_rate",              weight: -0.05 },
+  ],
+  WR: [
+    { name: "wr_rec_epa_per_target",         weight:  0.35 },
+    { name: "wr_yac_over_expected_per_rec",  weight:  0.27 },
+    { name: "wr_separation",                 weight:  0.10 },
+    { name: "wr_target_earn_rate",           weight:  0.10 },
+    { name: "wr_success_rate_per_target",    weight:  0.08 },
+    { name: "wr_fumble_rate",                weight: -0.05 },
+  ],
+  TE: [
+    { name: "te_rec_epa_per_target",         weight:  0.35 },
+    { name: "te_yac_over_expected_per_rec",  weight:  0.27 },
+    { name: "te_separation",                 weight:  0.07 },
+    { name: "te_target_earn_rate",           weight:  0.10 },
+    { name: "te_success_rate_per_target",    weight:  0.08 },
+    { name: "te_fumble_rate",                weight: -0.05 },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Z-score → grade lookup (sigmoid: grade = 100 / (1 + e^{-1.15z})).
+// ---------------------------------------------------------------------------
+
+const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
+  z,
+  label: z > 0 ? `+${z}` : String(z),
+  grade: Math.round(100 / (1 + Math.exp(-1.15 * z))),
+}));
+
 /**
  * Consumer-facing methodology page.
  *
  * Audience: an NFL fan who clicked the "methodology" link from a player
  * grade. They want to know what's measured, what the scale means, and
- * what the limitations are. They don't care about version numbers,
- * scope language, or design rationale — that lives at /about/decisions.
- *
- * Server component: the grade scale and per-position cards pull live
- * data so they refresh automatically as new seasons come in.
+ * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
   const [tiers, qbTop, rbTop, wrTop, teTop] = await Promise.all([
@@ -42,29 +89,26 @@ export default async function MethodologyPage() {
     {
       position: "QB",
       headline: "Quarterback",
-      description:
-        "Three things — how many points each dropback added, how accurate they were beyond what's expected, and how often the play succeeded.",
+      components: POSITION_COMPONENTS.QB,
       top: qbTop,
     },
     {
       position: "RB",
       headline: "Running back",
-      description:
-        "Six factors — yards over expected on each carry, points added per attempt, success rate, receiving value, catch rate, and ball security.",
+      components: POSITION_COMPONENTS.RB,
       top: rbTop,
     },
     {
       position: "WR",
       headline: "Wide receiver",
-      description:
-        "Six factors — points per target, yards-after-catch beyond expected, separation from defenders, share of team targets earned, success rate when targeted, and ball security.",
+      components: POSITION_COMPONENTS.WR,
       top: wrTop,
     },
     {
       position: "TE",
       headline: "Tight end",
-      description:
-        "Same six as receivers, with one twist — tight ends who are mostly blockers don't get penalized for low target volume. We classify each TE as receiving, balanced, or blocking based on usage.",
+      components: POSITION_COMPONENTS.TE,
+      teNote: true,
       top: teTop,
     },
   ];
@@ -93,7 +137,7 @@ function Hero() {
         How grades work
       </h1>
       <p className="mt-4 max-w-2xl text-lg text-neutral-300">
-        Every NFL player on a 0-100 scale, computed from play-by-play
+        Every NFL player on a 0–100 scale, computed from play-by-play
         data. Here&apos;s what goes into the number.
       </p>
     </header>
@@ -101,17 +145,15 @@ function Hero() {
 }
 
 // ---------------------------------------------------------------------------
-// The grade scale — vertical band of tiers, each with player examples.
+// The grade scale — gradient bar + vertical band of tiers with examples.
 // ---------------------------------------------------------------------------
 
 function GradeScale({ tiers }: { tiers: TierBucket[] }) {
   return (
     <section className="mb-16">
       <SectionHeading eyebrow="The scale" title="What each grade means" />
-      <p className="mb-6 max-w-2xl text-sm text-neutral-400">
-        Examples are real player-seasons from the database. Click any
-        name to see how their grade was built.
-      </p>
+      {/* Change 3: continuous color ramp so the reader sees the full spectrum before reading. */}
+      <div className="mb-4 h-2 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-emerald-400" />
       <div className="overflow-hidden rounded-xl border border-neutral-800">
         {tiers.map((tier) => (
           <TierRow key={tier.id} tier={tier} />
@@ -139,7 +181,9 @@ function TierRow({ tier }: { tier: TierBucket }) {
             No qualified seasons in this band yet.
           </span>
         ) : (
-          tier.examples.map((ex) => <ExampleChip key={`${ex.player_id}:${ex.season}`} ex={ex} />)
+          tier.examples.map((ex) => (
+            <ExampleChip key={`${ex.player_id}:${ex.season}`} ex={ex} />
+          ))
         )}
       </div>
     </div>
@@ -163,16 +207,7 @@ function ExampleChip({ ex }: { ex: TierExample }) {
   );
 }
 
-/**
- * Per-tier left-border + range-color accents. Kept separate from
- * `gradeColor()` because the grade-scale tiers don't line up exactly
- * with the leaderboard's text-color thresholds (e.g. 50-59 there is
- * yellow on top + orange on bottom).
- */
-const TIER_ACCENT: Record<
-  GradeTierId,
-  { text: string; borderL: string }
-> = {
+const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
   "tier-90":     { text: "text-emerald-400", borderL: "border-l-4 border-l-emerald-500/60" },
   "tier-80":     { text: "text-green-400",   borderL: "border-l-4 border-l-green-500/60" },
   "tier-70":     { text: "text-lime-400",    borderL: "border-l-4 border-l-lime-500/60" },
@@ -182,13 +217,15 @@ const TIER_ACCENT: Record<
 };
 
 // ---------------------------------------------------------------------------
-// Position cards — what gets measured per position.
+// Position cards — weight chips instead of prose descriptions.
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
   position: "QB" | "RB" | "WR" | "TE";
   headline: string;
-  description: string;
+  components: ComponentEntry[];
+  /** When true, renders a note about the blocking-TE path. */
+  teNote?: boolean;
   top: { season: number | null; entries: CurrentTopEntry[] };
 };
 
@@ -199,11 +236,6 @@ function PositionGrid({ positions }: { positions: PositionCardData[] }) {
         eyebrow="What gets measured"
         title="Each position has its own recipe"
       />
-      <p className="mb-6 max-w-2xl text-sm text-neutral-400">
-        We measure the things that matter at each position. Plain
-        English here; the exact weights live on the design-decisions
-        page.
-      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {positions.map((p) => (
           <PositionCard key={p.position} data={p} />
@@ -224,13 +256,53 @@ function PositionCard({ data }: { data: PositionCardData }) {
           {data.headline}
         </h3>
       </div>
-      <p className="text-sm leading-relaxed text-neutral-300">
-        {data.description}
-      </p>
+
+      {/* Change 1: weight chips replace the prose description paragraph. */}
+      <div className="flex flex-wrap gap-1.5">
+        {data.components.map((c) => (
+          <WeightChip key={c.name} name={c.name} weight={c.weight} />
+        ))}
+      </div>
+      {data.teNote && (
+        <p className="mt-2 text-[11px] text-neutral-500">
+          Pure blockers (&lt;15 targets): earn rate excluded from composite,
+          weight redistributed to EPA + YAC.
+        </p>
+      )}
+
       <div className="mt-4 border-t border-neutral-900 pt-4">
         <CurrentTopBlock data={data} />
       </div>
     </article>
+  );
+}
+
+function WeightChip({ name, weight }: ComponentEntry) {
+  const label = componentLabel(name);
+  const desc = componentDescription(name);
+  const pct = Math.round(Math.abs(weight) * 100);
+  const neg = weight < 0;
+  return (
+    <span className="group/chip relative">
+      <span
+        className={`inline-flex cursor-default items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
+          neg
+            ? "border-red-900/60 bg-red-950/30 text-red-400"
+            : "border-neutral-700 bg-neutral-900 text-neutral-300"
+        }`}
+      >
+        <span>{label}</span>
+        <span className={`font-mono font-semibold ${neg ? "text-red-400" : "text-neutral-500"}`}>
+          {neg ? "−" : ""}{pct}%
+        </span>
+      </span>
+      {desc && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-52 -translate-x-1/2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs leading-relaxed text-neutral-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover/chip:opacity-100">
+          {desc}
+          <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-neutral-700" />
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -277,47 +349,78 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
 }
 
 // ---------------------------------------------------------------------------
-// How a grade is built — three plain-language paragraphs.
+// How a grade is built — trimmed step cards + z→grade visual on step 3.
 // ---------------------------------------------------------------------------
 
 function HowItsBuilt() {
   return (
     <section className="mb-16">
-      <SectionHeading
-        eyebrow="The pipeline"
-        title="How a grade is built"
-      />
+      <SectionHeading eyebrow="The pipeline" title="How a grade is built" />
       <div className="grid gap-5 sm:grid-cols-3">
+        {/* Change 4: bodies trimmed to one tight sentence each. */}
         <Step
           n={1}
           title="Pull the raw numbers"
-          body="We take every play of the season — dropbacks, carries, targets — and toss out garbage time so blowouts don't pad the stats."
+          body="Every play, every season — dropbacks, carries, targets. Garbage-time plays (win probability below 5% or above 95%) are filtered out."
         />
         <Step
           n={2}
-          title="Give partial credit on small samples"
-          body="A guy with 8 great targets doesn't outrank a guy with 100 good ones. Small-sample numbers get pulled toward the position average until there's enough evidence."
+          title="Shrink toward the mean"
+          body="Low-sample numbers are pulled toward the position average in proportion to how little data there is — a 10-target season counts for less than a 100-target one."
         />
         <Step
           n={3}
           title="Compare to the field"
-          body="We compare each player to others at the same position that season. Closer to average means closer to a 50. About two standard deviations above the field lands around a 90."
-        />
+          body="Stats are z-scored within (season, position). The composite z is mapped to a grade via sigmoid:"
+        >
+          <p className="mt-2 rounded bg-neutral-900 px-2.5 py-1.5 font-mono text-[11px] text-neutral-400">
+            grade = 100 / (1 + e^(−1.15z))
+          </p>
+          <div className="mt-3">
+            <ZGradeStrip />
+          </div>
+        </Step>
       </div>
     </section>
   );
 }
 
-function Step({ n, title, body }: { n: number; title: string; body: string }) {
+function Step({
+  n,
+  title,
+  body,
+  children,
+}: {
+  n: number;
+  title: string;
+  body: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
       <div className="mb-2 font-mono text-xs uppercase tracking-wider text-neutral-500">
         Step {n}
       </div>
-      <h3 className="mb-2 text-base font-semibold text-neutral-100">
-        {title}
-      </h3>
+      <h3 className="mb-2 text-base font-semibold text-neutral-100">{title}</h3>
       <p className="text-sm leading-relaxed text-neutral-300">{body}</p>
+      {children}
+    </div>
+  );
+}
+
+function ZGradeStrip() {
+  return (
+    <div className="grid grid-cols-5 gap-px overflow-hidden rounded-lg border border-neutral-800 text-center">
+      {Z_GRADE_EXAMPLES.map(({ z, label, grade }) => (
+        <div key={z} className="bg-neutral-950 px-1 py-2.5">
+          <div className={`font-mono text-lg font-bold leading-none ${gradeColor(grade)}`}>
+            {grade}
+          </div>
+          <div className="mt-1 font-mono text-[10px] text-neutral-500">
+            z={label}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -412,15 +515,14 @@ function DataSource() {
 
 function Footer() {
   return (
-    <footer className="border-t border-neutral-900 pt-8 text-xs text-neutral-500">
-      For the technically curious: see our{" "}
+    <footer className="border-t border-neutral-900 pt-8">
       <Link
         href="/about/decisions"
-        className="underline decoration-dotted hover:text-neutral-300"
+        className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-400 transition-colors hover:border-neutral-500 hover:text-neutral-100"
       >
-        design decisions
+        Design decisions
+        <span aria-hidden>→</span>
       </Link>
-      .
     </footer>
   );
 }

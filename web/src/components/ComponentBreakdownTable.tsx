@@ -5,8 +5,11 @@ import { useState } from "react";
 import {
   componentDescription,
   componentLabel,
+  componentWeight,
   formatComponentValue,
+  formatPercentile,
   formatSample,
+  formatWeight,
   formatZ,
   zBand,
 } from "@/lib/grades";
@@ -20,6 +23,8 @@ type Props = {
    * can branch without an API change.
    */
   position?: string;
+  /** Player's role for the season — used to select the correct weight set (e.g. blocking_te). */
+  role?: string;
 };
 
 /**
@@ -39,7 +44,7 @@ type Props = {
  * only `te_target_earn_rate` for blocking TEs, see ADR-0016) get a small
  * "tracked, not graded" tag and a muted row colour in both views.
  */
-export function ComponentBreakdownTable({ components }: Props) {
+export function ComponentBreakdownTable({ components, role }: Props) {
   const [advanced, setAdvanced] = useState(false);
 
   if (components.length === 0) {
@@ -66,7 +71,7 @@ export function ComponentBreakdownTable({ components }: Props) {
           {advanced ? (
             <AdvancedView components={components} />
           ) : (
-            <FriendlyView components={components} />
+            <FriendlyView components={components} role={role} />
           )}
         </table>
       </div>
@@ -87,14 +92,23 @@ export function ComponentBreakdownTable({ components }: Props) {
   );
 }
 
-function FriendlyView({ components }: { components: StatComponentDetail[] }) {
+function FriendlyView({
+  components,
+  role,
+}: {
+  components: StatComponentDetail[];
+  role?: string;
+}) {
   return (
     <>
       <thead className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
         <tr>
           <th className="px-3 py-2 text-left">Stat</th>
           <th className="px-3 py-2 text-right">Value</th>
-          <th className="px-3 py-2 text-left">vs. position average</th>
+          <th className="px-3 py-2 text-right">Percentile</th>
+          <th className="hidden px-3 py-2 text-right text-neutral-600 sm:table-cell">
+            Weight
+          </th>
           <th className="hidden px-3 py-2 text-right text-neutral-600 sm:table-cell">
             Sample
           </th>
@@ -138,7 +152,12 @@ function FriendlyView({ components }: { components: StatComponentDetail[] }) {
               <td className="px-3 py-2 text-right font-mono text-neutral-100">
                 {formatComponentValue(c.component_name, c.raw_value)}
               </td>
-              <td className={`px-3 py-2 ${toneCls}`}>{band.label}</td>
+              <td className={`px-3 py-2 text-right font-mono ${toneCls}`}>
+                {formatPercentile(c.z_score)}
+              </td>
+              <td className="hidden px-3 py-2 text-right font-mono text-neutral-500 sm:table-cell">
+                {formatWeight(componentWeight(c.component_name, role))}
+              </td>
               <td className="hidden px-3 py-2 text-right font-mono text-neutral-500 sm:table-cell">
                 {formatSample(c.component_name, c.sample_size)}
               </td>

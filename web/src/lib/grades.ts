@@ -325,3 +325,89 @@ function signedFixed(v: number, digits: number): string {
   const sign = v > 0 ? "+" : v < 0 ? "-" : "";   // -0 renders without sign
   return `${sign}${Math.abs(v).toFixed(digits)}`;
 }
+
+// Normal CDF (Abramowitz & Stegun rational approximation, max error ~7.5e-8).
+function normalCDF(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp((-z * z) / 2);
+  const p =
+    d * t * (0.3193815 + t * (-0.3565638 + t * (1.7814779 + t * (-1.8212560 + t * 1.3302744))));
+  return z > 0 ? 1 - p : p;
+}
+
+function ordinalSuffix(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return "th";
+  switch (n % 10) {
+    case 1:  return "st";
+    case 2:  return "nd";
+    case 3:  return "rd";
+    default: return "th";
+  }
+}
+
+/** Converts a component z-score to a percentile string, e.g. "94th". */
+export function formatPercentile(z: number | null): string {
+  if (z === null || !Number.isFinite(z)) return "—";
+  const raw = Math.round(normalCDF(z) * 100);
+  const p = Math.max(1, Math.min(99, raw));
+  return `${p}${ordinalSuffix(p)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Component weights — mirrors pipeline/grading/weights.py.
+// These are stable design constants (ADR-0013 through ADR-0016), not
+// computed values, so hardcoding here avoids a backend round-trip.
+// ---------------------------------------------------------------------------
+
+const COMPONENT_WEIGHTS: Record<string, number> = {
+  // QB v1 (ADR-0013)
+  qb_epa_per_dropback:      0.50,
+  qb_cpoe:                  0.25,
+  qb_success_rate:          0.25,
+  // RB v1 (ADR-0014)
+  rb_ryoe_per_attempt:      0.28,
+  rb_rush_epa_per_attempt:  0.18,
+  rb_rush_success_rate:     0.14,
+  rb_rec_epa_per_target:    0.18,
+  rb_yac_over_expected_per_rec: 0.12,
+  rb_catch_pct:             0.05,
+  rb_fumble_rate:          -0.05,
+  // WR v1 (ADR-0015)
+  wr_rec_epa_per_target:    0.35,
+  wr_yac_over_expected_per_rec: 0.27,
+  wr_separation:            0.10,
+  wr_target_earn_rate:      0.10,
+  wr_success_rate_per_target: 0.08,
+  wr_fumble_rate:          -0.05,
+  // TE v1 receiving/balanced path (ADR-0016)
+  te_rec_epa_per_target:    0.35,
+  te_yac_over_expected_per_rec: 0.27,
+  te_separation:            0.07,
+  te_target_earn_rate:      0.10,
+  te_success_rate_per_target: 0.08,
+  te_fumble_rate:          -0.05,
+};
+
+// Blocking-TE path: earn rate excluded from composite; its weight is
+// redistributed to EPA and YAC in proportion (ADR-0016).
+const TE_BLOCKING_WEIGHTS: Record<string, number> = {
+  te_rec_epa_per_target:        0.406,
+  te_yac_over_expected_per_rec: 0.314,
+  te_separation:                0.07,
+  te_success_rate_per_target:   0.08,
+  te_fumble_rate:              -0.05,
+};
+
+/** Weight of a component in the composite, or null if not in the formula. */
+export function componentWeight(name: string, role?: string | null): number | null {
+  if (role === "blocking_te") return TE_BLOCKING_WEIGHTS[name] ?? null;
+  return COMPONENT_WEIGHTS[name] ?? null;
+}
+
+/** Formats a weight as a percentage, e.g. "50%" or "−50%" (minus sign for negative). */
+export function formatWeight(w: number | null): string {
+  if (w === null) return "—";
+  const pct = Math.round(Math.abs(w) * 100);
+  return w < 0 ? `−${pct}%` : `${pct}%`;
+}

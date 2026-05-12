@@ -153,6 +153,7 @@ function SeasonGradeCard({ grade: g }: { grade: SeasonGradeDetail }) {
         <ComponentBreakdownTable
           components={g.components}
           position={g.position}
+          role={g.role ?? undefined}
         />
       </div>
     </section>
