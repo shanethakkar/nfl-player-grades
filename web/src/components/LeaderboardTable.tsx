@@ -242,14 +242,6 @@ const QB_COLUMNS: SortableColumn[] = [
 
 const RB_COLUMNS: SortableColumn[] = [
   {
-    key: "n_touches",
-    header: "Touches",
-    hoverLabel: "Carries + receptions after filters",
-    defaultDir: "desc",
-    sortValue: (e) => e.n_touches,
-    render: (e) => fmtInt(e.n_touches),
-  },
-  {
     key: "ryoe",
     header: "RYOE/att",
     hoverLabel: "Rush yards over expected per attempt (NGS)",
@@ -259,7 +251,7 @@ const RB_COLUMNS: SortableColumn[] = [
   },
   {
     key: "rush_epa",
-    header: "EPA/att",
+    header: "Rush EPA/att",
     hoverLabel: "Rush EPA per attempt",
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_epa_per_attempt,
@@ -272,6 +264,14 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_success_rate,
     render: (e) => fmtPct(e.rb_rush_success_rate, 1),
+  },
+  {
+    key: "rec_epa",
+    header: "Rec EPA/tgt",
+    hoverLabel: "Receiving EPA per target",
+    defaultDir: "desc",
+    sortValue: (e) => e.rec_epa_per_target,
+    render: (e) => fmtSigned(e.rec_epa_per_target, 3),
   },
 ];
 
