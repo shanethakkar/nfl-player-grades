@@ -74,8 +74,22 @@ function SeasonGradeCard({
                 {roleText}
               </span>
             )}
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
-              {DATA_TIER_LABELS[g.data_tier as DataTier]}
+            <span className="group/tier relative">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3.5 w-3.5 cursor-default text-neutral-600 hover:text-neutral-400"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-36 -translate-x-1/2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-center text-xs text-neutral-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover/tier:opacity-100">
+                {DATA_TIER_LABELS[g.data_tier as DataTier]}
+              </span>
             </span>
           </div>
           <p className="mt-1 text-xs text-neutral-500">

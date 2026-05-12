@@ -61,11 +61,6 @@ export default async function PlayerPage({ params }: PageProps) {
                 <span className="text-neutral-300">{player.current_team_abbr}</span>
               </>
             )}
-            {player.gsis_id && (
-              <span className="text-xs text-neutral-600">
-                gsis {player.gsis_id}
-              </span>
-            )}
           </div>
         </div>
       </header>
