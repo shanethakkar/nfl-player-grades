@@ -7,6 +7,7 @@ import { GradeBadge } from "@/components/GradeBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
 import { TeamLogo } from "@/components/TeamLogo";
 import {
+  cbRoleLabel,
   componentLabel,
   componentWeight,
   DATA_TIER_LABELS,
@@ -54,7 +55,10 @@ function SeasonGradeCard({
   grade: SeasonGradeDetail;
   advanced: boolean;
 }) {
-  const roleText = g.position === "TE" ? teRoleLabel(g.role) : null;
+  const roleText =
+    g.position === "TE" ? teRoleLabel(g.role) :
+    g.position === "CB" ? cbRoleLabel(g.role) :
+    null;
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">

@@ -57,6 +57,13 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "te_success_rate_per_target",    weight:  0.08 },
     { name: "te_fumble_rate",                weight: -0.05 },
   ],
+  CB: [
+    { name: "cb_comp_pct_allowed",    weight: -0.22 },
+    { name: "cb_yac_per_rec_allowed", weight: -0.18 },
+    { name: "cb_int_rate",            weight:  0.10 },
+    { name: "cb_pbu_rate",            weight:  0.09 },
+    { name: "cb_td_rate",             weight: -0.07 },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -77,12 +84,13 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
     getCurrentTopAtPosition("WR"),
     getCurrentTopAtPosition("TE"),
+    getCurrentTopAtPosition("CB"),
   ]);
 
   const positions: PositionCardData[] = [
@@ -110,6 +118,13 @@ export default async function MethodologyPage() {
       components: POSITION_COMPONENTS.TE,
       teNote: true,
       top: teTop,
+    },
+    {
+      position: "CB",
+      headline: "Cornerback",
+      components: POSITION_COMPONENTS.CB,
+      availabilityNote: "Data from 2018+ (PFR coverage stats + nflverse box scores for PBU). Negative weights = lower is better for the CB.",
+      top: cbTop,
     },
   ];
 
@@ -217,11 +232,13 @@ const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
-  position: "QB" | "RB" | "WR" | "TE";
+  position: "QB" | "RB" | "WR" | "TE" | "CB";
   headline: string;
   components: ComponentEntry[];
   /** When true, renders a note about the blocking-TE path. */
   teNote?: boolean;
+  /** When set, renders a data-availability note below the weight chips. */
+  availabilityNote?: string;
   top: { season: number | null; entries: CurrentTopEntry[] };
 };
 
@@ -263,6 +280,11 @@ function PositionCard({ data }: { data: PositionCardData }) {
         <p className="mt-2 text-[11px] text-neutral-500">
           Pure blockers (&lt;15 targets): earn rate excluded from composite,
           weight redistributed to EPA + YAC.
+        </p>
+      )}
+      {data.availabilityNote && (
+        <p className="mt-2 text-[11px] text-neutral-500">
+          {data.availabilityNote}
         </p>
       )}
 

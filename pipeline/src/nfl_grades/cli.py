@@ -123,6 +123,22 @@ def ingest_ngs(season: int, stat_type: str, refresh: bool) -> None:
         )
 
 
+@ingest.command(name="pfr-def-coverage")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_pfr_def_coverage(season: int, refresh: bool) -> None:
+    """Pull PFR advanced defensive coverage stats for CBs (2018+)."""
+    from .ingest import pfr
+
+    result = pfr.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_pfr_match={result.rows_skipped_no_pfr_match}"
+    )
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -135,6 +151,8 @@ def ingest_all(season: int, refresh: bool) -> None:
     ctx.invoke(ingest_pbp, season=season, refresh=refresh)
     if season >= 2016:
         ctx.invoke(ingest_ngs, season=season, stat_type="all", refresh=refresh)
+    if season >= 2018:
+        ctx.invoke(ingest_pfr_def_coverage, season=season, refresh=refresh)
     # ftn — to be added when its ingest module lands.
 
 
@@ -144,36 +162,29 @@ def ingest_all(season: int, refresh: bool) -> None:
     "--position",
     type=str,
     default=None,
-    help="Limit to a single position (QB, RB, WR, TE). Omit to grade all.",
+    help="Limit to a single position (QB, RB, WR, TE, CB). Omit to grade all.",
 )
 def grade(season: int, position: str | None) -> None:
-    """Compute season grades (QB/RB/WR/TE v1)."""
+    """Compute season grades (QB/RB/WR/TE/CB v1)."""
     from .grading import run as grading_run
 
     summary = grading_run.run(season=season, position=position)
     for pos, result in summary.by_position.items():
         # Per-position RunResult dataclasses carry position-specific
-        # counters (n_qbs_total, n_rbs_total, n_wrs_total, …). Surface
-        # them generically.
-        total_attr = next(
-            a
-            for a in ("n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total")
-            if hasattr(result, a)
+        # counters (n_qbs_total, n_rbs_total, …). Probe generically.
+        _TOTAL_ATTRS = (
+            "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total", "n_cbs_total"
         )
-        qualified_attr = next(
-            a
-            for a in (
-                "n_qbs_qualified",
-                "n_rbs_qualified",
-                "n_wrs_qualified",
-                "n_tes_qualified",
-            )
-            if hasattr(result, a)
+        _QUAL_ATTRS = (
+            "n_qbs_qualified", "n_rbs_qualified", "n_wrs_qualified",
+            "n_tes_qualified", "n_cbs_qualified"
         )
+        total_attr = next((a for a in _TOTAL_ATTRS if hasattr(result, a)), None)
+        qualified_attr = next((a for a in _QUAL_ATTRS if hasattr(result, a)), None)
         click.echo(
             f"position={pos} season={result.season} "
-            f"total={getattr(result, total_attr)} "
-            f"qualified={getattr(result, qualified_attr)} "
+            f"total={getattr(result, total_attr) if total_attr else '?'} "
+            f"qualified={getattr(result, qualified_attr) if qualified_attr else '?'} "
             f"stat_components_written={result.stat_components_written} "
             f"season_grades_written={result.season_grades_written}"
         )

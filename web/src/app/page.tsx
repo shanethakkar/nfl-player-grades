@@ -51,7 +51,7 @@ export async function generateMetadata({
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first
 // and TE last, matching how the positions were rolled out.
-const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE"];
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB"];
 const DEFAULT_POSITION = "QB";
 
 /** Short phrase following "{N} qualified starters · composite of ..." */
@@ -60,6 +60,7 @@ const COMPOSITE_BLURB: Record<string, string> = {
   RB: "composite of rushing efficiency (RYOE / EPA / success), receiving value, and ball security",
   WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, and ball security",
   TE: "composite of EPA/target, YAC-over-expected, separation, earn rate, and ball security (earn rate dropped for pure blockers — ADR-0016)",
+  CB: "composite of completion% allowed, YAC/rec allowed, TD rate, and INT rate (data available 2018+)",
 };
 
 /** Heading + threshold text used for the below-qualification section. */
@@ -84,6 +85,11 @@ const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = 
     threshold:
       "Fewer than 40 targets. Grades still computed on the same 0-100 scale but treat them as noisy. Pure blocking TEs (<15 targets) are not graded at all.",
   },
+  CB: {
+    heading: "Low-volume corners",
+    threshold:
+      "Fewer than 30 targets. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
 };
 
 /** Noun used in the "{N} qualified X" header under the title. */
@@ -92,6 +98,7 @@ const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
   RB: { singular: "qualified back", plural: "qualified backs" },
   WR: { singular: "qualified receiver", plural: "qualified receivers" },
   TE: { singular: "qualified tight end", plural: "qualified tight ends" },
+  CB: { singular: "qualified corner", plural: "qualified corners" },
 };
 
 export default async function HomePage({ searchParams }: Props) {

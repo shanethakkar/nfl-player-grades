@@ -197,6 +197,48 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     sampleNoun: "reception",
   },
 
+  // --- CB v1 (ADR-0018) ---
+  cb_comp_pct_allowed: {
+    label: "Comp% allowed",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Completion percentage allowed when targeted. Lower is better — fewer completions means the CB won more reps.",
+    sampleNoun: "target",
+  },
+  cb_yac_per_rec_allowed: {
+    label: "YAC/rec allowed",
+    suffix: "",
+    formatValue: (v) => v.toFixed(2),
+    description:
+      "Average yards after catch allowed per reception. Lower is better — limits run-after-catch damage.",
+    sampleNoun: "target",
+  },
+  cb_td_rate: {
+    label: "TD rate allowed",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Touchdowns allowed per target. Lower is better — rare events with high k shrinkage.",
+    sampleNoun: "target",
+  },
+  cb_int_rate: {
+    label: "INT rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Interceptions per target. Volatile but the ultimate positive play for a cornerback.",
+    sampleNoun: "target",
+  },
+  cb_pbu_rate: {
+    label: "PBU rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Pass breakups (passes defended) per target. Active defense that stops the play without a turnover.",
+    sampleNoun: "target",
+  },
+
   // --- TE v1 (ADR-0016) ---
   te_rec_epa_per_target: {
     label: "Rec EPA / tgt",
@@ -259,6 +301,17 @@ export const TE_ROLE_LABELS: Record<string, string> = {
 export function teRoleLabel(role: string | null | undefined): string | null {
   if (!role) return null;
   return TE_ROLE_LABELS[role] ?? role;
+}
+
+export const CB_ROLE_LABELS: Record<string, string> = {
+  outside_cb: "Outside CB",
+  hybrid_cb:  "Hybrid CB",
+  slot_cb:    "Slot CB",
+};
+
+export function cbRoleLabel(role: string | null | undefined): string | null {
+  if (!role) return null;
+  return CB_ROLE_LABELS[role] ?? role;
 }
 
 export function componentLabel(componentName: string): string {
@@ -403,6 +456,12 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   te_target_earn_rate:      0.10,
   te_success_rate_per_target: 0.08,
   te_fumble_rate:          -0.05,
+  // CB v1 (ADR-0018) — negative weights = lower is better for that metric
+  cb_comp_pct_allowed:     -0.22,
+  cb_yac_per_rec_allowed:  -0.18,
+  cb_td_rate:              -0.07,
+  cb_int_rate:              0.10,
+  cb_pbu_rate:              0.09,
 };
 
 // Blocking-TE path: earn rate excluded from composite; its weight is

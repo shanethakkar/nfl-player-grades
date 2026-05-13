@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { TeamLogo } from "@/components/TeamLogo";
-import { gradeColor, teRoleLabel } from "@/lib/grades";
+import { cbRoleLabel, gradeColor, teRoleLabel } from "@/lib/grades";
 import type { LeaderboardEntry } from "@/types";
 
 type Props = {
@@ -314,11 +314,47 @@ const WR_COLUMNS: SortableColumn[] = [
 // its own column, to keep table density under control.
 const TE_COLUMNS: SortableColumn[] = WR_COLUMNS;
 
+const CB_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_targets",
+    header: "Tgts",
+    hoverLabel: "Qualifying targets against",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_targets,
+    render: (e) => fmtInt(e.n_targets),
+  },
+  {
+    key: "cb_comp_pct_allowed",
+    header: "Comp% Alwd",
+    hoverLabel: "Completion % allowed (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.cb_comp_pct_allowed,
+    render: (e) => fmtPct(e.cb_comp_pct_allowed, 1),
+  },
+  {
+    key: "cb_pbu_rate",
+    header: "PBU%",
+    hoverLabel: "Pass breakup rate (passes defended per target)",
+    defaultDir: "desc",
+    sortValue: (e) => e.cb_pbu_rate,
+    render: (e) => fmtPct(e.cb_pbu_rate, 2),
+  },
+  {
+    key: "cb_int_rate",
+    header: "INT%",
+    hoverLabel: "Interception rate (INTs per target)",
+    defaultDir: "desc",
+    sortValue: (e) => e.cb_int_rate,
+    render: (e) => fmtPct(e.cb_int_rate, 2),
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB: QB_COLUMNS,
   RB: RB_COLUMNS,
   WR: WR_COLUMNS,
   TE: TE_COLUMNS,
+  CB: CB_COLUMNS,
 };
 
 function Row({
@@ -335,7 +371,10 @@ function Row({
   const rowClass = e.qualified
     ? "border-t border-neutral-900 hover:bg-neutral-900/60"
     : "border-t border-neutral-900 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
-  const roleText = position === "TE" ? teRoleLabel(e.role) : null;
+  const roleText =
+    position === "TE" ? teRoleLabel(e.role) :
+    position === "CB" ? cbRoleLabel(e.role) :
+    null;
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>

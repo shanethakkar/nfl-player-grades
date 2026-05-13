@@ -22,6 +22,7 @@ pipeline stays pandas-native.
 | Participation / FTN | `load_ftn_charting`            | Personnel groupings, alignment (future)|
 | Players (master)    | `load_players`                 | Stable IDs, draft info, biographical   |
 | Schedules           | `load_schedules`               | Opponent + game context for adjustment |
+| PFR adv. def. stats | `load_pfr_advstats(stat_type="def")` | CB coverage metrics (2018+): targets, comp%, YAC, TDs, PBUs, INTs, slot% → `pfr_def_coverage` |
 
 `nflreadpy` is a superset of `nfl_data_py`'s coverage; if you need
 something not listed above (contracts, injuries, draft picks, officials,
@@ -37,7 +38,7 @@ combine), check `import nflreadpy as nfl; help(nfl)` first.
 | `import_depth_charts`      | `load_depth_charts`                   |
 | `import_ngs_data(stat)`    | `load_nextgen_stats(stat_type=stat)`  |
 | `import_snap_counts`       | `load_snap_counts`                    |
-| `import_seasonal_pfr`      | (no direct equivalent — PFR scrapes are out for now; use NGS+FTN) |
+| `import_seasonal_pfr`      | `load_pfr_advstats(stat_type=...)` (pass/rush/rec/def) |
 | `import_ftn_data`          | `load_ftn_charting`                   |
 
 ## Rate limiting / caching

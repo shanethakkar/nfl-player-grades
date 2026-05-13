@@ -57,6 +57,8 @@ export type DepthChartEntry = DepthChartsRow;
  *   WR → n_targets, rec_epa_per_target, yac_over_expected_per_rec,
  *        target_earn_rate
  *   TE → same as WR, plus `role` populated from season_grades
+ *   CB → n_targets, cb_comp_pct_allowed, cb_pbu_rate, cb_int_rate,
+ *        plus `role` (outside_cb / hybrid_cb / slot_cb)
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -75,7 +77,7 @@ export type LeaderboardEntry = {
   confidence: number | null;
   data_tier: number;
   team_abbr: string | null;
-  /** TE role label (receiving_te / balanced_te / blocking_te); null for QB/RB/WR. */
+  /** Role label; TE: receiving_te/balanced_te/blocking_te; CB: outside_cb/hybrid_cb/slot_cb; null otherwise. */
   role: string | null;
   // --- QB columns ---
   n_dropbacks: number | null;
@@ -93,6 +95,10 @@ export type LeaderboardEntry = {
   rec_epa_per_target: number | null;
   yac_over_expected_per_rec: number | null;
   target_earn_rate: number | null;
+  // --- CB columns ---
+  cb_comp_pct_allowed: number | null;
+  cb_pbu_rate: number | null;
+  cb_int_rate: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

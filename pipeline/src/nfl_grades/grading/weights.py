@@ -300,3 +300,90 @@ TE_V1_CONFIDENCE_FULL_TARGETS: int = 70
 TE_V1_TARGET_RATE_RECEIVING: float = 0.10
 TE_V1_TARGET_RATE_BALANCED_LO: float = 0.05
 TE_V1_MIN_SNAPS_FOR_BLOCKING_LABEL: int = 200
+
+
+# ---------------------------------------------------------------------------
+# CB v1 (ADR-0018).
+# ---------------------------------------------------------------------------
+# Data source: PFR advanced defensive coverage stats (pfr_def_coverage table).
+# Coverage begins 2018 — earliest year PFR published per-CB target/comp data.
+#
+# All five components are "lower is better" for the negative ones: a CB who
+# allows fewer completions / TDs / yards is better, so those enter with
+# negative weights. PBU rate and INT rate are positive.
+#
+# Weights are magnitudes designed so:
+#   - Coverage quality (comp% + YAC) = 40% of the composite
+#   - Positive defensive plays (PBU + INT) = 37% of the composite
+#   - TD suppression = 7% (small: rare events, low YoY reliability)
+#
+# The composite combiner normalizes by the sum of |weights|, so the absolute
+# values here are proportional shares, not percentage points.
+# ---------------------------------------------------------------------------
+
+CB_COMPONENT_COMP_PCT_ALLOWED: str = "cb_comp_pct_allowed"
+CB_COMPONENT_YAC_PER_REC_ALLOWED: str = "cb_yac_per_rec_allowed"
+CB_COMPONENT_TD_RATE: str = "cb_td_rate"
+CB_COMPONENT_INT_RATE: str = "cb_int_rate"
+CB_COMPONENT_PBU_RATE: str = "cb_pbu_rate"
+
+# Negative weights: higher comp% / YAC / TD rate is worse for the CB.
+# Positive: INT and PBU are good outcomes. PBU sourced from nflverse
+# load_player_stats (def_pass_defended). INT weight slightly reduced vs
+# the 4-component formula to make room for PBU alongside it.
+CB_V1_WEIGHTS: dict[str, float] = {
+    CB_COMPONENT_COMP_PCT_ALLOWED:    -0.22,
+    CB_COMPONENT_YAC_PER_REC_ALLOWED: -0.18,
+    CB_COMPONENT_TD_RATE:             -0.07,
+    CB_COMPONENT_INT_RATE:             0.10,
+    CB_COMPONENT_PBU_RATE:             0.09,
+}
+
+# Empirical Bayes shrinkage strengths.
+# - comp% and YAC: moderate k=50 (~3-game workload of targets).
+# - TD, INT, PBU rates: high k=80 (rare/noisy events, r<0.25 YoY).
+CB_V1_SHRINKAGE_K: dict[str, float] = {
+    CB_COMPONENT_COMP_PCT_ALLOWED:    50.0,
+    CB_COMPONENT_YAC_PER_REC_ALLOWED: 50.0,
+    CB_COMPONENT_TD_RATE:             80.0,
+    CB_COMPONENT_INT_RATE:            80.0,
+    CB_COMPONENT_PBU_RATE:            80.0,
+}
+
+# Which raw computed column in the feature DataFrame pairs with each component.
+CB_V1_RAW_VALUE_COLS: dict[str, str] = {
+    CB_COMPONENT_COMP_PCT_ALLOWED:    "comp_pct_allowed",
+    CB_COMPONENT_YAC_PER_REC_ALLOWED: "yac_per_rec_allowed",
+    CB_COMPONENT_TD_RATE:             "td_rate",
+    CB_COMPONENT_INT_RATE:            "int_rate",
+    CB_COMPONENT_PBU_RATE:            "pbu_rate",
+}
+
+# All metrics use targets as the sample-size denominator for shrinkage.
+CB_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    CB_COMPONENT_COMP_PCT_ALLOWED:    "targets",
+    CB_COMPONENT_YAC_PER_REC_ALLOWED: "targets",
+    CB_COMPONENT_TD_RATE:             "targets",
+    CB_COMPONENT_INT_RATE:            "targets",
+    CB_COMPONENT_PBU_RATE:            "targets",
+}
+
+# Qualification thresholds.
+# - MIN_TARGETS_TO_GRADE: below this, we skip the CB entirely (too small).
+# - QUALIFIED_MIN_TARGETS: the main leaderboard threshold. CBs below this
+#   appear with a "low volume" badge, not in the qualified percentile pool.
+# - CONFIDENCE_FULL_TARGETS: targets at which confidence reaches 1.0.
+CB_V1_MIN_TARGETS_TO_GRADE: int = 25
+CB_V1_QUALIFIED_MIN_TARGETS: int = 30
+CB_V1_CONFIDENCE_FULL_TARGETS: int = 60
+
+# Role strings stored in season_grades.role. Based on slot_pct from PFR.
+CB_ROLE_OUTSIDE: str = "outside_cb"
+CB_ROLE_SLOT:    str = "slot_cb"
+CB_ROLE_HYBRID:  str = "hybrid_cb"
+
+# Slot snap percentage thresholds (fraction, not percent).
+# CB is classified outside if slot_pct < SLOT_LO, slot if > SLOT_HI,
+# hybrid otherwise. NULL slot_pct → role = None (unknown).
+CB_V1_SLOT_LO: float = 0.35
+CB_V1_SLOT_HI: float = 0.65

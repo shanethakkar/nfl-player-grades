@@ -215,6 +215,52 @@ export async function getLeaderboard(
     return rows.map(coerceLeaderboardEntry);
   }
 
+  if (position === "CB") {
+    // CB headline columns (ADR-0018): comp% allowed, INT rate, targets.
+    // Team resolved via player_seasons (snap-count ingest populates this for
+    // all CBs regardless of whether they recorded an interception).
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                   AS team_abbr,
+        sc_comp.sample_size      AS n_targets,
+        sc_comp.raw_value        AS cb_comp_pct_allowed,
+        sc_int.raw_value         AS cb_int_rate,
+        sc_pbu.raw_value         AS cb_pbu_rate
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_comp
+        ON sc_comp.player_id = sg.player_id
+       AND sc_comp.season = sg.season
+       AND sc_comp.component_name = 'cb_comp_pct_allowed'
+      LEFT JOIN stat_components sc_int
+        ON sc_int.player_id = sg.player_id
+       AND sc_int.season = sg.season
+       AND sc_int.component_name = 'cb_int_rate'
+      LEFT JOIN stat_components sc_pbu
+        ON sc_pbu.player_id = sg.player_id
+       AND sc_pbu.season = sg.season
+       AND sc_pbu.component_name = 'cb_pbu_rate'
+      WHERE sg.season = ${season}
+        AND sg.position = 'CB'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
   // Any other position (none today) — return the minimum shape.
   const rows = await sql<LeaderboardEntry[]>`
     SELECT
@@ -743,5 +789,9 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
       row.yac_over_expected_per_rec,
     ),
     target_earn_rate: coerceNullableNumber(row.target_earn_rate),
+    // CB-only
+    cb_comp_pct_allowed: coerceNullableNumber(row.cb_comp_pct_allowed),
+    cb_pbu_rate: coerceNullableNumber(row.cb_pbu_rate),
+    cb_int_rate: coerceNullableNumber(row.cb_int_rate),
   };
 }
