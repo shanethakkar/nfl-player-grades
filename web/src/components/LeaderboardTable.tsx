@@ -98,9 +98,14 @@ export function LeaderboardTable({ entries, position }: Props) {
   return (
     <div>
       {columns.length > 0 && (
-        <p className="mb-2 hidden text-right text-xs text-neutral-600 sm:block">
-          Hover column headers for stat definitions
-        </p>
+        <>
+          <p className="mb-2 text-right text-xs text-neutral-600 sm:hidden">
+            Hold column headers for stat definitions
+          </p>
+          <p className="mb-2 hidden text-right text-xs text-neutral-600 sm:block">
+            Hover column headers for stat definitions
+          </p>
+        </>
       )}
       <div className="overflow-x-auto rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
       <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
@@ -193,7 +198,7 @@ const FIXED_COLUMNS: SortableColumn[] = [
   { key: "player", header: "Player", defaultDir: "asc", sortValue: (e) => e.full_name },
   { key: "team",   header: "Team",   defaultDir: "asc", sortValue: (e) => e.team_abbr ?? "" },
   { key: "grade",  header: "Grade",  defaultDir: "desc", sortValue: (e) => e.composite_grade },
-  { key: "percentile", header: "Pct", hoverLabel: "Percentile rank among qualified players at this position", defaultDir: "desc", sortValue: (e) => e.percentile },
+  { key: "percentile", header: "Pct", hoverLabel: "Percentile Rank — composite grade percentile among qualified players at this position", defaultDir: "desc", sortValue: (e) => e.percentile },
 ];
 const FIXED_COLUMNS_BY_KEY = Object.fromEntries(
   FIXED_COLUMNS.map((c) => [c.key, c]),
@@ -218,7 +223,7 @@ const QB_COLUMNS: SortableColumn[] = [
   {
     key: "n_dropbacks",
     header: "Dropbacks",
-    hoverLabel: "Qualifying dropbacks",
+    hoverLabel: "Qualifying Dropbacks — pass plays including sacks and scrambles counted in the grade",
     defaultDir: "desc",
     sortValue: (e) => e.n_dropbacks,
     render: (e) => fmtInt(e.n_dropbacks),
@@ -226,7 +231,7 @@ const QB_COLUMNS: SortableColumn[] = [
   {
     key: "epa_per_dropback",
     header: "EPA/db",
-    hoverLabel: "EPA per dropback",
+    hoverLabel: "Expected Points Added / Dropback — passing value generated per play above league average",
     defaultDir: "desc",
     sortValue: (e) => e.epa_per_dropback,
     render: (e) => fmtSigned(e.epa_per_dropback, 3),
@@ -234,7 +239,7 @@ const QB_COLUMNS: SortableColumn[] = [
   {
     key: "cpoe",
     header: "CPOE",
-    hoverLabel: "Completion % over expected",
+    hoverLabel: "Completion % Over Expected — actual completion rate minus model prediction accounting for throw location and difficulty",
     defaultDir: "desc",
     sortValue: (e) => e.cpoe,
     render: (e) => fmtSigned(e.cpoe, 2),
@@ -242,7 +247,7 @@ const QB_COLUMNS: SortableColumn[] = [
   {
     key: "success_rate",
     header: "Succ%",
-    hoverLabel: "Dropback success rate",
+    hoverLabel: "Dropback Success Rate — share of dropbacks that gained positive expected points",
     defaultDir: "desc",
     sortValue: (e) => e.success_rate,
     render: (e) => fmtPct(e.success_rate, 1),
@@ -253,7 +258,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "n_touches",
     header: "Touches",
-    hoverLabel: "Qualifying touches (carries + receptions)",
+    hoverLabel: "Qualifying Touches — carries and receptions counted in the grade",
     defaultDir: "desc",
     sortValue: (e) => e.n_touches,
     render: (e) => fmtInt(e.n_touches),
@@ -261,7 +266,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "ryoe",
     header: "RYOE/att",
-    hoverLabel: "Rush yards over expected per attempt (NGS)",
+    hoverLabel: "Rush Yards Over Expected / Attempt — rushing yards gained above model prediction per carry",
     defaultDir: "desc",
     sortValue: (e) => e.rb_ryoe_per_attempt,
     render: (e) => fmtSigned(e.rb_ryoe_per_attempt, 2),
@@ -269,7 +274,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "rush_epa",
     header: "Rush EPA/att",
-    hoverLabel: "Rush EPA per attempt",
+    hoverLabel: "Rush Expected Points Added / Attempt — rushing value generated per carry above league average",
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_epa_per_attempt,
     render: (e) => fmtSigned(e.rb_rush_epa_per_attempt, 3),
@@ -277,7 +282,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "rush_succ",
     header: "Rush Succ%",
-    hoverLabel: "Rushing success rate",
+    hoverLabel: "Rush Success Rate — share of carries that gained positive expected points",
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_success_rate,
     render: (e) => fmtPct(e.rb_rush_success_rate, 1),
@@ -285,7 +290,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "rec_epa",
     header: "Rec EPA/tgt",
-    hoverLabel: "Receiving EPA per target",
+    hoverLabel: "Receiving Expected Points Added / Target — receiving value generated per target above league average",
     defaultDir: "desc",
     sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
@@ -293,7 +298,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "rb_yac_oe",
     header: "YAC-OE/rec",
-    hoverLabel: "YAC over expected per reception (NGS)",
+    hoverLabel: "Yards After Catch Over Expected / Reception — yards after catch above model prediction per reception",
     defaultDir: "desc",
     sortValue: (e) => e.rb_yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.rb_yac_over_expected_per_rec, 2),
@@ -301,7 +306,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "catch_pct",
     header: "Catch%",
-    hoverLabel: "Reception rate (receptions / targets)",
+    hoverLabel: "Catch Rate — receptions as a share of targets",
     defaultDir: "desc",
     sortValue: (e) => e.rb_catch_pct,
     render: (e) => fmtPct(e.rb_catch_pct, 1),
@@ -309,7 +314,7 @@ const RB_COLUMNS: SortableColumn[] = [
   {
     key: "rb_fumble",
     header: "Fum%",
-    hoverLabel: "Fumble rate per touch (lower is better)",
+    hoverLabel: "Fumble Rate — fumbles per touch. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.rb_fumble_rate,
     render: (e) => fmtPct(e.rb_fumble_rate, 2),
@@ -320,7 +325,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "n_targets",
     header: "Tgts",
-    hoverLabel: "Qualifying targets",
+    hoverLabel: "Qualifying Targets — targets counted in the grade",
     defaultDir: "desc",
     sortValue: (e) => e.n_targets,
     render: (e) => fmtInt(e.n_targets),
@@ -328,7 +333,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "rec_epa",
     header: "EPA/tgt",
-    hoverLabel: "Receiving EPA per target",
+    hoverLabel: "Expected Points Added / Target — receiving value generated per target above league average",
     defaultDir: "desc",
     sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
@@ -336,7 +341,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "yac_oe",
     header: "YAC-OE/rec",
-    hoverLabel: "YAC over expected per reception (NGS)",
+    hoverLabel: "Yards After Catch Over Expected / Reception — yards after catch above model prediction per reception",
     defaultDir: "desc",
     sortValue: (e) => e.yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.yac_over_expected_per_rec, 2),
@@ -344,7 +349,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "separation",
     header: "Sep",
-    hoverLabel: "Average separation at target (yards, NGS)",
+    hoverLabel: "Average Separation — yards of open space at the moment of the target",
     defaultDir: "desc",
     sortValue: (e) => e.separation,
     render: (e) => e.separation === null || !Number.isFinite(e.separation) ? "—" : e.separation.toFixed(1),
@@ -352,7 +357,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "succ_rate",
     header: "Succ%",
-    hoverLabel: "Success rate per target",
+    hoverLabel: "Success Rate / Target — share of targets that gained positive expected points",
     defaultDir: "desc",
     sortValue: (e) => e.success_rate_per_target,
     render: (e) => fmtPct(e.success_rate_per_target, 1),
@@ -360,7 +365,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "earn",
     header: "Earn%",
-    hoverLabel: "Target earn rate (targets / team pass attempts while active)",
+    hoverLabel: "Target Earn Rate — targets earned as a share of team pass attempts while the receiver was active",
     defaultDir: "desc",
     sortValue: (e) => e.target_earn_rate,
     render: (e) => fmtPct(e.target_earn_rate, 1),
@@ -368,7 +373,7 @@ const WR_COLUMNS: SortableColumn[] = [
   {
     key: "fumble_rate",
     header: "Fum%",
-    hoverLabel: "Fumble rate per reception (lower is better)",
+    hoverLabel: "Fumble Rate — fumbles per reception. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.fumble_rate,
     render: (e) => fmtPct(e.fumble_rate, 2),
@@ -383,7 +388,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "n_targets",
     header: "Tgts",
-    hoverLabel: "Qualifying targets against",
+    hoverLabel: "Qualifying Targets Against — targets thrown at this corner counted in the grade",
     defaultDir: "desc",
     sortValue: (e) => e.n_targets,
     render: (e) => fmtInt(e.n_targets),
@@ -391,7 +396,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_comp_pct_allowed",
     header: "Comp% Alwd",
-    hoverLabel: "Completion % allowed (lower is better)",
+    hoverLabel: "Completion % Allowed — share of targets caught against this corner. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.cb_comp_pct_allowed,
     render: (e) => fmtPct(e.cb_comp_pct_allowed, 1),
@@ -399,7 +404,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_yac_per_rec",
     header: "YAC/Rec Alwd",
-    hoverLabel: "YAC per reception allowed (lower is better)",
+    hoverLabel: "Yards After Catch / Reception Allowed — YAC allowed per reception against. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.cb_yac_per_rec_allowed,
     render: (e) => e.cb_yac_per_rec_allowed === null || !Number.isFinite(e.cb_yac_per_rec_allowed) ? "—" : e.cb_yac_per_rec_allowed.toFixed(1),
@@ -407,7 +412,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_target_rate",
     header: "Tgt%",
-    hoverLabel: "Target rate per defensive snap (lower is better)",
+    hoverLabel: "Target Rate — targets faced per defensive snap. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.cb_target_rate,
     render: (e) => fmtPct(e.cb_target_rate, 1),
@@ -415,7 +420,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass breakup rate per target",
+    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced",
     defaultDir: "desc",
     sortValue: (e) => e.cb_pbu_rate,
     render: (e) => fmtPct(e.cb_pbu_rate, 2),
@@ -423,7 +428,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_int_rate",
     header: "INT%",
-    hoverLabel: "Interception rate per target",
+    hoverLabel: "Interception Rate — interceptions as a share of targets faced",
     defaultDir: "desc",
     sortValue: (e) => e.cb_int_rate,
     render: (e) => fmtPct(e.cb_int_rate, 2),
@@ -434,7 +439,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "n_snaps",
     header: "Snaps",
-    hoverLabel: "Qualifying defensive snaps",
+    hoverLabel: "Qualifying Defensive Snaps — snaps counted in the grade",
     defaultDir: "desc",
     sortValue: (e) => e.n_snaps,
     render: (e) => fmtInt(e.n_snaps),
@@ -442,7 +447,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_comp_pct_allowed",
     header: "Comp% Alwd",
-    hoverLabel: "Completion % allowed (lower is better)",
+    hoverLabel: "Completion % Allowed — share of targets caught against this safety. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.s_comp_pct_allowed,
     render: (e) => fmtPct(e.s_comp_pct_allowed, 1),
@@ -450,7 +455,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_yds_per_tgt",
     header: "Yds/Tgt",
-    hoverLabel: "Yards per target allowed (lower is better)",
+    hoverLabel: "Yards / Target Allowed — passing yards allowed per target. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.s_yards_per_target_allowed,
     render: (e) => e.s_yards_per_target_allowed === null || !Number.isFinite(e.s_yards_per_target_allowed) ? "—" : e.s_yards_per_target_allowed.toFixed(1),
@@ -458,7 +463,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_target_rate",
     header: "Tgt%",
-    hoverLabel: "Target rate per defensive snap (lower is better)",
+    hoverLabel: "Target Rate — targets faced per defensive snap. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.s_target_rate,
     render: (e) => fmtPct(e.s_target_rate, 1),
@@ -466,7 +471,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass breakup rate per target",
+    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced",
     defaultDir: "desc",
     sortValue: (e) => e.s_pbu_rate,
     render: (e) => fmtPct(e.s_pbu_rate, 2),
@@ -474,7 +479,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_int_rate",
     header: "INT%",
-    hoverLabel: "Interception rate per target",
+    hoverLabel: "Interception Rate — interceptions as a share of targets faced",
     defaultDir: "desc",
     sortValue: (e) => e.s_int_rate,
     render: (e) => fmtPct(e.s_int_rate, 2),
@@ -482,7 +487,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_tackles_per_snap",
     header: "Tkl/Snap",
-    hoverLabel: "Combined tackles per defensive snap",
+    hoverLabel: "Combined Tackles / Snap — total tackles and assists per defensive snap",
     defaultDir: "desc",
     sortValue: (e) => e.s_tackles_per_snap,
     render: (e) => e.s_tackles_per_snap === null || !Number.isFinite(e.s_tackles_per_snap) ? "—" : e.s_tackles_per_snap.toFixed(3),
@@ -490,7 +495,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_missed_tkl",
     header: "MTkl%",
-    hoverLabel: "Missed tackle rate (missed / tackle attempts, lower is better)",
+    hoverLabel: "Missed Tackle Rate — missed tackles as a share of tackle attempts. Lower is better.",
     defaultDir: "asc",
     sortValue: (e) => e.s_missed_tackle_rate,
     render: (e) => fmtPct(e.s_missed_tackle_rate, 1),
@@ -498,7 +503,7 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_disruption",
     header: "Disrpt/100",
-    hoverLabel: "Backfield disruption per 100 snaps (TFL + sacks)",
+    hoverLabel: "Backfield Disruption / 100 Snaps — tackles for loss and sacks per 100 defensive snaps",
     defaultDir: "desc",
     sortValue: (e) => e.s_backfield_disruption_per_snap,
     render: (e) => e.s_backfield_disruption_per_snap === null || !Number.isFinite(e.s_backfield_disruption_per_snap) ? "—" : (e.s_backfield_disruption_per_snap * 100).toFixed(2),
