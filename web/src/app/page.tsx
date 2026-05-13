@@ -185,7 +185,7 @@ export default async function HomePage({ searchParams }: Props) {
         </div>
       </div>
 
-      <section className="mt-6">
+      <section className="mt-6 -mr-6 sm:mr-0">
         <LeaderboardTable entries={qualified} position={activePosition} />
       </section>
 

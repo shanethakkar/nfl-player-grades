@@ -96,7 +96,13 @@ export function LeaderboardTable({ entries, position }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-800">
+    <div>
+      {columns.length > 0 && (
+        <p className="mb-2 hidden text-right text-xs text-neutral-600 sm:block">
+          Hover column headers for stat definitions
+        </p>
+      )}
+      <div className="overflow-x-auto rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
       <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
         <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-400">
           <tr>
@@ -126,6 +132,7 @@ export function LeaderboardTable({ entries, position }: Props) {
             />
             <SortHeader
               label="Pct"
+              hover={FIXED_COLUMNS_BY_KEY.percentile.hoverLabel}
               align="right"
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.percentile}
@@ -157,6 +164,7 @@ export function LeaderboardTable({ entries, position }: Props) {
         </tbody>
       </table>
     </div>
+    </div>
   );
 }
 
@@ -185,7 +193,7 @@ const FIXED_COLUMNS: SortableColumn[] = [
   { key: "player", header: "Player", defaultDir: "asc", sortValue: (e) => e.full_name },
   { key: "team",   header: "Team",   defaultDir: "asc", sortValue: (e) => e.team_abbr ?? "" },
   { key: "grade",  header: "Grade",  defaultDir: "desc", sortValue: (e) => e.composite_grade },
-  { key: "percentile", header: "Pct", defaultDir: "desc", sortValue: (e) => e.percentile },
+  { key: "percentile", header: "Pct", hoverLabel: "Percentile rank among qualified players at this position", defaultDir: "desc", sortValue: (e) => e.percentile },
 ];
 const FIXED_COLUMNS_BY_KEY = Object.fromEntries(
   FIXED_COLUMNS.map((c) => [c.key, c]),
@@ -209,7 +217,7 @@ function fmtInt(v: number | null): string {
 const QB_COLUMNS: SortableColumn[] = [
   {
     key: "n_dropbacks",
-    header: "Drops",
+    header: "Dropbacks",
     hoverLabel: "Qualifying dropbacks",
     defaultDir: "desc",
     sortValue: (e) => e.n_dropbacks,
@@ -517,9 +525,17 @@ function Row({
   columns: SortableColumn[];
   position: string;
 }) {
+  const isEven = rank % 2 === 0;
   const rowClass = e.qualified
-    ? "group border-t border-neutral-800/50 hover:bg-neutral-900/60"
-    : "group border-t border-neutral-800/50 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
+    ? isEven
+      ? "group border-t border-neutral-800/50 bg-[#111111] hover:bg-[#181818]"
+      : "group border-t border-neutral-800/50 hover:bg-[#111111]"
+    : isEven
+      ? "group border-t border-neutral-800/50 bg-[#0e0e0e] text-neutral-500 hover:bg-[#151515]"
+      : "group border-t border-neutral-800/50 text-neutral-500 hover:bg-[#0d0d0d]";
+  const stickyBg = isEven
+    ? "bg-[#111111] group-hover:bg-[#181818]"
+    : "bg-neutral-950 group-hover:bg-[#111111]";
   const roleText =
     position === "TE" ? teRoleLabel(e.role) :
     position === "CB" ? cbRoleLabel(e.role) :
@@ -527,7 +543,7 @@ function Row({
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
-      <Td className="sticky left-0 z-20 bg-neutral-950 group-hover:bg-neutral-900/60 border-r border-neutral-800">
+      <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
         <Link
           href={{ pathname: `/players/${e.player_id}` }}
           className="font-medium text-neutral-100 hover:text-white hover:underline"
@@ -603,6 +619,19 @@ function SortHeader({
       : align === "center"
         ? "mx-auto"
         : "";
+  const sortIndicator = (
+    <span
+      aria-hidden
+      className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}
+    >
+      {arrow || "▾"}
+    </span>
+  );
+  const labelNode = hover ? (
+    <Tooltip content={hover}><span>{label}</span></Tooltip>
+  ) : (
+    <span>{label}</span>
+  );
   return (
     <th className={`px-3 py-2 ${alignCls} ${className}`}>
       <button
@@ -612,19 +641,7 @@ function SortHeader({
           active ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"
         }`}
       >
-        {hover ? (
-          <Tooltip content={hover}>
-            <span>{label}</span>
-          </Tooltip>
-        ) : (
-          <span>{label}</span>
-        )}
-        <span
-          aria-hidden
-          className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}
-        >
-          {arrow || "▾"}
-        </span>
+        {align === "right" ? <>{sortIndicator}{labelNode}</> : <>{labelNode}{sortIndicator}</>}
       </button>
     </th>
   );

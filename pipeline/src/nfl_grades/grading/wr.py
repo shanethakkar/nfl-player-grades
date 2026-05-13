@@ -207,15 +207,17 @@ _FEATURES_SQL = text(f"""
         GROUP BY g.player_id
     ),
     ngs_sep_agg AS (
-        -- NGS receiving publishes one row per team stint at week=0.
-        -- Volume-weight separation by the NGS `targets` column so
-        -- traded WRs get a correct season-level average.
+        -- Aggregate from weekly rows (week > 0) rather than the week=0 season
+        -- summary so players who nflverse never publishes a summary row for
+        -- (e.g. low-target TEs/WRs in some seasons) still get separation data.
+        -- SUM(targets * avg_separation) / SUM(targets) is the same
+        -- volume-weighted average either way.
         SELECT
             player_id,
             SUM(targets) AS ngs_targets,
             SUM(avg_separation * targets) AS ngs_separation_times_targets
         FROM ngs_receiving
-        WHERE season = :season AND season_type = 'REG' AND week = 0
+        WHERE season = :season AND season_type = 'REG' AND week > 0
         GROUP BY player_id
     )
     SELECT

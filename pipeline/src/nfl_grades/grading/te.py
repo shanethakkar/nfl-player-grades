@@ -171,7 +171,7 @@ _FEATURES_SQL = text(f"""
             SUM(targets) AS ngs_targets,
             SUM(avg_separation * targets) AS ngs_separation_times_targets
         FROM ngs_receiving
-        WHERE season = :season AND season_type = 'REG' AND week = 0
+        WHERE season = :season AND season_type = 'REG' AND week > 0
         GROUP BY player_id
     )
     SELECT
