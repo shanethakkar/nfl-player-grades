@@ -96,8 +96,8 @@ export function LeaderboardTable({ entries, position }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-800">
-      <table className="w-max min-w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
+      <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
+        <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-500">
           <tr>
             <Th className="w-14 text-center">Rank</Th>
             <SortHeader
@@ -140,7 +140,6 @@ export function LeaderboardTable({ entries, position }: Props) {
                 onSort={onSort}
               />
             ))}
-            <th aria-hidden className="w-4" />
           </tr>
         </thead>
         <tbody>
@@ -488,11 +487,11 @@ const S_COLUMNS: SortableColumn[] = [
   },
   {
     key: "s_disruption",
-    header: "Disrpt",
-    hoverLabel: "Backfield disruption per snap (TFL + sacks)",
+    header: "Disrpt/100",
+    hoverLabel: "Backfield disruption per 100 snaps (TFL + sacks)",
     defaultDir: "desc",
     sortValue: (e) => e.s_backfield_disruption_per_snap,
-    render: (e) => e.s_backfield_disruption_per_snap === null || !Number.isFinite(e.s_backfield_disruption_per_snap) ? "—" : e.s_backfield_disruption_per_snap.toFixed(3),
+    render: (e) => e.s_backfield_disruption_per_snap === null || !Number.isFinite(e.s_backfield_disruption_per_snap) ? "—" : (e.s_backfield_disruption_per_snap * 100).toFixed(2),
   },
 ];
 
@@ -517,8 +516,8 @@ function Row({
   position: string;
 }) {
   const rowClass = e.qualified
-    ? "group border-t border-neutral-900 hover:bg-neutral-900/60"
-    : "group border-t border-neutral-900 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
+    ? "group border-t border-neutral-800/50 hover:bg-neutral-900/60"
+    : "group border-t border-neutral-800/50 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
   const roleText =
     position === "TE" ? teRoleLabel(e.role) :
     position === "CB" ? cbRoleLabel(e.role) :
@@ -567,7 +566,6 @@ function Row({
           {c.render ? c.render(e) : "—"}
         </Td>
       ))}
-      <td aria-hidden className="w-4" />
     </tr>
   );
 }

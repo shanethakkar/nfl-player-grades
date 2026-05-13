@@ -297,9 +297,9 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     sampleNoun: "tackle attempt",
   },
   s_backfield_disruption_per_snap: {
-    label: "Disruption/snap",
+    label: "Disruption/100 snaps",
     suffix: "",
-    formatValue: (v) => v.toFixed(3),
+    formatValue: (v) => (v * 100).toFixed(2),
     description:
       "Tackles for loss plus sacks per defensive snap. Measures pass-rush versatility and the ability to stop plays behind the line.",
     sampleNoun: "defensive snap",
