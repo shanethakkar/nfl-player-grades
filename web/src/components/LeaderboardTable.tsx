@@ -30,9 +30,10 @@ type SortState = { key: string; dir: SortDir };
  * - Click cycles: numeric columns default to desc on first click
  *   (best at top), alpha columns default to asc; clicking the
  *   already-active column flips direction.
- * - Stat columns hide below `md:`, team/percentile hide below `sm:`,
- *   so the table stops being a horizontal scroll on phones. Player +
- *   Grade are always visible.
+ * - All stat columns are always visible; the table itself scrolls
+ *   horizontally inside its `overflow-x-auto` container so the page
+ *   never scrolls horizontally. The Player column is sticky-pinned
+ *   to the left so context is never lost while scrolling right.
  * - `<thead>` is `sticky top-0` so column names stay visible on long
  *   lists (RB/WR with 70+ rows).
  */
@@ -95,16 +96,17 @@ export function LeaderboardTable({ entries, position }: Props) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-800">
-      <table className="min-w-full text-sm">
+      <table className="w-max min-w-full text-sm">
         <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
           <tr>
-            <Th className="w-10 text-center">#</Th>
+            <Th className="w-14 text-center">Rank</Th>
             <SortHeader
               label="Player"
               align="left"
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.player}
               onSort={onSort}
+              className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800"
             />
             <SortHeader
               label="Team"
@@ -112,7 +114,6 @@ export function LeaderboardTable({ entries, position }: Props) {
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.team}
               onSort={onSort}
-              className="hidden sm:table-cell"
             />
             <SortHeader
               label="Grade"
@@ -127,7 +128,6 @@ export function LeaderboardTable({ entries, position }: Props) {
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.percentile}
               onSort={onSort}
-              className="hidden sm:table-cell"
             />
             {columns.map((c) => (
               <SortHeader
@@ -138,7 +138,6 @@ export function LeaderboardTable({ entries, position }: Props) {
                 sort={sort}
                 col={c}
                 onSort={onSort}
-                className="hidden md:table-cell"
               />
             ))}
           </tr>
@@ -349,12 +348,48 @@ const CB_COLUMNS: SortableColumn[] = [
   },
 ];
 
+const S_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_snaps",
+    header: "Snaps",
+    hoverLabel: "Qualifying defensive snaps",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_snaps,
+    render: (e) => fmtInt(e.n_snaps),
+  },
+  {
+    key: "s_comp_pct_allowed",
+    header: "Comp% Alwd",
+    hoverLabel: "Completion % allowed (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.s_comp_pct_allowed,
+    render: (e) => fmtPct(e.s_comp_pct_allowed, 1),
+  },
+  {
+    key: "s_pbu_rate",
+    header: "PBU%",
+    hoverLabel: "Pass breakup rate (passes defended per target)",
+    defaultDir: "desc",
+    sortValue: (e) => e.s_pbu_rate,
+    render: (e) => fmtPct(e.s_pbu_rate, 2),
+  },
+  {
+    key: "s_tackles_per_snap",
+    header: "Tkl/Snap",
+    hoverLabel: "Combined tackles per defensive snap",
+    defaultDir: "desc",
+    sortValue: (e) => e.s_tackles_per_snap,
+    render: (e) => (e.s_tackles_per_snap === null || !Number.isFinite(e.s_tackles_per_snap) ? "—" : e.s_tackles_per_snap.toFixed(3)),
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB: QB_COLUMNS,
   RB: RB_COLUMNS,
   WR: WR_COLUMNS,
   TE: TE_COLUMNS,
   CB: CB_COLUMNS,
+  S:  S_COLUMNS,
 };
 
 function Row({
@@ -369,8 +404,8 @@ function Row({
   position: string;
 }) {
   const rowClass = e.qualified
-    ? "border-t border-neutral-900 hover:bg-neutral-900/60"
-    : "border-t border-neutral-900 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
+    ? "group border-t border-neutral-900 hover:bg-neutral-900/60"
+    : "group border-t border-neutral-900 bg-neutral-950/60 text-neutral-500 hover:bg-neutral-900/60";
   const roleText =
     position === "TE" ? teRoleLabel(e.role) :
     position === "CB" ? cbRoleLabel(e.role) :
@@ -378,7 +413,7 @@ function Row({
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
-      <Td>
+      <Td className="sticky left-0 z-20 bg-neutral-950 group-hover:bg-neutral-900/60 border-r border-neutral-800">
         <Link
           href={{ pathname: `/players/${e.player_id}` }}
           className="font-medium text-neutral-100 hover:text-white hover:underline"
@@ -396,7 +431,7 @@ function Row({
           </span>
         )}
       </Td>
-      <Td className="hidden sm:table-cell">
+      <Td>
         {e.team_abbr ? (
           <div className="flex items-center gap-1.5">
             <TeamLogo abbr={e.team_abbr} size={20} />
@@ -411,14 +446,11 @@ function Row({
           {e.composite_grade.toFixed(1)}
         </span>
       </Td>
-      <Td className="hidden text-right font-mono text-neutral-400 sm:table-cell">
+      <Td className="text-right font-mono text-neutral-400">
         {e.percentile.toFixed(0)}
       </Td>
       {columns.map((c) => (
-        <Td
-          key={c.key}
-          className="hidden text-right font-mono text-neutral-300 md:table-cell"
-        >
+        <Td key={c.key} className="text-right font-mono text-neutral-300">
           {c.render ? c.render(e) : "—"}
         </Td>
       ))}
