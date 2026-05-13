@@ -149,6 +149,12 @@ _FEATURES_SQL = text("""
         COALESCE(ps_agg.snaps_defense, 0) AS snaps_defense
     FROM pfr_def_coverage_s s
     JOIN players p ON p.player_id = s.player_id
+    JOIN (
+        SELECT DISTINCT ON (player_id) player_id, position_played
+        FROM player_seasons
+        WHERE season = :season
+        ORDER BY player_id, snaps_defense DESC
+    ) ps_pos ON ps_pos.player_id = s.player_id AND ps_pos.position_played = 'S'
     LEFT JOIN (
         SELECT player_id, SUM(snaps_defense) AS snaps_defense
         FROM player_seasons
@@ -156,7 +162,6 @@ _FEATURES_SQL = text("""
         GROUP BY player_id
     ) ps_agg ON ps_agg.player_id = s.player_id
     WHERE s.season = :season
-      AND p.position = 'S'
       AND COALESCE(ps_agg.snaps_defense, 0) >= :min_snaps
 """)
 
