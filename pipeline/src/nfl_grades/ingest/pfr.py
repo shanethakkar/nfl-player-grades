@@ -81,8 +81,8 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     engine = get_engine()
     with pipeline_run("ingest:pfr_def_coverage", season=season) as handle:
         with engine.begin() as conn:
-            pfr_to_player = _pfr_to_player_lookup(conn)
-            player_id_to_pbu = _build_player_id_to_pbu(conn, ps_df)
+            pfr_to_player = _pfr_to_player_lookup(conn, season)
+            player_id_to_pbu = _build_player_id_to_pbu(conn, ps_df, season)
             rows, skipped_no_match, skipped_not_cb = _build_rows(
                 df_agg, season, pfr_to_player, player_id_to_pbu
             )
@@ -143,32 +143,54 @@ def _aggregate(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
     return agg
 
 
-def _pfr_to_player_lookup(conn: Connection) -> dict[str, tuple[int, str]]:
-    """Build pfr_id -> (player_id, position) lookup from the players master."""
+def _pfr_to_player_lookup(conn: Connection, season: int) -> dict[str, tuple[int, str]]:
+    """Build pfr_id -> (player_id, position_played) for the given season.
+
+    Uses player_seasons.position_played rather than players.position so that
+    players who switched positions mid-career are classified correctly for
+    each historical season (e.g. a CB who became a Safety in year N is still
+    graded as CB for years < N).
+
+    Players with no player_seasons row for the season are excluded — they
+    were not on a roster that year and cannot be graded.
+
+    When a player appeared on multiple teams in a season (traded), the team
+    with the most defensive snaps determines position_played.
+    """
     rows = conn.execute(
-        text("SELECT pfr_id, player_id, position FROM players WHERE pfr_id IS NOT NULL")
+        text("""
+            SELECT p.pfr_id, p.player_id, ps.position_played
+            FROM players p
+            JOIN (
+                SELECT DISTINCT ON (player_id) player_id, position_played
+                FROM player_seasons
+                WHERE season = :season
+                ORDER BY player_id, snaps_defense DESC
+            ) ps ON ps.player_id = p.player_id
+            WHERE p.pfr_id IS NOT NULL
+        """),
+        {"season": season},
     ).all()
-    return {pfr_id: (player_id, position) for pfr_id, player_id, position in rows}
+    return {pfr_id: (player_id, position_played) for pfr_id, player_id, position_played in rows}
 
 
-def _build_player_id_to_pbu(conn: Connection, ps_df: pd.DataFrame) -> dict[int, int]:
+def _build_player_id_to_pbu(
+    conn: Connection, ps_df: pd.DataFrame, season: int
+) -> dict[int, int]:
     """Return internal player_id -> season PBU count from nflverse player stats.
 
-    Filters to CB + REG, aggregates def_pass_defended, then maps GSIS IDs to
-    internal player_ids via the players table. CBs absent from player_stats
-    will be missing from the returned dict (caller should use .get(id) → None).
+    Filters nflverse to REG season, aggregates def_pass_defended, then maps
+    GSIS IDs to internal player_ids using player_seasons for the given season
+    (position-agnostic — the CB filter is already applied upstream via
+    _pfr_to_player_lookup, so we just need the GSIS bridge here).
     """
-    mask = (
-        (ps_df["position"] == "CB")
-        & (ps_df["season_type"] == "REG")
-        & ps_df["player_id"].notna()
-    )
-    cbs = ps_df[mask]
-    if cbs.empty:
+    mask = (ps_df["season_type"] == "REG") & ps_df["player_id"].notna()
+    reg = ps_df[mask]
+    if reg.empty:
         return {}
 
     gsis_to_pbu: dict[str, int] = (
-        cbs.groupby("player_id")["def_pass_defended"]
+        reg.groupby("player_id")["def_pass_defended"]
         .sum()
         .fillna(0)
         .astype(int)
@@ -176,7 +198,18 @@ def _build_player_id_to_pbu(conn: Connection, ps_df: pd.DataFrame) -> dict[int, 
     )
 
     db_rows = conn.execute(
-        text("SELECT player_id, gsis_id FROM players WHERE gsis_id IS NOT NULL AND position = 'CB'")
+        text("""
+            SELECT p.player_id, p.gsis_id
+            FROM players p
+            JOIN (
+                SELECT DISTINCT ON (player_id) player_id
+                FROM player_seasons
+                WHERE season = :season AND position_played = 'CB'
+                ORDER BY player_id, snaps_defense DESC
+            ) ps ON ps.player_id = p.player_id
+            WHERE p.gsis_id IS NOT NULL
+        """),
+        {"season": season},
     ).all()
     gsis_to_internal = {gsis_id: player_id for player_id, gsis_id in db_rows}
 

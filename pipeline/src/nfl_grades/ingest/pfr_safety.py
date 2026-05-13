@@ -88,7 +88,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     engine = get_engine()
     with pipeline_run("ingest:pfr_def_coverage_s", season=season) as handle:
         with engine.begin() as conn:
-            pfr_to_player = _pfr_to_player_lookup(conn)
+            pfr_to_player = _pfr_to_player_lookup(conn, season)
             gsis_to_nflvs = _gsis_to_nflvs_lookup(conn, nflvs_agg)
             rows, skipped_no_match, skipped_not_safety = _build_rows(
                 pfr_agg, season, pfr_to_player, gsis_to_nflvs
@@ -183,7 +183,7 @@ def _aggregate_nflverse(ps_df: pd.DataFrame) -> pd.DataFrame:
     reg["_pbu"] = _col_or_zero("def_pass_defended")
     reg["_solo"] = _col_or_zero("def_tackles_solo")
     reg["_ast"] = _col_or_zero("def_tackle_assists")
-    reg["_tfl"] = _col_or_zero("def_tackles_loss")
+    reg["_tfl"] = _col_or_zero("def_tackles_for_loss")
     reg["_sacks"] = _col_or_zero("def_sacks")
 
     agg = (
@@ -206,16 +206,34 @@ def _aggregate_nflverse(ps_df: pd.DataFrame) -> pd.DataFrame:
 # DB lookup helpers
 # ---------------------------------------------------------------------------
 
-def _pfr_to_player_lookup(conn: Connection) -> dict[str, tuple[int, str, str | None]]:
-    """pfr_id -> (player_id, position, gsis_id) for all players with a pfr_id."""
+def _pfr_to_player_lookup(
+    conn: Connection, season: int
+) -> dict[str, tuple[int, str, str | None]]:
+    """pfr_id -> (player_id, position_played, gsis_id) for the given season.
+
+    Uses player_seasons.position_played rather than players.position so that
+    players who switched positions mid-career are classified correctly for
+    each historical season. When a player appeared on multiple teams in a
+    season, the team with the most defensive snaps determines position_played.
+    """
     rows = conn.execute(
         text("""
-            SELECT pfr_id, player_id, position, gsis_id
-            FROM players
-            WHERE pfr_id IS NOT NULL
-        """)
+            SELECT p.pfr_id, p.player_id, ps.position_played, p.gsis_id
+            FROM players p
+            JOIN (
+                SELECT DISTINCT ON (player_id) player_id, position_played
+                FROM player_seasons
+                WHERE season = :season
+                ORDER BY player_id, snaps_defense DESC
+            ) ps ON ps.player_id = p.player_id
+            WHERE p.pfr_id IS NOT NULL
+        """),
+        {"season": season},
     ).all()
-    return {pfr_id: (player_id, position, gsis_id) for pfr_id, player_id, position, gsis_id in rows}
+    return {
+        pfr_id: (player_id, position_played, gsis_id)
+        for pfr_id, player_id, position_played, gsis_id in rows
+    }
 
 
 def _gsis_to_nflvs_lookup(
