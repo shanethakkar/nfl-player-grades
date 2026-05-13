@@ -154,7 +154,7 @@ export default async function HomePage({ searchParams }: Props) {
     LOW_VOLUME_COPY[activePosition] ?? LOW_VOLUME_COPY[DEFAULT_POSITION];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
