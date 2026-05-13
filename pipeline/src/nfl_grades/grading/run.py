@@ -1,7 +1,8 @@
 """Top-level grading orchestrator.
 
 Dispatches to per-position grading modules. QB (ADR-0013), RB
-(ADR-0014), WR (ADR-0015), TE (ADR-0016), and CB (ADR-0018) are live.
+(ADR-0014), WR (ADR-0015), TE (ADR-0016), CB (ADR-0018), and S
+(ADR-0019) are live.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from nfl_grades.grading import cb, qb, rb, te, wr
+from nfl_grades.grading import cb, qb, rb, safety, te, wr
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,15 @@ POSITION_RUNNERS = {
     "WR": wr.run,
     "TE": te.run,
     "CB": cb.run,
+    "S":  safety.run,
 }
 
 # Union of per-position RunResult dataclasses — they each carry
 # position-specific counters (n_qbs_*, n_rbs_*, n_wrs_*) but share the
 # (season, stat_components_written, season_grades_written) shape.
-PositionRunResult = qb.RunResult | rb.RunResult | wr.RunResult | te.RunResult | cb.RunResult
+PositionRunResult = (
+    qb.RunResult | rb.RunResult | wr.RunResult | te.RunResult | cb.RunResult | safety.RunResult
+)
 
 
 @dataclass

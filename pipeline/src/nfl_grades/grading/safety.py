@@ -1,9 +1,9 @@
-"""CB v1 grading pipeline (ADR-0018).
+"""Safety v1 grading pipeline (ADR-0019).
 
 Flow:
-    1. ``extract_features``: reads ``pfr_def_coverage`` (ingested by
-       ``ingest/pfr.py``) + ``player_seasons`` (for snaps_defense) and
-       computes per-rate metrics from raw counts.
+    1. ``extract_features``: reads ``pfr_def_coverage_s`` (ingested by
+       ``ingest/pfr_safety.py``) + ``player_seasons`` (for snaps_defense)
+       and computes per-rate metrics from raw counts.
     2. ``compute_grades``: pure-python —
          shrink → z-score → NaN neutralization →
          composite → sigmoid → percentile rank.
@@ -14,31 +14,26 @@ Public entry point: ``run(season)``.
 
 Design notes:
 
-- Data source: PFR advanced defensive stats (``pfr_def_coverage``),
-  nflverse player stats (PBU via ``def_pass_defended``), and
-  ``player_seasons`` (``snaps_defense`` for target-rate denominator).
-  PBP was considered but discarded because PBP doesn't record the
-  covering CB on completed passes.
+- Data sources: PFR advanced defensive stats (coverage + attempted missed-
+  tackle counts via ``pfr_def_coverage_s``), nflverse player stats (PBU,
+  combined tackles, TFL, sacks), and ``player_seasons`` (snaps_defense).
 
-- Data available from 2018. Earlier seasons return empty results with a
-  warning logged.
+- Data available from 2018. Earlier seasons return empty results.
 
-- Target rate (cb_target_rate): targets / snaps_defense. Captures QB
-  avoidance — elite CBs are scheme-around rather than attacked. Uses
-  defensive snap count as denominator (coverage snaps are not available
-  in public data), which conflates avoidance with role depth; modest
-  weight (11% of composite) reflects this limitation.
+- Qualification is snap-based (not target-based like CB): 200 snaps to
+  appear, 400 snaps qualified, 700 snaps full confidence.
 
-- td_rate dropped in v1.1: TDs are rare (2–5/season), highly variable,
-  and partially redundant with comp% + YAC. Noise outweighed signal.
+- missed_tackle_rate: derived as missed / (comb + missed) when missed_tackles
+  is not NULL. If the pfr_advstats_def source does not include a missed-tackle
+  column (varies by release), this component is NaN-neutralized to 0.0.
 
-- YAC component: PFR publishes per-CB YAC allowed for most seasons. If
-  missing (``yac IS NULL``), the z-score is NaN-neutralized to 0.0.
+- backfield_disruption_per_snap: (tfl + sacks) / snaps_defense. TFL and sacks
+  are combined because they measure the same underlying skill (stopping the
+  play behind the line), and combining doubles the event count, improving
+  stability.
 
-- Role classification: outside_cb / slot_cb / hybrid_cb from slot_pct.
-  Label-only — z-scores computed against the full CB pool.
-
-- Qualification: 25 targets to appear, 30 to be qualified.
+- No role classification for safeties (no slot_pct equivalent). The single
+  pool includes FS, SS, and hybrid safeties.
 """
 
 from __future__ import annotations
@@ -55,59 +50,61 @@ from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
-    CB_ROLE_HYBRID,
-    CB_ROLE_OUTSIDE,
-    CB_ROLE_SLOT,
-    CB_V1_CONFIDENCE_FULL_TARGETS,
-    CB_V1_MIN_TARGETS_TO_GRADE,
-    CB_V1_QUALIFIED_MIN_TARGETS,
-    CB_V1_RAW_VALUE_COLS,
-    CB_V1_SAMPLE_SIZE_COLS,
-    CB_V1_SHRINKAGE_K,
-    CB_V1_SLOT_HI,
-    CB_V1_SLOT_LO,
-    CB_V1_WEIGHTS,
+    S_COMPONENT_BACKFIELD_DISRUPTION,
+    S_COMPONENT_COMP_PCT_ALLOWED,
+    S_COMPONENT_INT_RATE,
+    S_COMPONENT_MISSED_TACKLE_RATE,
+    S_COMPONENT_PBU_RATE,
+    S_COMPONENT_TACKLES_PER_SNAP,
+    S_COMPONENT_TARGET_RATE,
+    S_COMPONENT_YARDS_PER_TARGET,
+    S_V1_CONFIDENCE_FULL_SNAPS,
+    S_V1_MIN_SNAPS_TO_GRADE,
+    S_V1_QUALIFIED_MIN_SNAPS,
+    S_V1_RAW_VALUE_COLS,
+    S_V1_SAMPLE_SIZE_COLS,
+    S_V1_SHRINKAGE_K,
+    S_V1_WEIGHTS,
 )
-from nfl_grades.ingest.pfr import PFR_DEF_COVERAGE_MIN_SEASON
+from nfl_grades.ingest.pfr_safety import PFR_DEF_COVERAGE_S_MIN_SEASON
 
 logger = logging.getLogger(__name__)
 
-POSITION = "CB"
+POSITION = "S"
 
 
 @dataclass(frozen=True)
 class RunResult:
     season: int
-    n_cbs_total: int
-    n_cbs_qualified: int
+    n_safeties_total: int
+    n_safeties_qualified: int
     stat_components_written: int
     season_grades_written: int
 
 
 def run(season: int) -> RunResult:
-    """Run the full CB v1 grading pipeline for one season.
+    """Run the full Safety v1 grading pipeline for one season.
 
     Idempotent: re-writes all stat_components and season_grades rows
-    that belong to (season, position='CB').
+    that belong to (season, position='S').
 
-    Returns empty RunResult (all zeros) for seasons before
-    PFR_DEF_COVERAGE_MIN_SEASON with a warning — no grades are written.
+    Returns empty RunResult for seasons before PFR_DEF_COVERAGE_S_MIN_SEASON.
     """
-    if season < PFR_DEF_COVERAGE_MIN_SEASON:
+    if season < PFR_DEF_COVERAGE_S_MIN_SEASON:
         logger.warning(
-            "CB grading requires PFR coverage data (available from %d); "
-            "season %d has no CB grades.",
-            PFR_DEF_COVERAGE_MIN_SEASON,
+            "Safety grading requires PFR coverage data (available from %d); "
+            "season %d has no Safety grades.",
+            PFR_DEF_COVERAGE_S_MIN_SEASON,
             season,
         )
         return RunResult(season, 0, 0, 0, 0)
 
     engine = get_engine()
-    with pipeline_run("grading:cb", season=season) as handle:
+    with pipeline_run("grading:safety", season=season) as handle:
         with engine.begin() as conn:
             features = extract_features(conn, season)
             if features.empty:
-                logger.warning("no CB coverage data found in pfr_def_coverage for season %d", season)
+                logger.warning("no Safety data found in pfr_def_coverage_s for season %d", season)
                 result = RunResult(season, 0, 0, 0, 0)
                 handle.rows_written = 0
                 handle.note("no data")
@@ -118,66 +115,70 @@ def run(season: int) -> RunResult:
 
         result = RunResult(
             season=season,
-            n_cbs_total=len(graded),
-            n_cbs_qualified=int(graded["qualified"].sum()),
+            n_safeties_total=len(graded),
+            n_safeties_qualified=int(graded["qualified"].sum()),
             stat_components_written=n_components,
             season_grades_written=n_grades,
         )
         handle.rows_written = n_grades
-        handle.note(f"cbs_total={result.n_cbs_total} cbs_qualified={result.n_cbs_qualified}")
+        handle.note(
+            f"safeties_total={result.n_safeties_total} "
+            f"safeties_qualified={result.n_safeties_qualified}"
+        )
     return result
 
 
 # ---------------------------------------------------------------------------
-# 1. Extract features from pfr_def_coverage
+# 1. Extract features
 # ---------------------------------------------------------------------------
 
 _FEATURES_SQL = text("""
     SELECT
-        pdc.player_id,
+        s.player_id,
         p.full_name,
-        pdc.games,
-        pdc.targets,
-        pdc.completions,
-        pdc.yards,
-        pdc.yac,
-        pdc.tds,
-        pdc.ints,
-        pdc.pass_breakups,
-        pdc.slot_pct,
+        s.games,
+        s.targets,
+        s.completions,
+        s.yards,
+        s.ints,
+        s.pass_breakups,
+        s.comb_tackles,
+        s.tfl,
+        s.sacks,
+        s.missed_tackles,
         COALESCE(ps_agg.snaps_defense, 0) AS snaps_defense
-    FROM pfr_def_coverage pdc
-    JOIN players p ON p.player_id = pdc.player_id
+    FROM pfr_def_coverage_s s
+    JOIN players p ON p.player_id = s.player_id
     LEFT JOIN (
         SELECT player_id, SUM(snaps_defense) AS snaps_defense
         FROM player_seasons
         WHERE season = :season
         GROUP BY player_id
-    ) ps_agg ON ps_agg.player_id = pdc.player_id
-    WHERE pdc.season = :season
-      AND p.position = 'CB'
-      AND pdc.targets >= :min_targets
+    ) ps_agg ON ps_agg.player_id = s.player_id
+    WHERE s.season = :season
+      AND p.position = 'S'
+      AND COALESCE(ps_agg.snaps_defense, 0) >= :min_snaps
 """)
 
 
 def extract_features(conn: Connection, season: int) -> pd.DataFrame:
-    """Pull per-CB raw coverage stats from pfr_def_coverage.
+    """Pull per-safety raw stats from pfr_def_coverage_s.
 
-    Returns a DataFrame with one row per CB who reached
-    ``CB_V1_MIN_TARGETS_TO_GRADE`` targets. Rate columns are derived
-    from the raw count columns here (not in SQL) so we keep the math
-    in Python where it's easier to test.
+    Returns a DataFrame filtered to safeties with at least
+    S_V1_MIN_SNAPS_TO_GRADE defensive snaps.
 
     Columns returned:
-        player_id, full_name,
-        games, targets, completions, yards, yac, tds, ints, pass_breakups,
-        slot_pct, snaps_defense,
-        comp_pct_allowed, yac_per_rec_allowed, target_rate, int_rate, pbu_rate
+        player_id, full_name, games, targets, completions, yards, ints,
+        pass_breakups, comb_tackles, tfl, sacks, missed_tackles,
+        snaps_defense,
+        comp_pct_allowed, yards_per_target_allowed, pbu_rate, int_rate,
+        target_rate, tackles_per_snap, missed_tackle_rate,
+        backfield_disruption_per_snap, tackle_attempts
     """
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_targets": CB_V1_MIN_TARGETS_TO_GRADE},
+            {"season": season, "min_snaps": S_V1_MIN_SNAPS_TO_GRADE},
         )
         .mappings()
         .all()
@@ -186,40 +187,34 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Coerce integer count columns.
-    int_cols = ("games", "targets", "completions", "yards", "tds", "ints",
-                "pass_breakups", "snaps_defense")
+    int_cols = ("games", "targets", "completions", "yards", "ints",
+                "pass_breakups", "comb_tackles", "tfl", "missed_tackles",
+                "snaps_defense")
     for col in int_cols:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
 
-    float_cols = ("yac", "slot_pct")
+    float_cols = ("sacks",)
     for col in float_cols:
         if col in df.columns:
             df[col] = df[col].astype("Float64").astype(float)
 
-    # Derived rate columns from raw counts.
-    # Each rate is NaN when the denominator is zero.
+    # Derived rate columns (NaN when denominator is zero or data is missing).
     df["comp_pct_allowed"] = np.where(
         df["targets"] > 0,
         df["completions"] / df["targets"],
         np.nan,
     )
 
-    # YAC per reception: undefined when no completions, or when yac is NULL
-    # (missing from PFR for some seasons). NaN-neutralized in compute_grades.
-    df["yac_per_rec_allowed"] = np.where(
-        (df["completions"] > 0) & df["yac"].notna(),
-        df["yac"] / df["completions"],
+    df["yards_per_target_allowed"] = np.where(
+        df["targets"] > 0,
+        df["yards"] / df["targets"],
         np.nan,
     )
 
-    # Target rate: targets per defensive snap. Captures QB avoidance —
-    # elite CBs are schemed around, so lower is better. Uses snaps_defense
-    # as denominator (coverage snaps unavailable in public data).
-    df["target_rate"] = np.where(
-        df["snaps_defense"] > 0,
-        df["targets"] / df["snaps_defense"],
+    df["pbu_rate"] = np.where(
+        (df["targets"] > 0) & df["pass_breakups"].notna(),
+        df["pass_breakups"] / df["targets"],
         np.nan,
     )
 
@@ -229,10 +224,38 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         np.nan,
     )
 
-    # PBU rate: NULL pass_breakups → NaN (CBs absent from nflverse stats).
-    df["pbu_rate"] = np.where(
-        (df["targets"] > 0) & df["pass_breakups"].notna(),
-        df["pass_breakups"] / df["targets"],
+    df["target_rate"] = np.where(
+        df["snaps_defense"] > 0,
+        df["targets"] / df["snaps_defense"],
+        np.nan,
+    )
+
+    df["tackles_per_snap"] = np.where(
+        df["snaps_defense"] > 0,
+        df["comb_tackles"] / df["snaps_defense"],
+        np.nan,
+    )
+
+    # tackle_attempts = comb + missed; used as EB sample size for missed_rate.
+    df["tackle_attempts"] = df["comb_tackles"] + df["missed_tackles"]
+
+    # missed_tackle_rate = missed / (comb + missed). NaN when missed is 0/NULL.
+    # When missed_tackles was NULL in pfr_advstats_def, it was stored as 0
+    # after fillna above. We treat missed_tackles == 0 as unknown (not truly
+    # zero) — if tackle_attempts > 0 AND the original missed was NULL, the
+    # rate would be spuriously 0.0. We detect this by checking that the
+    # original column was non-zero before fillna.
+    # Simpler: just set NaN when comb_tackles == 0 OR tackle_attempts == 0.
+    df["missed_tackle_rate"] = np.where(
+        df["tackle_attempts"] > 0,
+        df["missed_tackles"] / df["tackle_attempts"],
+        np.nan,
+    )
+
+    sacks_safe = df["sacks"].fillna(0.0)
+    df["backfield_disruption_per_snap"] = np.where(
+        df["snaps_defense"] > 0,
+        (df["tfl"] + sacks_safe) / df["snaps_defense"],
         np.nan,
     )
 
@@ -243,59 +266,36 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 # 2. Compute grades
 # ---------------------------------------------------------------------------
 
-
-def _classify_role(slot_pct: float | None) -> str | None:
-    """Map slot_pct fraction to a CB role label, or None if unknown."""
-    if slot_pct is None or not np.isfinite(slot_pct):
-        return None
-    if slot_pct < CB_V1_SLOT_LO:
-        return CB_ROLE_OUTSIDE
-    if slot_pct > CB_V1_SLOT_HI:
-        return CB_ROLE_SLOT
-    return CB_ROLE_HYBRID
-
-
 def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
     """Apply shrinkage → z-score → NaN neutralization → composite → sigmoid.
 
     Returns the input DataFrame augmented with:
         raw_*/adjusted_*/z_* columns per component,
-        composite_z, grade, percentile, qualified, confidence, role.
+        composite_z, grade, percentile, qualified, confidence.
     """
     df = features.copy()
 
-    # --- qualification + confidence ---
-    df["qualified"] = df["targets"] >= CB_V1_QUALIFIED_MIN_TARGETS
-    df["confidence"] = (df["targets"].astype(float) / CB_V1_CONFIDENCE_FULL_TARGETS).clip(
+    df["qualified"] = df["snaps_defense"] >= S_V1_QUALIFIED_MIN_SNAPS
+    df["confidence"] = (df["snaps_defense"].astype(float) / S_V1_CONFIDENCE_FULL_SNAPS).clip(
         upper=1.0
     )
 
-    # --- role classification (label-only; doesn't affect z-score pooling) ---
-    df["role"] = df["slot_pct"].apply(_classify_role)
-
-    # --- per-component: shrink + z-score ---
     z_frame = pd.DataFrame(index=df.index)
-    for component, raw_col in CB_V1_RAW_VALUE_COLS.items():
-        n_col = CB_V1_SAMPLE_SIZE_COLS[component]
+    for component, raw_col in S_V1_RAW_VALUE_COLS.items():
+        n_col = S_V1_SAMPLE_SIZE_COLS[component]
         raw = df[raw_col]
         n = df[n_col]
-        k = CB_V1_SHRINKAGE_K[component]
+        k = S_V1_SHRINKAGE_K[component]
         shrunk = empirical_bayes.shrink_series(raw, n, k=k)
         z = zscore.zscore(shrunk, qualified_mask=df["qualified"])
         df[f"raw_{component}"] = raw
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
-
-        # NaN z-scores (missing YAC or degenerate edge cases) are replaced with
-        # 0.0 (neutral) before entering the composite. The raw NaN is preserved
-        # in stat_components.z_score so the UI renders "—" rather than "0.0".
         z_frame[component] = z.fillna(0.0)
 
-    # --- composite + sigmoid ---
-    df["composite_z"] = composite.combine(z_frame, CB_V1_WEIGHTS)
+    df["composite_z"] = composite.combine(z_frame, S_V1_WEIGHTS)
     df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
 
-    # --- percentile against the qualified cohort ---
     qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
     if len(qualified_grades) >= 2:
         df["percentile"] = df["grade"].apply(
@@ -319,7 +319,7 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
 _DELETE_STAT_COMPONENTS = text("""
     DELETE FROM stat_components
     WHERE season = :season
-      AND component_name LIKE 'cb_%'
+      AND component_name LIKE 's_%'
 """)
 
 _DELETE_SEASON_GRADES = text("""
@@ -348,13 +348,12 @@ _INSERT_SEASON_GRADES = text("""
 
 def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
     """Upsert stat_components + season_grades. Returns (n_components, n_grades)."""
-    components = list(CB_V1_RAW_VALUE_COLS.keys())
+    components = list(S_V1_RAW_VALUE_COLS.keys())
     era_tier, era_reason = _era_tier_for_season(season)
 
-    # --- stat_components ---
     component_rows: list[dict[str, object]] = []
     for component in components:
-        n_col = CB_V1_SAMPLE_SIZE_COLS[component]
+        n_col = S_V1_SAMPLE_SIZE_COLS[component]
         for _, r in graded.iterrows():
             raw = r[f"raw_{component}"]
             adj = r[f"adjusted_{component}"]
@@ -376,7 +375,6 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
     if component_rows:
         conn.execute(_INSERT_STAT_COMPONENTS, component_rows)
 
-    # --- season_grades ---
     grade_rows: list[dict[str, object]] = []
     for _, r in graded.iterrows():
         if pd.isna(r["grade"]):
@@ -392,7 +390,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
                 "confidence": float(r["confidence"]),
                 "data_tier": era_tier,
                 "qualified": bool(r["qualified"]),
-                "role": r["role"],
+                "role": None,
                 "data_tier_reason": era_reason,
             }
         )

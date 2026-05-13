@@ -11,6 +11,8 @@
 
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { sql } from "./db";
 import type {
   LeaderboardEntry,
@@ -62,7 +64,7 @@ export async function getGradedPositions(): Promise<string[]> {
  * across conditional joins, and the four cases are short enough that
  * mild duplication reads better than a dynamic query builder.
  */
-export async function getLeaderboard(
+async function _getLeaderboard(
   season: number,
   position: string,
 ): Promise<LeaderboardEntry[]> {
@@ -261,7 +263,56 @@ export async function getLeaderboard(
     return rows.map(coerceLeaderboardEntry);
   }
 
-  // Any other position (none today) — return the minimum shape.
+  if (position === "S") {
+    // Safety headline columns (ADR-0019): comp% allowed, PBU rate, tackles/snap.
+    // Team resolved via player_seasons (safeties don't appear in plays table).
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                   AS team_abbr,
+        sc_snap.sample_size      AS n_snaps,
+        sc_comp.raw_value        AS s_comp_pct_allowed,
+        sc_pbu.raw_value         AS s_pbu_rate,
+        sc_tkl.raw_value         AS s_tackles_per_snap
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_snap
+        ON sc_snap.player_id = sg.player_id
+       AND sc_snap.season = sg.season
+       AND sc_snap.component_name = 's_target_rate'
+      LEFT JOIN stat_components sc_comp
+        ON sc_comp.player_id = sg.player_id
+       AND sc_comp.season = sg.season
+       AND sc_comp.component_name = 's_comp_pct_allowed'
+      LEFT JOIN stat_components sc_pbu
+        ON sc_pbu.player_id = sg.player_id
+       AND sc_pbu.season = sg.season
+       AND sc_pbu.component_name = 's_pbu_rate'
+      LEFT JOIN stat_components sc_tkl
+        ON sc_tkl.player_id = sg.player_id
+       AND sc_tkl.season = sg.season
+       AND sc_tkl.component_name = 's_tackles_per_snap'
+      WHERE sg.season = ${season}
+        AND sg.position = 'S'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
+  // Any other position — return the minimum shape.
   const rows = await sql<LeaderboardEntry[]>`
     SELECT
       sg.player_id,
@@ -409,91 +460,79 @@ export async function searchPlayers(
  * Returns null if the player has no grade rows (either they don't exist
  * or haven't been graded yet).
  */
-export async function getPlayerDetail(
+async function _getPlayerDetail(
   playerId: number,
 ): Promise<PlayerDetail | null> {
-  const metaRows = await sql<
-    {
-      player_id: number;
-      gsis_id: string | null;
-      full_name: string;
-      position: string;
-      current_team_abbr: string | null;
-    }[]
-  >`
-    SELECT
-      p.player_id,
-      p.gsis_id,
-      p.full_name,
-      p.position,
-      t.abbr AS current_team_abbr
-    FROM players p
-    LEFT JOIN teams t ON t.team_id = p.current_team_id
-    WHERE p.player_id = ${playerId}
-  `;
+  // Three independent queries — run in parallel.
+  const [metaRows, gradeRows, componentRows] = await Promise.all([
+    sql<
+      {
+        player_id: number;
+        gsis_id: string | null;
+        full_name: string;
+        position: string;
+        current_team_abbr: string | null;
+      }[]
+    >`
+      SELECT
+        p.player_id,
+        p.gsis_id,
+        p.full_name,
+        p.position,
+        t.abbr AS current_team_abbr
+      FROM players p
+      LEFT JOIN teams t ON t.team_id = p.current_team_id
+      WHERE p.player_id = ${playerId}
+    `,
+    sql<
+      {
+        season: number;
+        position: string;
+        composite_grade: number;
+        composite_z: number;
+        percentile: number;
+        qualified: boolean;
+        confidence: number | null;
+        data_tier: number;
+        role: string | null;
+        team_abbr: string | null;
+      }[]
+    >`
+      SELECT
+        sg.season,
+        sg.position,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        sg.team_abbr
+      FROM season_grades sg
+      WHERE sg.player_id = ${playerId}
+      ORDER BY sg.season DESC, sg.position
+    `,
+    sql<
+      {
+        season: number;
+        component_name: string;
+        raw_value: number | null;
+        adjusted_value: number | null;
+        z_score: number | null;
+        sample_size: number | null;
+      }[]
+    >`
+      SELECT
+        season, component_name, raw_value, adjusted_value, z_score, sample_size
+      FROM stat_components
+      WHERE player_id = ${playerId}
+      ORDER BY season DESC, component_name
+    `,
+  ]);
+
   if (metaRows.length === 0) return null;
   const meta: PlayerMeta = metaRows[0];
-
-  const gradeRows = await sql<
-    {
-      season: number;
-      position: string;
-      composite_grade: number;
-      composite_z: number;
-      percentile: number;
-      qualified: boolean;
-      confidence: number | null;
-      data_tier: number;
-      role: string | null;
-      team_abbr: string | null;
-    }[]
-  >`
-    SELECT
-      sg.season,
-      sg.position,
-      sg.composite_grade,
-      sg.composite_z,
-      sg.percentile,
-      sg.qualified,
-      sg.confidence,
-      sg.data_tier,
-      sg.role,
-      team_lookup.team_abbr
-    FROM season_grades sg
-    LEFT JOIN LATERAL (
-      SELECT pl.posteam AS team_abbr
-      FROM plays pl
-      WHERE pl.season = sg.season
-        AND pl.posteam IS NOT NULL
-        AND (
-             pl.passer_player_id   = ${meta.gsis_id}
-          OR pl.rusher_player_id   = ${meta.gsis_id}
-          OR pl.receiver_player_id = ${meta.gsis_id}
-        )
-      GROUP BY pl.posteam
-      ORDER BY COUNT(*) DESC
-      LIMIT 1
-    ) team_lookup ON TRUE
-    WHERE sg.player_id = ${playerId}
-    ORDER BY sg.season DESC, sg.position
-  `;
-
-  const componentRows = await sql<
-    {
-      season: number;
-      component_name: string;
-      raw_value: number | null;
-      adjusted_value: number | null;
-      z_score: number | null;
-      sample_size: number | null;
-    }[]
-  >`
-    SELECT
-      season, component_name, raw_value, adjusted_value, z_score, sample_size
-    FROM stat_components
-    WHERE player_id = ${playerId}
-    ORDER BY season DESC, component_name
-  `;
 
   const componentsBySeason = new Map<number, StatComponentDetail[]>();
   for (const row of componentRows) {
@@ -580,37 +619,116 @@ async function getTeamContexts(
 
   const seasons = Array.from(new Set(keys.map((k) => k.season)));
 
-  // --- Query 1: team EPA/play + rank per season ---
-  const epaRows = await sql<
-    {
-      season: number;
-      posteam: string;
-      epa_per_play: number;
-      rk: number;
-      n_teams: number;
-    }[]
-  >`
-    WITH team_epa AS (
+  // All three queries are independent — run in parallel.
+  const [epaRows, qbRows, volumeRows] = await Promise.all([
+    // --- Query 1: team EPA/play + rank per season (pre-computed table) ---
+    sql<
+      {
+        season: number;
+        posteam: string;
+        epa_per_play: number;
+        rk: number;
+        n_teams: number;
+      }[]
+    >`
+      SELECT season, team_abbr AS posteam, epa_per_play, epa_rank AS rk, n_teams
+      FROM team_season_epa
+      WHERE season = ANY(${seasons})
+    `,
+
+    // --- Query 2: lead QB per (team, season) + their season_grades row ---
+    // Dropback definition: pass attempt OR sack OR QB scramble. Matches
+    // QB v1 feature extraction (ADR-0013).
+    sql<
+      {
+        season: number;
+        team_abbr: string;
+        player_id: number;
+        full_name: string;
+        n_dropbacks: number;
+        composite_grade: number | null;
+        qualified: boolean | null;
+      }[]
+    >`
+      WITH qb_team_dropbacks AS (
+        SELECT
+          pl.passer_player_id AS gsis_id,
+          pl.posteam          AS team_abbr,
+          pl.season,
+          COUNT(*)::int       AS n_dropbacks
+        FROM plays pl
+        WHERE pl.season = ANY(${seasons})
+          AND pl.posteam IS NOT NULL
+          AND pl.passer_player_id IS NOT NULL
+          AND (pl.pass_attempt = TRUE OR pl.sack = TRUE OR pl.qb_scramble = TRUE)
+        GROUP BY 1, 2, 3
+      ),
+      lead_qb AS (
+        SELECT DISTINCT ON (season, team_abbr)
+          season, team_abbr, gsis_id, n_dropbacks
+        FROM qb_team_dropbacks
+        ORDER BY season, team_abbr, n_dropbacks DESC
+      )
       SELECT
-        pl.season,
-        pl.posteam,
-        AVG(pl.epa)::float AS epa_per_play
-      FROM plays pl
-      WHERE pl.season = ANY(${seasons})
-        AND pl.posteam IS NOT NULL
-        AND pl.down BETWEEN 1 AND 4
-        AND pl.play_type IN ('pass', 'run')
-        AND pl.epa IS NOT NULL
-      GROUP BY pl.season, pl.posteam
-    )
-    SELECT
-      season,
-      posteam,
-      epa_per_play,
-      RANK() OVER (PARTITION BY season ORDER BY epa_per_play DESC)::int AS rk,
-      COUNT(*) OVER (PARTITION BY season)::int AS n_teams
-    FROM team_epa
-  `;
+        lq.season,
+        lq.team_abbr,
+        p.player_id,
+        p.full_name,
+        lq.n_dropbacks,
+        sg.composite_grade,
+        sg.qualified
+      FROM lead_qb lq
+      JOIN players p ON p.gsis_id = lq.gsis_id
+      LEFT JOIN season_grades sg
+        ON sg.player_id = p.player_id
+       AND sg.season = lq.season
+       AND sg.position = 'QB'
+    `,
+
+    // --- Query 3: top-15 volume per (season, position) ---
+    // Volume proxy = sample_size on the "touches" (RB) or "targets" (WR/TE)
+    // component, pulled from stat_components. RANK, then filter rk <= 15.
+    sql<
+      {
+        season: number;
+        position: string;
+        player_id: number;
+      }[]
+    >`
+      WITH volume_components AS (
+        SELECT
+          sc.player_id,
+          sc.season,
+          CASE
+            WHEN sc.component_name = 'rb_fumble_rate'                THEN 'RB'
+            WHEN sc.component_name = 'wr_rec_epa_per_target'         THEN 'WR'
+            WHEN sc.component_name = 'te_rec_epa_per_target'         THEN 'TE'
+          END AS position,
+          sc.sample_size AS volume
+        FROM stat_components sc
+        WHERE sc.season = ANY(${seasons})
+          AND sc.component_name IN (
+            'rb_fumble_rate',
+            'wr_rec_epa_per_target',
+            'te_rec_epa_per_target'
+          )
+          AND sc.sample_size IS NOT NULL
+      ),
+      ranked AS (
+        SELECT
+          player_id, season, position, volume,
+          RANK() OVER (
+            PARTITION BY season, position
+            ORDER BY volume DESC NULLS LAST
+          )::int AS rk
+        FROM volume_components
+      )
+      SELECT player_id, season, position
+      FROM ranked
+      WHERE rk <= 15
+    `,
+  ]);
+
   const epaByKey = new Map<string, { epa_per_play: number; rk: number; n_teams: number }>();
   for (const r of epaRows) {
     epaByKey.set(`${r.season}:${r.posteam}`, {
@@ -620,54 +738,6 @@ async function getTeamContexts(
     });
   }
 
-  // --- Query 2: lead QB per (team, season) + their season_grades row ---
-  // Dropback definition: pass attempt OR sack OR QB scramble. Matches
-  // QB v1 feature extraction (ADR-0013).
-  const qbRows = await sql<
-    {
-      season: number;
-      team_abbr: string;
-      player_id: number;
-      full_name: string;
-      n_dropbacks: number;
-      composite_grade: number | null;
-      qualified: boolean | null;
-    }[]
-  >`
-    WITH qb_team_dropbacks AS (
-      SELECT
-        pl.passer_player_id AS gsis_id,
-        pl.posteam          AS team_abbr,
-        pl.season,
-        COUNT(*)::int       AS n_dropbacks
-      FROM plays pl
-      WHERE pl.season = ANY(${seasons})
-        AND pl.posteam IS NOT NULL
-        AND pl.passer_player_id IS NOT NULL
-        AND (pl.pass_attempt = TRUE OR pl.sack = TRUE OR pl.qb_scramble = TRUE)
-      GROUP BY 1, 2, 3
-    ),
-    lead_qb AS (
-      SELECT DISTINCT ON (season, team_abbr)
-        season, team_abbr, gsis_id, n_dropbacks
-      FROM qb_team_dropbacks
-      ORDER BY season, team_abbr, n_dropbacks DESC
-    )
-    SELECT
-      lq.season,
-      lq.team_abbr,
-      p.player_id,
-      p.full_name,
-      lq.n_dropbacks,
-      sg.composite_grade,
-      sg.qualified
-    FROM lead_qb lq
-    JOIN players p ON p.gsis_id = lq.gsis_id
-    LEFT JOIN season_grades sg
-      ON sg.player_id = p.player_id
-     AND sg.season = lq.season
-     AND sg.position = 'QB'
-  `;
   const qbByKey = new Map<string, TopQb>();
   for (const r of qbRows) {
     qbByKey.set(`${r.season}:${r.team_abbr}`, {
@@ -680,48 +750,6 @@ async function getTeamContexts(
     });
   }
 
-  // --- Query 3: top-15 volume per (season, position) ---
-  // Volume proxy = sample_size on the "touches" (RB) or "targets" (WR/TE)
-  // component, pulled from stat_components. RANK, then filter rk <= 15.
-  const volumeRows = await sql<
-    {
-      season: number;
-      position: string;
-      player_id: number;
-    }[]
-  >`
-    WITH volume_components AS (
-      SELECT
-        sc.player_id,
-        sc.season,
-        CASE
-          WHEN sc.component_name = 'rb_fumble_rate'                THEN 'RB'
-          WHEN sc.component_name = 'wr_rec_epa_per_target'         THEN 'WR'
-          WHEN sc.component_name = 'te_rec_epa_per_target'         THEN 'TE'
-        END AS position,
-        sc.sample_size AS volume
-      FROM stat_components sc
-      WHERE sc.season = ANY(${seasons})
-        AND sc.component_name IN (
-          'rb_fumble_rate',
-          'wr_rec_epa_per_target',
-          'te_rec_epa_per_target'
-        )
-        AND sc.sample_size IS NOT NULL
-    ),
-    ranked AS (
-      SELECT
-        player_id, season, position, volume,
-        RANK() OVER (
-          PARTITION BY season, position
-          ORDER BY volume DESC NULLS LAST
-        )::int AS rk
-      FROM volume_components
-    )
-    SELECT player_id, season, position
-    FROM ranked
-    WHERE rk <= 15
-  `;
   const highVolumeSet = new Set(
     volumeRows.map((r) => `${r.season}:${r.position}:${r.player_id}`),
   );
@@ -765,6 +793,25 @@ function coerceNullableInt(v: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// ---------------------------------------------------------------------------
+// Cached public exports
+// Wrap the internal async functions with unstable_cache so repeated requests
+// for the same player / leaderboard hit Next.js's data cache instead of the
+// DB. TTL 1 hour — grades only change when the pipeline runs (at most daily).
+// ---------------------------------------------------------------------------
+
+export const getLeaderboard = unstable_cache(
+  _getLeaderboard,
+  ["leaderboard"],
+  { revalidate: 3600 },
+);
+
+export const getPlayerDetail = unstable_cache(
+  _getPlayerDetail,
+  ["player-detail"],
+  { revalidate: 3600 },
+);
+
 function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
   return {
     ...row,
@@ -793,5 +840,10 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     cb_comp_pct_allowed: coerceNullableNumber(row.cb_comp_pct_allowed),
     cb_pbu_rate: coerceNullableNumber(row.cb_pbu_rate),
     cb_int_rate: coerceNullableNumber(row.cb_int_rate),
+    // S-only
+    n_snaps: coerceNullableInt(row.n_snaps),
+    s_comp_pct_allowed: coerceNullableNumber(row.s_comp_pct_allowed),
+    s_pbu_rate: coerceNullableNumber(row.s_pbu_rate),
+    s_tackles_per_snap: coerceNullableNumber(row.s_tackles_per_snap),
   };
 }

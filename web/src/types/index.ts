@@ -59,6 +59,7 @@ export type DepthChartEntry = DepthChartsRow;
  *   TE → same as WR, plus `role` populated from season_grades
  *   CB → n_targets, cb_comp_pct_allowed, cb_pbu_rate, cb_int_rate,
  *        plus `role` (outside_cb / hybrid_cb / slot_cb)
+ *   S  → n_snaps, s_comp_pct_allowed, s_pbu_rate, s_tackles_per_snap
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -99,6 +100,11 @@ export type LeaderboardEntry = {
   cb_comp_pct_allowed: number | null;
   cb_pbu_rate: number | null;
   cb_int_rate: number | null;
+  // --- S columns ---
+  n_snaps: number | null;
+  s_comp_pct_allowed: number | null;
+  s_pbu_rate: number | null;
+  s_tackles_per_snap: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

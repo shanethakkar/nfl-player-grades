@@ -139,6 +139,23 @@ def ingest_pfr_def_coverage(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="pfr-def-coverage-s")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_pfr_def_coverage_s(season: int, refresh: bool) -> None:
+    """Pull PFR advanced defensive stats for safeties (2018+)."""
+    from .ingest import pfr_safety
+
+    result = pfr_safety.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_pfr_match={result.rows_skipped_no_pfr_match} "
+        f"skipped_not_safety={result.rows_skipped_not_safety}"
+    )
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -153,6 +170,7 @@ def ingest_all(season: int, refresh: bool) -> None:
         ctx.invoke(ingest_ngs, season=season, stat_type="all", refresh=refresh)
     if season >= 2018:
         ctx.invoke(ingest_pfr_def_coverage, season=season, refresh=refresh)
+        ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)
     # ftn — to be added when its ingest module lands.
 
 
@@ -162,10 +180,10 @@ def ingest_all(season: int, refresh: bool) -> None:
     "--position",
     type=str,
     default=None,
-    help="Limit to a single position (QB, RB, WR, TE, CB). Omit to grade all.",
+    help="Limit to a single position (QB, RB, WR, TE, CB, S). Omit to grade all.",
 )
 def grade(season: int, position: str | None) -> None:
-    """Compute season grades (QB/RB/WR/TE/CB v1)."""
+    """Compute season grades (QB/RB/WR/TE/CB/S v1)."""
     from .grading import run as grading_run
 
     summary = grading_run.run(season=season, position=position)
@@ -173,11 +191,12 @@ def grade(season: int, position: str | None) -> None:
         # Per-position RunResult dataclasses carry position-specific
         # counters (n_qbs_total, n_rbs_total, …). Probe generically.
         _TOTAL_ATTRS = (
-            "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total", "n_cbs_total"
+            "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total",
+            "n_cbs_total", "n_safeties_total",
         )
         _QUAL_ATTRS = (
             "n_qbs_qualified", "n_rbs_qualified", "n_wrs_qualified",
-            "n_tes_qualified", "n_cbs_qualified"
+            "n_tes_qualified", "n_cbs_qualified", "n_safeties_qualified",
         )
         total_attr = next((a for a in _TOTAL_ATTRS if hasattr(result, a)), None)
         qualified_attr = next((a for a in _QUAL_ATTRS if hasattr(result, a)), None)
@@ -188,6 +207,23 @@ def grade(season: int, position: str | None) -> None:
             f"stat_components_written={result.stat_components_written} "
             f"season_grades_written={result.season_grades_written}"
         )
+
+
+@main.command(name="backfill-team-context")
+@click.option("--season", type=int, required=True)
+def backfill_team_context(season: int) -> None:
+    """Populate season_grades.team_abbr and team_season_epa for a season.
+
+    Run after grading. Idempotent — safe to re-run.
+    """
+    from .db import get_engine
+    from .grading.team_context import backfill_team_abbr, compute_team_epa
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        n_abbr = backfill_team_abbr(conn, season)
+        n_epa = compute_team_epa(conn, season)
+    click.echo(f"season={season} team_abbr_updated={n_abbr} team_epa_written={n_epa}")
 
 
 @main.command()

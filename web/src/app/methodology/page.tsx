@@ -60,9 +60,19 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
   CB: [
     { name: "cb_comp_pct_allowed",    weight: -0.22 },
     { name: "cb_yac_per_rec_allowed", weight: -0.18 },
+    { name: "cb_target_rate",         weight: -0.08 },
     { name: "cb_int_rate",            weight:  0.10 },
-    { name: "cb_pbu_rate",            weight:  0.09 },
-    { name: "cb_td_rate",             weight: -0.07 },
+    { name: "cb_pbu_rate",            weight:  0.12 },
+  ],
+  S: [
+    { name: "s_comp_pct_allowed",              weight: -0.13 },
+    { name: "s_yards_per_target_allowed",      weight: -0.08 },
+    { name: "s_pbu_rate",                      weight:  0.15 },
+    { name: "s_int_rate",                      weight:  0.13 },
+    { name: "s_target_rate",                   weight: -0.08 },
+    { name: "s_tackles_per_snap",              weight:  0.07 },
+    { name: "s_missed_tackle_rate",            weight: -0.09 },
+    { name: "s_backfield_disruption_per_snap", weight:  0.09 },
   ],
 };
 
@@ -84,13 +94,14 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
     getCurrentTopAtPosition("WR"),
     getCurrentTopAtPosition("TE"),
     getCurrentTopAtPosition("CB"),
+    getCurrentTopAtPosition("S"),
   ]);
 
   const positions: PositionCardData[] = [
@@ -123,8 +134,15 @@ export default async function MethodologyPage() {
       position: "CB",
       headline: "Cornerback",
       components: POSITION_COMPONENTS.CB,
-      availabilityNote: "Data from 2018+ (PFR coverage stats + nflverse box scores for PBU). Negative weights = lower is better for the CB.",
+      availabilityNote: "Data from 2018+ (PFR coverage stats + nflverse box scores for PBU). Negative weights = lower is better. Target rate measures QB avoidance — elite CBs get fewer targets per snap.",
       top: cbTop,
+    },
+    {
+      position: "S",
+      headline: "Safety",
+      components: POSITION_COMPONENTS.S,
+      availabilityNote: "Data from 2018+. 70% coverage / 30% tackling. Qualified at 400+ defensive snaps. Missed tackle rate may be unavailable for some seasons (NaN-neutralized). Negative weights = lower is better.",
+      top: sTop,
     },
   ];
 
@@ -232,7 +250,7 @@ const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
-  position: "QB" | "RB" | "WR" | "TE" | "CB";
+  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S";
   headline: string;
   components: ComponentEntry[];
   /** When true, renders a note about the blocking-TE path. */

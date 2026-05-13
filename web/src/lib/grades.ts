@@ -203,7 +203,7 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     suffix: "%",
     formatValue: pctFraction(1),
     description:
-      "Completion percentage allowed when targeted. Lower is better — fewer completions means the CB won more reps.",
+      "Completion percentage allowed when targeted. The most direct measure of whether the CB won his rep.",
     sampleNoun: "target",
   },
   cb_yac_per_rec_allowed: {
@@ -211,23 +211,23 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     suffix: "",
     formatValue: (v) => v.toFixed(2),
     description:
-      "Average yards after catch allowed per reception. Lower is better — limits run-after-catch damage.",
+      "Yards after catch allowed per reception. Captures cushion allowed and tackling quality at the catch point — a different skill from preventing the catch.",
     sampleNoun: "target",
   },
-  cb_td_rate: {
-    label: "TD rate allowed",
+  cb_target_rate: {
+    label: "Target rate",
     suffix: "%",
-    formatValue: pctFraction(2),
+    formatValue: pctFraction(1),
     description:
-      "Touchdowns allowed per target. Lower is better — rare events with high k shrinkage.",
-    sampleNoun: "target",
+      "Targets per defensive snap. Lower is better — elite CBs get avoided. QBs scheme away from them regardless of outcome.",
+    sampleNoun: "defensive snap",
   },
   cb_int_rate: {
     label: "INT rate",
     suffix: "%",
     formatValue: pctFraction(2),
     description:
-      "Interceptions per target. Volatile but the ultimate positive play for a cornerback.",
+      "Interceptions per target. Highly variable but the ultimate positive play — a turnover that ends the drive.",
     sampleNoun: "target",
   },
   cb_pbu_rate: {
@@ -235,8 +235,74 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     suffix: "%",
     formatValue: pctFraction(2),
     description:
-      "Pass breakups (passes defended) per target. Active defense that stops the play without a turnover.",
+      "Pass breakups (passes defended) per target. About 3× more frequent than INTs and more stable — active defense that stops the play without a turnover.",
     sampleNoun: "target",
+  },
+
+  // --- Safety v1 (ADR-0019) ---
+  s_comp_pct_allowed: {
+    label: "Comp% allowed",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Completion percentage allowed when targeted. Primary coverage signal — did the safety win the rep?",
+    sampleNoun: "target",
+  },
+  s_yards_per_target_allowed: {
+    label: "Yds/tgt allowed",
+    suffix: "",
+    formatValue: (v) => v.toFixed(1),
+    description:
+      "Yards allowed per target. Captures damage done when the ball is thrown his way.",
+    sampleNoun: "target",
+  },
+  s_pbu_rate: {
+    label: "PBU rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Pass breakups (passes defended) per target. Active coverage that stops the play without a turnover.",
+    sampleNoun: "target",
+  },
+  s_int_rate: {
+    label: "INT rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Interceptions per target. The ultimate positive play — a turnover that ends the drive.",
+    sampleNoun: "target",
+  },
+  s_target_rate: {
+    label: "Target rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Targets per defensive snap. Lower is better — elite safeties get schemed around, independent of what happens when they are thrown at.",
+    sampleNoun: "defensive snap",
+  },
+  s_tackles_per_snap: {
+    label: "Tackles/snap",
+    suffix: "",
+    formatValue: (v) => v.toFixed(3),
+    description:
+      "Combined tackles per defensive snap. Safeties are expected to be reliable tacklers in both coverage and run support.",
+    sampleNoun: "defensive snap",
+  },
+  s_missed_tackle_rate: {
+    label: "Missed tkl%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Missed tackles as a share of tackle attempts. Lower is better — misses in space often turn into big gains.",
+    sampleNoun: "tackle attempt",
+  },
+  s_backfield_disruption_per_snap: {
+    label: "Disruption/snap",
+    suffix: "",
+    formatValue: (v) => v.toFixed(3),
+    description:
+      "Tackles for loss plus sacks per defensive snap. Measures pass-rush versatility and the ability to stop plays behind the line.",
+    sampleNoun: "defensive snap",
   },
 
   // --- TE v1 (ADR-0016) ---
@@ -459,9 +525,18 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   // CB v1 (ADR-0018) — negative weights = lower is better for that metric
   cb_comp_pct_allowed:     -0.22,
   cb_yac_per_rec_allowed:  -0.18,
-  cb_td_rate:              -0.07,
+  cb_target_rate:          -0.08,
   cb_int_rate:              0.10,
-  cb_pbu_rate:              0.09,
+  cb_pbu_rate:              0.12,
+  // Safety v1 (ADR-0019) — 70% coverage / 30% tackling
+  s_comp_pct_allowed:      -0.13,
+  s_yards_per_target_allowed: -0.08,
+  s_pbu_rate:               0.15,
+  s_int_rate:               0.13,
+  s_target_rate:           -0.08,
+  s_tackles_per_snap:       0.07,
+  s_missed_tackle_rate:    -0.09,
+  s_backfield_disruption_per_snap: 0.09,
 };
 
 // Blocking-TE path: earn rate excluded from composite; its weight is
