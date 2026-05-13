@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { TeamLogo } from "@/components/TeamLogo";
+import { Tooltip } from "@/components/Tooltip";
 import { cbRoleLabel, gradeColor, teRoleLabel } from "@/lib/grades";
 import type { LeaderboardEntry } from "@/types";
 
@@ -97,7 +98,7 @@ export function LeaderboardTable({ entries, position }: Props) {
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-800">
       <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
-        <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-500">
+        <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-400">
           <tr>
             <Th className="w-14 text-center">Rank</Th>
             <SortHeader
@@ -114,6 +115,7 @@ export function LeaderboardTable({ entries, position }: Props) {
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.team}
               onSort={onSort}
+              className="w-24"
             />
             <SortHeader
               label="Grade"
@@ -553,7 +555,7 @@ function Row({
           <span className="text-neutral-500">—</span>
         )}
       </Td>
-      <Td className="text-right font-mono font-semibold">
+      <Td className="text-right font-mono">
         <span className={gradeColor(e.composite_grade)}>
           {e.composite_grade.toFixed(1)}
         </span>
@@ -602,7 +604,7 @@ function SortHeader({
         ? "mx-auto"
         : "";
   return (
-    <th className={`px-3 py-2 ${alignCls} ${className}`} title={hover}>
+    <th className={`px-3 py-2 ${alignCls} ${className}`}>
       <button
         type="button"
         onClick={() => onSort(col)}
@@ -610,7 +612,13 @@ function SortHeader({
           active ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"
         }`}
       >
-        <span>{label}</span>
+        {hover ? (
+          <Tooltip content={hover}>
+            <span>{label}</span>
+          </Tooltip>
+        ) : (
+          <span>{label}</span>
+        )}
         <span
           aria-hidden
           className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}

@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/Tooltip";
 import {
   componentDescription,
   componentLabel,
@@ -103,16 +104,15 @@ function FriendlyView({
               }
             >
               <td className="px-3 py-2 text-neutral-200">
-                <span
-                  className={
-                    description
-                      ? "cursor-help decoration-dotted underline-offset-4 hover:underline"
-                      : ""
-                  }
-                  title={description ?? undefined}
-                >
-                  {componentLabel(c.component_name)}
-                </span>
+                {description ? (
+                  <Tooltip content={description}>
+                    <span className="cursor-help decoration-dotted underline-offset-4 hover:underline">
+                      {componentLabel(c.component_name)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span>{componentLabel(c.component_name)}</span>
+                )}
                 {tracked && (
                   <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-500">
                     tracked, not graded
@@ -174,7 +174,18 @@ function AdvancedView({
               }
             >
               <td className="px-3 py-2 text-neutral-200">
-                {componentLabel(c.component_name)}
+                {(() => {
+                  const desc = componentDescription(c.component_name);
+                  return desc ? (
+                    <Tooltip content={desc}>
+                      <span className="cursor-help decoration-dotted underline-offset-4 hover:underline">
+                        {componentLabel(c.component_name)}
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <span>{componentLabel(c.component_name)}</span>
+                  );
+                })()}
                 <span className="ml-2 text-[10px] uppercase text-neutral-600">
                   {c.component_name}
                 </span>

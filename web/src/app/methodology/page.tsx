@@ -127,21 +127,18 @@ export default async function MethodologyPage() {
       position: "TE",
       headline: "Tight end",
       components: POSITION_COMPONENTS.TE,
-      teNote: true,
       top: teTop,
     },
     {
       position: "CB",
       headline: "Cornerback",
       components: POSITION_COMPONENTS.CB,
-      availabilityNote: "Data from 2018+ (PFR coverage stats + nflverse box scores for PBU). Negative weights = lower is better. Target rate measures QB avoidance — elite CBs get fewer targets per snap.",
       top: cbTop,
     },
     {
       position: "S",
       headline: "Safety",
       components: POSITION_COMPONENTS.S,
-      availabilityNote: "Data from 2018+. 70% coverage / 30% tackling. Qualified at 400+ defensive snaps. Missed tackle rate may be unavailable for some seasons (NaN-neutralized). Negative weights = lower is better.",
       top: sTop,
     },
   ];
@@ -165,7 +162,7 @@ export default async function MethodologyPage() {
 
 function Hero() {
   return (
-    <header className="mb-14">
+    <header className="mb-8">
       <h1 className="text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
         How grades work
       </h1>
@@ -265,7 +262,7 @@ function PositionGrid({ positions }: { positions: PositionCardData[] }) {
     <section className="mb-16">
       <SectionHeading
         eyebrow="What gets measured"
-        title="Each position has its own recipe"
+        title="Each position has its own model"
       />
       <div className="grid gap-4 sm:grid-cols-2">
         {positions.map((p) => (
@@ -279,8 +276,8 @@ function PositionGrid({ positions }: { positions: PositionCardData[] }) {
 function PositionCard({ data }: { data: PositionCardData }) {
   return (
     <article className="flex flex-col rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
-      <div className="mb-3 flex items-baseline justify-between">
-        <div className="font-mono text-sm uppercase tracking-wider text-neutral-500">
+      <div className="mb-3">
+        <div className="mb-0.5 font-mono text-xs uppercase tracking-wider text-neutral-500">
           {data.position}
         </div>
         <h3 className="text-lg font-semibold text-neutral-100">
@@ -393,21 +390,24 @@ function HowItsBuilt() {
     <section className="mb-16">
       <SectionHeading eyebrow="The pipeline" title="How a grade is built" />
       <div className="grid gap-5 sm:grid-cols-3">
-        {/* Change 4: bodies trimmed to one tight sentence each. */}
         <Step
           n={1}
           title="Pull the raw numbers"
-          body="Every play, every season — dropbacks, carries, targets. Garbage-time plays (win probability below 5% or above 95%) are filtered out."
-        />
+          body="Play-by-play efficiency metrics come from nflverse, tracking data from Next Gen Stats, and pass-coverage breakdowns from Pro Football Reference. Plays with win probability below 5% or above 95% are excluded before any calculation:"
+        >
+          <WinProbFilter />
+        </Step>
         <Step
           n={2}
-          title="Shrink toward the mean"
-          body="Low-sample numbers are pulled toward the position average in proportion to how little data there is — a 10-target season counts for less than a 100-target one."
-        />
+          title="Stabilize with Empirical Bayes"
+          body="Raw rates are shrunk toward the position mean, weighted by sample size. A season with 10 targets contributes far less signal than one with 150, preventing small-sample extremes from distorting the composite:"
+        >
+          <ShrinkageStrip />
+        </Step>
         <Step
           n={3}
           title="Compare to the field"
-          body="Stats are z-scored within (season, position). The composite z is mapped to a grade via sigmoid:"
+          body="Each stat is z-scored within its season and position group, then combined into a single composite. That composite maps to a 0–100 grade via sigmoid, where 50 is exactly average and each full z-unit shifts the grade by roughly 22 points:"
         >
           <p className="mt-2 rounded bg-neutral-900 px-2.5 py-1.5 font-mono text-[11px] text-neutral-400">
             grade = 100 / (1 + e^(−1.15z))
@@ -440,6 +440,53 @@ function Step({
       <h3 className="mb-2 text-base font-semibold text-neutral-100">{title}</h3>
       <p className="text-sm leading-relaxed text-neutral-300">{body}</p>
       {children}
+    </div>
+  );
+}
+
+function WinProbFilter() {
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 font-mono text-[11px] text-center">
+      <div className="flex">
+        <div className="w-16 shrink-0 bg-red-950/30 px-1 py-3">
+          <div className="font-semibold text-red-400">&lt; 5%</div>
+          <div className="mt-0.5 text-red-700">excluded</div>
+        </div>
+        <div className="flex-1 bg-neutral-900/40 px-2 py-3">
+          <div className="text-neutral-300">included plays</div>
+          <div className="mt-0.5 text-neutral-600">win probability 5% – 95%</div>
+        </div>
+        <div className="w-16 shrink-0 bg-red-950/30 px-1 py-3">
+          <div className="font-semibold text-red-400">&gt; 95%</div>
+          <div className="mt-0.5 text-red-700">excluded</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShrinkageStrip() {
+  const rows = [
+    { sample: 10,  raw: 40, shrunk: 53, pull: "heavy pull toward mean" },
+    { sample: 150, raw: 40, shrunk: 44, pull: "light pull toward mean"  },
+  ];
+  return (
+    <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 font-mono text-[11px]">
+      {rows.map((r, i) => (
+        <div
+          key={r.sample}
+          className={`flex items-center gap-2 px-3 py-2.5 bg-neutral-950 ${i < rows.length - 1 ? "border-b border-neutral-800" : ""}`}
+        >
+          <span className="w-20 text-neutral-500">{r.sample} samples</span>
+          <span className="text-neutral-400">{r.raw}%</span>
+          <span className="text-neutral-700">→</span>
+          <span className="text-neutral-100">{r.shrunk}%</span>
+          <span className="ml-auto text-neutral-600">{r.pull}</span>
+        </div>
+      ))}
+      <div className="border-t border-neutral-800 bg-neutral-900/30 px-3 py-2 text-neutral-500">
+        position mean: 55%
+      </div>
     </div>
   );
 }
@@ -535,10 +582,10 @@ function DataSource() {
         >
           nflverse
         </a>
-        {" "}— the community-maintained play-by-play and Next Gen Stats
-        dataset that most public football analytics research runs on.
-        No proprietary feeds, no subjective inputs. The pipeline is
-        fully reproducible: the same data always produces the same grades.
+        , the community-maintained play-by-play and Next Gen Stats dataset
+        underpinning most public football analytics research. No proprietary
+        feeds, no subjective inputs. The same source data always produces
+        the same grades.
       </div>
     </section>
   );

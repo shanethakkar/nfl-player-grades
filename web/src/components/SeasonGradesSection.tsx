@@ -6,8 +6,10 @@ import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
 import { TeamLogo } from "@/components/TeamLogo";
+import { Tooltip } from "@/components/Tooltip";
 import {
   cbRoleLabel,
+  componentDescription,
   componentLabel,
   componentWeight,
   DATA_TIER_LABELS,
@@ -165,9 +167,22 @@ function ComponentPercentileBars({
         const color = displayPct !== null ? gradeHex(displayPct) : undefined;
         return (
           <div key={c.component_name} className="flex items-center gap-3">
-            <span className="w-32 shrink-0 text-right text-[11px] text-neutral-500">
-              {componentLabel(c.component_name)}
-            </span>
+            <div className="flex w-32 shrink-0 items-center justify-end">
+              {(() => {
+                const desc = componentDescription(c.component_name);
+                return desc ? (
+                  <Tooltip content={desc}>
+                    <span className="cursor-help text-right text-[11px] text-neutral-500 decoration-dotted underline-offset-4 hover:underline">
+                      {componentLabel(c.component_name)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="text-right text-[11px] text-neutral-500">
+                    {componentLabel(c.component_name)}
+                  </span>
+                );
+              })()}
+            </div>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
               {displayPct !== null && (
                 <div
