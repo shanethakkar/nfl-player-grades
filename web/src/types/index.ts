@@ -53,13 +53,17 @@ export type DepthChartEntry = DepthChartsRow;
  * Which component fields carry values depends on `position`:
  *   QB → n_dropbacks, epa_per_dropback, cpoe, success_rate
  *   RB → n_touches, rb_ryoe_per_attempt, rb_rush_epa_per_attempt,
- *        rb_rush_success_rate
+ *        rb_rush_success_rate, rec_epa_per_target,
+ *        rb_yac_over_expected_per_rec, rb_catch_pct, rb_fumble_rate
  *   WR → n_targets, rec_epa_per_target, yac_over_expected_per_rec,
- *        target_earn_rate
+ *        separation, success_rate_per_target, target_earn_rate, fumble_rate
  *   TE → same as WR, plus `role` populated from season_grades
- *   CB → n_targets, cb_comp_pct_allowed, cb_pbu_rate, cb_int_rate,
+ *   CB → n_targets, cb_comp_pct_allowed, cb_yac_per_rec_allowed,
+ *        cb_target_rate, cb_pbu_rate, cb_int_rate,
  *        plus `role` (outside_cb / hybrid_cb / slot_cb)
- *   S  → n_snaps, s_comp_pct_allowed, s_pbu_rate, s_tackles_per_snap
+ *   S  → n_snaps, s_comp_pct_allowed, s_yards_per_target_allowed,
+ *        s_target_rate, s_pbu_rate, s_int_rate, s_tackles_per_snap,
+ *        s_missed_tackle_rate, s_backfield_disruption_per_snap
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -90,21 +94,34 @@ export type LeaderboardEntry = {
   rb_ryoe_per_attempt: number | null;
   rb_rush_epa_per_attempt: number | null;
   rb_rush_success_rate: number | null;
-  // --- WR / TE columns (column names are position-agnostic; the
-  // underlying component is wr_* or te_* depending on sg.position) ---
+  rb_yac_over_expected_per_rec: number | null;
+  rb_catch_pct: number | null;
+  rb_fumble_rate: number | null;
+  // --- WR / TE columns (position-agnostic names; underlying component is
+  // wr_* or te_* depending on sg.position) ---
   n_targets: number | null;
   rec_epa_per_target: number | null;
   yac_over_expected_per_rec: number | null;
+  separation: number | null;
+  success_rate_per_target: number | null;
   target_earn_rate: number | null;
+  fumble_rate: number | null;
   // --- CB columns ---
   cb_comp_pct_allowed: number | null;
+  cb_yac_per_rec_allowed: number | null;
+  cb_target_rate: number | null;
   cb_pbu_rate: number | null;
   cb_int_rate: number | null;
   // --- S columns ---
   n_snaps: number | null;
   s_comp_pct_allowed: number | null;
+  s_yards_per_target_allowed: number | null;
+  s_target_rate: number | null;
   s_pbu_rate: number | null;
+  s_int_rate: number | null;
   s_tackles_per_snap: number | null;
+  s_missed_tackle_rate: number | null;
+  s_backfield_disruption_per_snap: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

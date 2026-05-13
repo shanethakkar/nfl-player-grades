@@ -138,7 +138,10 @@ async function _getLeaderboard(
         sc_ryoe.raw_value       AS rb_ryoe_per_attempt,
         sc_epa.raw_value        AS rb_rush_epa_per_attempt,
         sc_succ.raw_value       AS rb_rush_success_rate,
-        sc_rec_epa.raw_value    AS rec_epa_per_target
+        sc_rec_epa.raw_value    AS rec_epa_per_target,
+        sc_yac_oe.raw_value     AS rb_yac_over_expected_per_rec,
+        sc_catch.raw_value      AS rb_catch_pct,
+        sc_fumble.raw_value     AS rb_fumble_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -162,6 +165,14 @@ async function _getLeaderboard(
         ON sc_rec_epa.player_id = sg.player_id
        AND sc_rec_epa.season = sg.season
        AND sc_rec_epa.component_name = 'rb_rec_epa_per_target'
+      LEFT JOIN stat_components sc_yac_oe
+        ON sc_yac_oe.player_id = sg.player_id
+       AND sc_yac_oe.season = sg.season
+       AND sc_yac_oe.component_name = 'rb_yac_over_expected_per_rec'
+      LEFT JOIN stat_components sc_catch
+        ON sc_catch.player_id = sg.player_id
+       AND sc_catch.season = sg.season
+       AND sc_catch.component_name = 'rb_catch_pct'
       WHERE sg.season = ${season}
         AND sg.position = 'RB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -174,9 +185,12 @@ async function _getLeaderboard(
     // the wr_/te_ prefix). Branch on prefix rather than duplicating the
     // outer scaffolding.
     const prefix = position === "WR" ? "wr" : "te";
-    const cEpa = `${prefix}_rec_epa_per_target`;
-    const cYac = `${prefix}_yac_over_expected_per_rec`;
+    const cEpa  = `${prefix}_rec_epa_per_target`;
+    const cYac  = `${prefix}_yac_over_expected_per_rec`;
+    const cSep  = `${prefix}_separation`;
+    const cSucc = `${prefix}_success_rate_per_target`;
     const cEarn = `${prefix}_target_earn_rate`;
+    const cFum  = `${prefix}_fumble_rate`;
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -194,7 +208,10 @@ async function _getLeaderboard(
         sc_epa.sample_size      AS n_targets,
         sc_epa.raw_value        AS rec_epa_per_target,
         sc_yac.raw_value        AS yac_over_expected_per_rec,
-        sc_earn.raw_value       AS target_earn_rate
+        sc_sep.raw_value        AS separation,
+        sc_succ.raw_value       AS success_rate_per_target,
+        sc_earn.raw_value       AS target_earn_rate,
+        sc_fum.raw_value        AS fumble_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -206,10 +223,22 @@ async function _getLeaderboard(
         ON sc_yac.player_id = sg.player_id
        AND sc_yac.season = sg.season
        AND sc_yac.component_name = ${cYac}
+      LEFT JOIN stat_components sc_sep
+        ON sc_sep.player_id = sg.player_id
+       AND sc_sep.season = sg.season
+       AND sc_sep.component_name = ${cSep}
+      LEFT JOIN stat_components sc_succ
+        ON sc_succ.player_id = sg.player_id
+       AND sc_succ.season = sg.season
+       AND sc_succ.component_name = ${cSucc}
       LEFT JOIN stat_components sc_earn
         ON sc_earn.player_id = sg.player_id
        AND sc_earn.season = sg.season
        AND sc_earn.component_name = ${cEarn}
+      LEFT JOIN stat_components sc_fum
+        ON sc_fum.player_id = sg.player_id
+       AND sc_fum.season = sg.season
+       AND sc_fum.component_name = ${cFum}
       WHERE sg.season = ${season}
         AND sg.position = ${position}
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -237,8 +266,10 @@ async function _getLeaderboard(
         t.abbr                   AS team_abbr,
         sc_comp.sample_size      AS n_targets,
         sc_comp.raw_value        AS cb_comp_pct_allowed,
-        sc_int.raw_value         AS cb_int_rate,
-        sc_pbu.raw_value         AS cb_pbu_rate
+        sc_yac.raw_value         AS cb_yac_per_rec_allowed,
+        sc_tgt.raw_value         AS cb_target_rate,
+        sc_pbu.raw_value         AS cb_pbu_rate,
+        sc_int.raw_value         AS cb_int_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -248,14 +279,22 @@ async function _getLeaderboard(
         ON sc_comp.player_id = sg.player_id
        AND sc_comp.season = sg.season
        AND sc_comp.component_name = 'cb_comp_pct_allowed'
-      LEFT JOIN stat_components sc_int
-        ON sc_int.player_id = sg.player_id
-       AND sc_int.season = sg.season
-       AND sc_int.component_name = 'cb_int_rate'
+      LEFT JOIN stat_components sc_yac
+        ON sc_yac.player_id = sg.player_id
+       AND sc_yac.season = sg.season
+       AND sc_yac.component_name = 'cb_yac_per_rec_allowed'
+      LEFT JOIN stat_components sc_tgt
+        ON sc_tgt.player_id = sg.player_id
+       AND sc_tgt.season = sg.season
+       AND sc_tgt.component_name = 'cb_target_rate'
       LEFT JOIN stat_components sc_pbu
         ON sc_pbu.player_id = sg.player_id
        AND sc_pbu.season = sg.season
        AND sc_pbu.component_name = 'cb_pbu_rate'
+      LEFT JOIN stat_components sc_int
+        ON sc_int.player_id = sg.player_id
+       AND sc_int.season = sg.season
+       AND sc_int.component_name = 'cb_int_rate'
       WHERE sg.season = ${season}
         AND sg.position = 'CB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -279,32 +318,53 @@ async function _getLeaderboard(
         sg.confidence,
         sg.data_tier,
         sg.role,
-        t.abbr                   AS team_abbr,
-        sc_snap.sample_size      AS n_snaps,
-        sc_comp.raw_value        AS s_comp_pct_allowed,
-        sc_pbu.raw_value         AS s_pbu_rate,
-        sc_tkl.raw_value         AS s_tackles_per_snap
+        t.abbr                        AS team_abbr,
+        sc_tgt.sample_size            AS n_snaps,
+        sc_comp.raw_value             AS s_comp_pct_allowed,
+        sc_yds.raw_value              AS s_yards_per_target_allowed,
+        sc_tgt.raw_value              AS s_target_rate,
+        sc_pbu.raw_value              AS s_pbu_rate,
+        sc_int.raw_value              AS s_int_rate,
+        sc_tkl.raw_value              AS s_tackles_per_snap,
+        sc_miss.raw_value             AS s_missed_tackle_rate,
+        sc_dis.raw_value              AS s_backfield_disruption_per_snap
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
         ON ps.player_id = sg.player_id AND ps.season = sg.season
       LEFT JOIN teams t ON t.team_id = ps.team_id
-      LEFT JOIN stat_components sc_snap
-        ON sc_snap.player_id = sg.player_id
-       AND sc_snap.season = sg.season
-       AND sc_snap.component_name = 's_target_rate'
+      LEFT JOIN stat_components sc_tgt
+        ON sc_tgt.player_id = sg.player_id
+       AND sc_tgt.season = sg.season
+       AND sc_tgt.component_name = 's_target_rate'
       LEFT JOIN stat_components sc_comp
         ON sc_comp.player_id = sg.player_id
        AND sc_comp.season = sg.season
        AND sc_comp.component_name = 's_comp_pct_allowed'
+      LEFT JOIN stat_components sc_yds
+        ON sc_yds.player_id = sg.player_id
+       AND sc_yds.season = sg.season
+       AND sc_yds.component_name = 's_yards_per_target_allowed'
       LEFT JOIN stat_components sc_pbu
         ON sc_pbu.player_id = sg.player_id
        AND sc_pbu.season = sg.season
        AND sc_pbu.component_name = 's_pbu_rate'
+      LEFT JOIN stat_components sc_int
+        ON sc_int.player_id = sg.player_id
+       AND sc_int.season = sg.season
+       AND sc_int.component_name = 's_int_rate'
       LEFT JOIN stat_components sc_tkl
         ON sc_tkl.player_id = sg.player_id
        AND sc_tkl.season = sg.season
        AND sc_tkl.component_name = 's_tackles_per_snap'
+      LEFT JOIN stat_components sc_miss
+        ON sc_miss.player_id = sg.player_id
+       AND sc_miss.season = sg.season
+       AND sc_miss.component_name = 's_missed_tackle_rate'
+      LEFT JOIN stat_components sc_dis
+        ON sc_dis.player_id = sg.player_id
+       AND sc_dis.season = sg.season
+       AND sc_dis.component_name = 's_backfield_disruption_per_snap'
       WHERE sg.season = ${season}
         AND sg.position = 'S'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -829,21 +889,32 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     rb_ryoe_per_attempt: coerceNullableNumber(row.rb_ryoe_per_attempt),
     rb_rush_epa_per_attempt: coerceNullableNumber(row.rb_rush_epa_per_attempt),
     rb_rush_success_rate: coerceNullableNumber(row.rb_rush_success_rate),
+    rb_yac_over_expected_per_rec: coerceNullableNumber(row.rb_yac_over_expected_per_rec),
+    rb_catch_pct: coerceNullableNumber(row.rb_catch_pct),
+    rb_fumble_rate: coerceNullableNumber(row.rb_fumble_rate),
     // WR/TE shared
     n_targets: coerceNullableInt(row.n_targets),
     rec_epa_per_target: coerceNullableNumber(row.rec_epa_per_target),
-    yac_over_expected_per_rec: coerceNullableNumber(
-      row.yac_over_expected_per_rec,
-    ),
+    yac_over_expected_per_rec: coerceNullableNumber(row.yac_over_expected_per_rec),
+    separation: coerceNullableNumber(row.separation),
+    success_rate_per_target: coerceNullableNumber(row.success_rate_per_target),
     target_earn_rate: coerceNullableNumber(row.target_earn_rate),
+    fumble_rate: coerceNullableNumber(row.fumble_rate),
     // CB-only
     cb_comp_pct_allowed: coerceNullableNumber(row.cb_comp_pct_allowed),
+    cb_yac_per_rec_allowed: coerceNullableNumber(row.cb_yac_per_rec_allowed),
+    cb_target_rate: coerceNullableNumber(row.cb_target_rate),
     cb_pbu_rate: coerceNullableNumber(row.cb_pbu_rate),
     cb_int_rate: coerceNullableNumber(row.cb_int_rate),
     // S-only
     n_snaps: coerceNullableInt(row.n_snaps),
     s_comp_pct_allowed: coerceNullableNumber(row.s_comp_pct_allowed),
+    s_yards_per_target_allowed: coerceNullableNumber(row.s_yards_per_target_allowed),
+    s_target_rate: coerceNullableNumber(row.s_target_rate),
     s_pbu_rate: coerceNullableNumber(row.s_pbu_rate),
+    s_int_rate: coerceNullableNumber(row.s_int_rate),
     s_tackles_per_snap: coerceNullableNumber(row.s_tackles_per_snap),
+    s_missed_tackle_rate: coerceNullableNumber(row.s_missed_tackle_rate),
+    s_backfield_disruption_per_snap: coerceNullableNumber(row.s_backfield_disruption_per_snap),
   };
 }

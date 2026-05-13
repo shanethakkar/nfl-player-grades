@@ -140,6 +140,7 @@ export function LeaderboardTable({ entries, position }: Props) {
                 onSort={onSort}
               />
             ))}
+            <th aria-hidden className="w-4" />
           </tr>
         </thead>
         <tbody>
@@ -241,6 +242,14 @@ const QB_COLUMNS: SortableColumn[] = [
 
 const RB_COLUMNS: SortableColumn[] = [
   {
+    key: "n_touches",
+    header: "Touches",
+    hoverLabel: "Qualifying touches (carries + receptions)",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_touches,
+    render: (e) => fmtInt(e.n_touches),
+  },
+  {
     key: "ryoe",
     header: "RYOE/att",
     hoverLabel: "Rush yards over expected per attempt (NGS)",
@@ -272,6 +281,30 @@ const RB_COLUMNS: SortableColumn[] = [
     sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
   },
+  {
+    key: "rb_yac_oe",
+    header: "YAC-OE/rec",
+    hoverLabel: "YAC over expected per reception (NGS)",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_yac_over_expected_per_rec,
+    render: (e) => fmtSigned(e.rb_yac_over_expected_per_rec, 2),
+  },
+  {
+    key: "catch_pct",
+    header: "Catch%",
+    hoverLabel: "Reception rate (receptions / targets)",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_catch_pct,
+    render: (e) => fmtPct(e.rb_catch_pct, 1),
+  },
+  {
+    key: "rb_fumble",
+    header: "Fum%",
+    hoverLabel: "Fumble rate per touch (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.rb_fumble_rate,
+    render: (e) => fmtPct(e.rb_fumble_rate, 2),
+  },
 ];
 
 const WR_COLUMNS: SortableColumn[] = [
@@ -293,11 +326,27 @@ const WR_COLUMNS: SortableColumn[] = [
   },
   {
     key: "yac_oe",
-    header: "YAC/rec",
-    hoverLabel: "YAC over expected per reception",
+    header: "YAC-OE/rec",
+    hoverLabel: "YAC over expected per reception (NGS)",
     defaultDir: "desc",
     sortValue: (e) => e.yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.yac_over_expected_per_rec, 2),
+  },
+  {
+    key: "separation",
+    header: "Sep",
+    hoverLabel: "Average separation at target (yards, NGS)",
+    defaultDir: "desc",
+    sortValue: (e) => e.separation,
+    render: (e) => e.separation === null || !Number.isFinite(e.separation) ? "—" : e.separation.toFixed(1),
+  },
+  {
+    key: "succ_rate",
+    header: "Succ%",
+    hoverLabel: "Success rate per target",
+    defaultDir: "desc",
+    sortValue: (e) => e.success_rate_per_target,
+    render: (e) => fmtPct(e.success_rate_per_target, 1),
   },
   {
     key: "earn",
@@ -306,6 +355,14 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.target_earn_rate,
     render: (e) => fmtPct(e.target_earn_rate, 1),
+  },
+  {
+    key: "fumble_rate",
+    header: "Fum%",
+    hoverLabel: "Fumble rate per reception (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.fumble_rate,
+    render: (e) => fmtPct(e.fumble_rate, 2),
   },
 ];
 
@@ -331,9 +388,25 @@ const CB_COLUMNS: SortableColumn[] = [
     render: (e) => fmtPct(e.cb_comp_pct_allowed, 1),
   },
   {
+    key: "cb_yac_per_rec",
+    header: "YAC/Rec Alwd",
+    hoverLabel: "YAC per reception allowed (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.cb_yac_per_rec_allowed,
+    render: (e) => e.cb_yac_per_rec_allowed === null || !Number.isFinite(e.cb_yac_per_rec_allowed) ? "—" : e.cb_yac_per_rec_allowed.toFixed(1),
+  },
+  {
+    key: "cb_target_rate",
+    header: "Tgt%",
+    hoverLabel: "Target rate per defensive snap (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.cb_target_rate,
+    render: (e) => fmtPct(e.cb_target_rate, 1),
+  },
+  {
     key: "cb_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass breakup rate (passes defended per target)",
+    hoverLabel: "Pass breakup rate per target",
     defaultDir: "desc",
     sortValue: (e) => e.cb_pbu_rate,
     render: (e) => fmtPct(e.cb_pbu_rate, 2),
@@ -341,7 +414,7 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_int_rate",
     header: "INT%",
-    hoverLabel: "Interception rate (INTs per target)",
+    hoverLabel: "Interception rate per target",
     defaultDir: "desc",
     sortValue: (e) => e.cb_int_rate,
     render: (e) => fmtPct(e.cb_int_rate, 2),
@@ -366,12 +439,36 @@ const S_COLUMNS: SortableColumn[] = [
     render: (e) => fmtPct(e.s_comp_pct_allowed, 1),
   },
   {
+    key: "s_yds_per_tgt",
+    header: "Yds/Tgt",
+    hoverLabel: "Yards per target allowed (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.s_yards_per_target_allowed,
+    render: (e) => e.s_yards_per_target_allowed === null || !Number.isFinite(e.s_yards_per_target_allowed) ? "—" : e.s_yards_per_target_allowed.toFixed(1),
+  },
+  {
+    key: "s_target_rate",
+    header: "Tgt%",
+    hoverLabel: "Target rate per defensive snap (lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.s_target_rate,
+    render: (e) => fmtPct(e.s_target_rate, 1),
+  },
+  {
     key: "s_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass breakup rate (passes defended per target)",
+    hoverLabel: "Pass breakup rate per target",
     defaultDir: "desc",
     sortValue: (e) => e.s_pbu_rate,
     render: (e) => fmtPct(e.s_pbu_rate, 2),
+  },
+  {
+    key: "s_int_rate",
+    header: "INT%",
+    hoverLabel: "Interception rate per target",
+    defaultDir: "desc",
+    sortValue: (e) => e.s_int_rate,
+    render: (e) => fmtPct(e.s_int_rate, 2),
   },
   {
     key: "s_tackles_per_snap",
@@ -379,7 +476,23 @@ const S_COLUMNS: SortableColumn[] = [
     hoverLabel: "Combined tackles per defensive snap",
     defaultDir: "desc",
     sortValue: (e) => e.s_tackles_per_snap,
-    render: (e) => (e.s_tackles_per_snap === null || !Number.isFinite(e.s_tackles_per_snap) ? "—" : e.s_tackles_per_snap.toFixed(3)),
+    render: (e) => e.s_tackles_per_snap === null || !Number.isFinite(e.s_tackles_per_snap) ? "—" : e.s_tackles_per_snap.toFixed(3),
+  },
+  {
+    key: "s_missed_tkl",
+    header: "MTkl%",
+    hoverLabel: "Missed tackle rate (missed / tackle attempts, lower is better)",
+    defaultDir: "asc",
+    sortValue: (e) => e.s_missed_tackle_rate,
+    render: (e) => fmtPct(e.s_missed_tackle_rate, 1),
+  },
+  {
+    key: "s_disruption",
+    header: "Disrpt",
+    hoverLabel: "Backfield disruption per snap (TFL + sacks)",
+    defaultDir: "desc",
+    sortValue: (e) => e.s_backfield_disruption_per_snap,
+    render: (e) => e.s_backfield_disruption_per_snap === null || !Number.isFinite(e.s_backfield_disruption_per_snap) ? "—" : e.s_backfield_disruption_per_snap.toFixed(3),
   },
 ];
 
@@ -454,6 +567,7 @@ function Row({
           {c.render ? c.render(e) : "—"}
         </Td>
       ))}
+      <td aria-hidden className="w-4" />
     </tr>
   );
 }
