@@ -1,6 +1,6 @@
 # ADR-0022 — LB v1 Grading Formula
 
-**Status:** Accepted (revised 2026-05-14 — see *Revision History*)
+**Status:** Accepted (v1.2 rebalance from exhaustive audit — 2026-05-14)
 **Date:** 2026-05-14
 
 ---
@@ -25,20 +25,20 @@ PBU data confirmed populated for off-ball LBs (Fred Warner 5-12 PBUs/yr, Roquan 
 
 ---
 
-## Components
+## Components (v1.2, 2026-05-14)
 
 | Component | Formula | Weight | Direction |
 |---|---|---|---|
 | `lb_tfl_rate` | tfl / snaps_defense | **+0.20** | higher = better |
-| `lb_passer_rating_allowed` | NFL passer rating on targeted throws | **−0.27** | lower = better |
+| `lb_passer_rating_allowed` | NFL passer rating on targeted throws | **−0.15** | lower = better |
 | `lb_missed_tackle_rate` | missed / (comb + missed) | **−0.15** | lower = better |
-| `lb_pbu_rate` | pbu / targets | **+0.08** | higher = better |
+| `lb_pbu_rate` | pbu / targets | **+0.05** | higher = better |
 | `lb_tackle_rate` | comb_tackles / snaps_defense | **+0.13** | higher = better |
-| `lb_pressure_rate` | pressures / snaps_defense | **+0.07** | higher = better |
+| `lb_pressure_rate` | pressures / snaps_defense | **+0.10** | higher = better |
 
-Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
+Sum |weights| = 0.78. Normalized dynamically by `composite.combine`.
 
-**Relative shares:** run defense ~45% (TFL 22% + tackle 14% + missed tackle penalty 17%), coverage ~39% (passer rating 30% + PBU 9%), pass rush ~8%.
+**Relative shares:** run defense ~58% (TFL 26% + tackle 17% + missed tackle penalty 19% — implicit, see math), coverage ~25% (passer rating 19% + PBU 6%), pass rush ~13%.
 
 **Passer rating allowed** is computed season-long from `(completions_allowed, targets, yards_allowed, tds_allowed, ints)` using the standard NFL passer rating formula. PBU rate is PBU-only (not PBU+INT) because INTs are already captured inside passer rating allowed (a single INT lowers rating by ~25 points); double-counting would over-reward turnover-heavy LBs.
 
@@ -87,19 +87,19 @@ Players failing the LB filter are **not graded as LB** for that season. They flo
 
 ---
 
-## Design Rationale
+## Design Rationale (v1.2)
 
-**Passer rating allowed dominant (−0.27):** Industry-standard NFL coverage metric. Combines comp%, yards per attempt, TDs, and INTs into one number that captures the full extent of coverage damage. The single cleanest LB skill signal in our dataset: rewards forced incompletions (PBUs lower comp%), penalizes TDs allowed (yds/tgt didn't), and rewards turnovers (INTs hammer the rating by ~25 points each). Weighted heaviest of any component because of how well it tracks consensus elite coverage.
+**TFL rate primary positive (+0.20):** Cleanest LB run-defense signal — actual play-making behind the LOS, harder to inflate via team-context than raw tackle volume. Now the largest positive weight after the v1.2 rebalance lowered passer_rating_allowed.
 
-**TFL rate (+0.20):** Cleanest LB run-defense signal — actual play-making behind the LOS, harder to inflate via team-context than raw tackle volume. Slightly de-weighted from initial draft (0.22 → 0.20) to make room for passer rating allowed.
+**Passer rating allowed (−0.15, lowered in v1.2):** Industry-standard NFL coverage metric. Combines comp%, yards per attempt, TDs, and INTs into one number. **v1.2 lowered the weight from −0.27 to −0.15** because the exhaustive audit revealed both weak reliability (YoY +0.146, just above noise threshold) AND weak predictive validity (−0.071) at LB-specific sample sizes. LBs have ~15-25 targets/qualified season vs 50-120 for DBs, so the same metric is structurally noisier here. Still the primary coverage signal, but right-sized.
 
-**PBU rate (+0.08) — PBU-only, not PBU+INT:** INTs are already captured inside passer rating allowed. Keeping PBU as a separate component still credits the active "broke up the catch" play (passer rating only captures it indirectly via comp%) without double-counting interceptions.
+**Pressure rate (+0.10, bumped in v1.2):** Most off-ball LBs rarely rush — Fred Warner / Roquan Smith have 5-12 pressures/yr on 1000 snaps (0.5-1.2% rate) vs. 4-6% for EDGE. **v1.2 bumped the weight from +0.07 to +0.10** because the audit revealed pressure_rate has the HIGHEST positive validity (+0.149) of any LB component but was the LOWEST-weighted positive component. Same iDL-style mis-order pattern, but smaller magnitude (kept conservative because base rates are low). Rewards blitz-heavy MLBs (Patrick Queen, Kaden Elliss) without overstating position-wide impact.
+
+**PBU rate (+0.05) — PBU-only, not PBU+INT:** INTs are already captured inside passer rating allowed. Keeping PBU as a separate component still credits the active "broke up the catch" play without double-counting interceptions.
 
 **Missed tackle rate penalty (−0.15):** LBs make the most tackles of any position; misses cost the most. Same penalty weight as Safety.
 
-**Tackle rate (+0.13):** Raw tackle volume has team-context contamination (bad defenses see more snaps, more plays). Meaningful but not dominant.
-
-**Pressure rate small (+0.07):** Most off-ball LBs rarely rush. Fred Warner / Roquan Smith have 5-12 pressures/yr on 1000 snaps (0.5-1.2% rate) vs. 4-6% for EDGE. The 7% weight rewards blitz-heavy MLBs (Patrick Queen, Kaden Elliss-type) without overstating the position-wide impact.
+**Tackle rate (+0.13):** Raw tackle volume has team-context contamination (bad defenses see more snaps, more plays). Audit confirmed strong YoY (+0.475 — highest in formula) but weak validity (+0.052 — voters don't reward tackle volume at LB). Meaningful for skill measurement but not dominant.
 
 ---
 
@@ -136,6 +136,48 @@ Expected YoY r band: 0.35-0.50. Wider/lower than offensive skill positions. Belo
 ---
 
 ## Revision History
+
+### v1.2 (2026-05-14) — exhaustive audit rebalance
+
+Two-component rebalance driven by the exhaustive candidate audit ([../grading/audits/2026-05-14-exhaustive-lb.md](../grading/audits/2026-05-14-exhaustive-lb.md)). 19 candidates were scored against four criteria.
+
+**(a) `lb_passer_rating_allowed`: -0.27 → -0.15.** Was the heaviest component (32% of formula). Audit revealed:
+- YoY +0.146 (just above noise threshold — vs +0.143 at S/CB but with structurally larger samples there)
+- Validity -0.071 (sign correct, magnitude tiny — vs -0.178 at S/CB)
+- The metric is genuinely noisier at LB sample sizes (15-25 targets/season per qualified LB vs 50-120 for DBs)
+- Pro Bowl voters reward LB coverage less than they reward DB coverage
+
+Right-sized to its real signal strength. Still primary coverage signal at 19% of formula share.
+
+**(b) `lb_pressure_rate`: +0.07 → +0.10.** Modest bump. Audit revealed:
+- Highest positive validity in the formula (+0.149)
+- Strong YoY (+0.407)
+- Was the LOWEST-weighted positive component despite being most voter-validated
+
+Conservative bump (vs iDL's larger +0.05 swing) because LB base pressure rates are very low and over-weighting could push blitz-specialists too high.
+
+**No new components added.** The 6-component LB formula was confirmed structurally complete by the audit. All 13 new candidates were rejected:
+- PFR passer-rating sub-components (comp_pct, yards/tgt, int_rate, td_rate): subsumed (+0.51-0.63 correlation with PR_allowed)
+- Pass-rush sub-components (qb_hits, hurries, sack_rate): subsumed by pressure_rate (+0.70+ correlation)
+- sack_per_pressure, hit_per_pressure: small samples or near-zero validity
+- forced_fumble_per_snap, int_per_snap: rare-event noise (xsect 0.00)
+- adot_allowed, yac_per_target_allowed: noise / subsumed
+
+**LB has a structural validity ceiling.** Baseline +0.179 is the lowest of any audited position because Pro Bowl voting at LB is driven more by reputation than by box-score stats (the well-known "stats vs reputation" gap). Roquan Smith — universally regarded top-3 LB — grades #19 in 2024 because his box-score numbers don't reflect his consensus standing. No formula change can fix this without encoding reputation directly.
+
+**Validity gate:** LB composite vs next-year Pro Bowl correlation **+0.179 → +0.198 (+0.019)**. Strongest *relative* gain (+11%) of any defensive audit. Largest absolute Path A rebalance in the system. Holds; no rollback.
+
+**Face-check 2024:** Top 2 unchanged in spirit — Zack Baun (DPOY runner-up, 1st-Team All-Pro) #1, Blake Cashman (Pro Bowl) #2. Movers include Roquan Smith (rose from below-cohort-median because he was being penalized by coverage stats and rewarded modestly by pressure). Notable stats-vs-reputation gap persists for Smith (#19).
+
+**Weight totals:** v1.1 sum |abs| = 0.87 → v1.2 sum |abs| = 0.78.
+
+### v1.1 (2026-05-14, second revision) — `lb_pbu_rate` weight lowered (noise)
+
+**Lowered `lb_pbu_rate` from +0.08 → +0.05.** Sum |w| drops 0.90 → 0.87.
+
+**Why:** Cross-position YoY audit found mean YoY r = 0.085 — noise. Light weight bounds noise without removing the signal completely.
+
+### v1.0 (2026-05-14) — initial release + passer-rating revision
 
 **2026-05-14 (initial release):** Used `lb_yards_per_target_allowed` (−0.20) and `lb_pbu_int_rate` (+0.13). Face-check on 2024 / 2023 showed elite consensus LBs (Fred Warner in his All-Pro 2023 season, Roquan Smith) graded lower than expected because yards/target is heavily scheme-dependent for LBs and doesn't capture TDs allowed or INT events.
 

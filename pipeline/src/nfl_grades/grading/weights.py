@@ -766,42 +766,54 @@ IDL_V1_CONFIDENCE_FULL_SNAPS: int = 700
 
 
 # ---------------------------------------------------------------------------
-# LB v1.1 (ADR-0022, revised 2026-05-14).
+# LB v1.2 (ADR-0022, revised 2026-05-14 via exhaustive audit).
 # ---------------------------------------------------------------------------
 # v1.1 (cross-position audit 2026-05-14): lb_pbu_rate lowered from +0.08
-# → +0.05. Mean YoY r = 0.085 across 2018-2025 — same noise pattern as
-# idl_missed_tackle_rate. INTs are already captured inside passer_rating_
-# allowed (which has more material weight), so pbu_rate was already a
-# narrow "broke up the catch" play signal; with weak YoY it's barely
-# carrying its weight. Not removed entirely because the cross-sectional
-# spread is real (active plays show up) — light weight bounds noise.
-# Sum |w| drops 0.90 → 0.87. See project_cross_position_yoy_audit.md.
-# ---------------------------------------------------------------------------
-# Off-ball linebackers. Multi-skill position covering run defense, coverage,
-# and situational pass rush. Filter: target_rate >= 3.5% to exclude
-# pass-rush OLBs misclassified as LB (T.J. Watt, Micah Parsons, etc.).
+# → +0.05. Noise pattern.
 #
-# Weight split: ~45% run defense, ~35% coverage, ~8% pass rush, 17% technique
-# penalty.
+# v1.2 (2026-05-14, exhaustive audit): rebalance two components.
 #
-# lb_tfl_rate (20%): run-stop TFLs per snap. Cleanest run-defense signal —
-#   actual play-making behind the LOS.
-# lb_passer_rating_allowed (-27%): NFL passer rating allowed when targeted.
-#   Combines comp%, yards, TDs, and INTs into one industry-standard metric.
-#   Heavily weighted because it's the cleanest LB coverage skill signal:
-#   penalizes TDs allowed (yds/tgt didn't), rewards INTs, and rewards
-#   forced incompletions all in one number.
-# lb_missed_tackle_rate (-15%): technique penalty. LBs make the most
-#   tackles of any position; missed ones cost the most.
-# lb_pbu_rate (8%): PBU per target. Active play that broke up the catch.
-#   INTs already captured inside passer rating allowed, so INT removed
-#   from this component (vs original pbu_int_rate) to avoid double-count.
-# lb_tackle_rate (13%): tackles per snap. Volume signal — bad LBs simply
-#   don't accumulate tackles. Some team-context noise accepted for v1.
-# lb_pressure_rate (7%): situational pass rush. Real signal for
-#   blitz-heavy MLBs but near-zero for most LBs; small weight reflects.
+#   (a) lb_passer_rating_allowed: -0.27 → -0.15. Was the heaviest
+#       component (32% of formula) but had both weak reliability
+#       (YoY +0.146, near noise threshold) AND weak predictive validity
+#       (-0.071, sign correct but magnitude tiny). At LB sample sizes
+#       (15-25 targets/season per qualified LB) the metric is structurally
+#       noisier than at S/CB. Right-sized to its real signal strength.
 #
-# Sum |abs| = 0.90. Normalized dynamically by composite.combine.
+#   (b) lb_pressure_rate: +0.07 → +0.10. Modest bump. It had the
+#       HIGHEST positive validity (+0.149) of any LB component but was
+#       the LOWEST-weighted positive component. Same iDL-style mis-order
+#       pattern, but smaller in magnitude — kept conservative.
+#
+# Rejected new candidates (article-defensible log):
+#   - PFR passer-rating sub-components (comp_pct, yards/tgt, int_rate,
+#     td_rate): all +0.51-0.63 correlation with passer_rating_allowed,
+#     subsumed by it.
+#   - Pass-rush sub-components (qb_hits, hurries, sack_rate): all
+#     +0.70-0.73 correlation with pressure_rate, subsumed.
+#   - sack_per_pressure, hit_per_pressure: small n (135), weak validity.
+#   - forced_fumble_per_snap, int_per_snap: rare-event noise.
+#   - adot_allowed, yac_per_target_allowed: noise / subsumed.
+#
+# No new components added — LB had the richest existing formula (6
+# components) and the audit confirmed it's structurally complete. The
+# value is the rebalance.
+#
+# Note: LB has the WEAKEST baseline validity (+0.179) of any audited
+# position — the well-known "stats vs reputation" gap for LBs. The
+# v1.2 rebalance modestly improves alignment with voter consensus
+# without abandoning the design intent (LBs ARE coverage-graded, just
+# less heavily than v1 assumed).
+#
+# v1.2 weight breakdown:
+# lb_tfl_rate (26%): run-stop TFLs per snap. Cleanest run-defense signal.
+# lb_passer_rating_allowed (-19%): NFL passer rating allowed when targeted.
+# lb_missed_tackle_rate (-19%): technique penalty.
+# lb_pbu_rate (6%): PBU per target. Active play that broke up the catch.
+# lb_tackle_rate (17%): tackles per snap. Volume signal.
+# lb_pressure_rate (13%): situational pass rush. Highest positive validity.
+#
+# Sum |abs| = 0.78. Normalized dynamically by composite.combine.
 # ---------------------------------------------------------------------------
 
 LB_COMPONENT_TFL_RATE: str = "lb_tfl_rate"
@@ -813,11 +825,11 @@ LB_COMPONENT_PRESSURE_RATE: str = "lb_pressure_rate"
 
 LB_V1_WEIGHTS: dict[str, float] = {
     LB_COMPONENT_TFL_RATE:              0.20,
-    LB_COMPONENT_PASSER_RATING_ALLOWED: -0.27,
+    LB_COMPONENT_PASSER_RATING_ALLOWED: -0.15,
     LB_COMPONENT_MISSED_TACKLE_RATE:    -0.15,
     LB_COMPONENT_PBU_RATE:              0.05,
     LB_COMPONENT_TACKLE_RATE:           0.13,
-    LB_COMPONENT_PRESSURE_RATE:         0.07,
+    LB_COMPONENT_PRESSURE_RATE:         0.10,
 }
 
 LB_V1_SHRINKAGE_K: dict[str, float] = {

@@ -1723,6 +1723,160 @@ def run_idl_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# LB candidates
+# ---------------------------------------------------------------------------
+
+def lb_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full LB candidate set for the exhaustive audit.
+
+    LB has the richest existing formula (6 components: TFL, passer rating
+    allowed, missed_tackle, PBU, tackle_rate, pressure_rate). The audit
+    tests:
+      - PFR passer_rating sub-components (comp_pct, yds/tgt, int_rate, td_rate)
+      - YAC/tgt and ADOT from pfr_advstats_def (per-game aggregated)
+      - PFR pass-rush sub-components (qb_hits, hurries, sack_per_pressure)
+      - Sack rate, INT rate, forced fumble rate as standalone metrics
+    """
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified LB IDs.
+    lb_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name,
+               ps.snaps_defense
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        LEFT JOIN (
+            SELECT DISTINCT ON (player_id, season) player_id, season, snaps_defense
+            FROM player_seasons
+            ORDER BY player_id, season, snaps_defense DESC NULLS LAST
+        ) ps ON ps.player_id = sg.player_id AND ps.season = sg.season
+        WHERE sg.position = 'LB' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        lb_ids = pd.read_sql(lb_sql, conn)
+    seasons = sorted(lb_ids["season"].unique())
+
+    # 2. Currently-shipped components.
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'LB'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'lb_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. Raw pfr_def_lb data for sub-component candidates.
+    raw_sql = text(
+        """
+        SELECT player_id, season, targets, completions_allowed, yards_allowed,
+               tds_allowed, ints, pbu, pressures, sacks, qb_hits, hurries,
+               comb_tackles, fumbles_forced
+        FROM pfr_def_lb
+        """
+    )
+    with engine.connect() as conn:
+        raw = pd.read_sql(raw_sql, conn)
+
+    merged = raw.merge(
+        lb_ids[["player_id", "season", "snaps_defense"]],
+        on=["player_id", "season"], how="inner",
+    )
+    snaps = merged["snaps_defense"].astype(float).replace(0, np.nan)
+    targets = merged["targets"].astype(float).replace(0, np.nan)
+    pressures = merged["pressures"].astype(float).replace(0, np.nan)
+
+    # Coverage sub-components
+    merged["comp_pct_allowed"] = merged["completions_allowed"] / targets
+    merged["yards_per_target_allowed"] = merged["yards_allowed"] / targets
+    merged["int_rate"] = merged["ints"] / targets
+    merged["td_rate_allowed"] = merged["tds_allowed"] / targets
+    # Pass-rush sub-components
+    merged["qb_hits_per_snap"] = merged["qb_hits"] / snaps
+    merged["hurries_per_snap"] = merged["hurries"] / snaps
+    merged["sack_rate"] = merged["sacks"] / snaps
+    merged["sack_per_pressure"] = merged["sacks"] / pressures
+    merged["hit_per_pressure"] = merged["qb_hits"] / pressures
+    # Splash plays
+    merged["forced_fumble_per_snap"] = merged["fumbles_forced"] / snaps
+    merged["int_per_snap"] = merged["ints"].astype(float) / snaps
+
+    for col, display, denom_col, min_n in [
+        # Coverage sub-components (require min targets)
+        ("comp_pct_allowed", "lb_comp_pct_allowed", "targets", 15),
+        ("yards_per_target_allowed", "lb_yards_per_target_allowed", "targets", 15),
+        ("int_rate", "lb_int_rate", "targets", 15),
+        ("td_rate_allowed", "lb_td_rate_allowed", "targets", 15),
+        # Pass-rush sub-components (require min snaps)
+        ("qb_hits_per_snap", "lb_qb_hits_per_snap", "snaps_defense", 400),
+        ("hurries_per_snap", "lb_hurries_per_snap", "snaps_defense", 400),
+        ("sack_rate", "lb_sack_rate", "snaps_defense", 400),
+        ("sack_per_pressure", "lb_sack_per_pressure", "pressures", 8),
+        ("hit_per_pressure", "lb_hit_per_pressure", "pressures", 8),
+        # Splash plays
+        ("forced_fumble_per_snap", "lb_forced_fumble_per_snap", "snaps_defense", 400),
+        ("int_per_snap", "lb_int_per_snap", "snaps_defense", 400),
+    ]:
+        mask = merged[denom_col].fillna(0) >= min_n
+        panel = merged.loc[mask, ["player_id", "season", col]].rename(
+            columns={col: "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append((display, panel, False))
+
+    # 4. PFR def_advstats per-game for ADOT and YAC/target_allowed.
+    pfr_agg = _pfr_def_aggregated(seasons, position_filter=frozenset({"LB"}))
+    if not pfr_agg.empty:
+        lb_names = lb_ids[["player_id", "season", "full_name"]].copy()
+        lb_names["name_norm"] = lb_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_agg["name_norm"] = pfr_agg["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged2 = pfr_agg.merge(lb_names, on=["name_norm", "season"], how="inner")
+        merged2["adot_allowed"] = merged2["adot"]
+        merged2["yac_per_target_allowed"] = merged2["yac"] / merged2["targets"].replace(0, np.nan)
+        for col, display, min_n in [
+            ("adot_allowed", "lb_adot_allowed", 15),
+            ("yac_per_target_allowed", "lb_yac_per_target_allowed", 15),
+        ]:
+            mask = merged2["targets"].fillna(0) >= min_n
+            panel = merged2.loc[mask, ["player_id", "season", col]].rename(
+                columns={col: "value"}
+            )
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    return candidates
+
+
+def run_lb_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full LB exhaustive audit."""
+    eng = engine or get_engine()
+    cands = lb_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "LB",
+            season_pairs=_DEFENSIVE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1743,4 +1897,6 @@ __all__ = [
     "run_edge_audit",
     "idl_candidates",
     "run_idl_audit",
+    "lb_candidates",
+    "run_lb_audit",
 ]

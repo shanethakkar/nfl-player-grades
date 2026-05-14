@@ -654,11 +654,11 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   idl_tackles_per_snap:               0.05,
   idl_missed_tackle_rate:            -0.05,
   lb_tfl_rate:                        0.20,
-  lb_passer_rating_allowed:          -0.27,
+  lb_passer_rating_allowed:          -0.15,
   lb_missed_tackle_rate:             -0.15,
   lb_pbu_rate:                        0.05,
   lb_tackle_rate:                     0.13,
-  lb_pressure_rate:                   0.07,
+  lb_pressure_rate:                   0.10,
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {
