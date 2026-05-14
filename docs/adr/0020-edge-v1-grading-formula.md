@@ -1,6 +1,6 @@
 # ADR-0020 — EDGE v1 Grading Formula
 
-**Status:** Accepted  
+**Status:** Accepted (v1.1 OLB-gap closure — 2026-05-14)
 **Date:** 2026-05-13
 
 ---
@@ -73,7 +73,7 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
 ## Known Limitations
 
-**OLB gap (3-4 schemes):** nflverse classifies 3-4 edge rushers (T.J. Watt, Micah Parsons, Haason Reddick) as OLB/LB rather than DE/EDGE. These players do not appear in EDGE grades and instead fall in the ungraded LB pool. This is documented in the methodology page. Addressed in v2 when depth-chart role data improves or a manual override list is maintained.
+**OLB gap (3-4 schemes):** ~~Original v1 limitation~~ — **closed in v1.1 (2026-05-14)**. The EDGE grader now reads from both `pfr_def_pass_rush` (EDGE-tagged) and `pfr_def_lb` (LB-tagged pass-rush OLBs with ≥25 pressures and target rate <3.5%). See Revision History.
 
 **No pass-rush snap denominator:** Total defensive snaps is used as denominator. This conflates run-defense snaps (where pressure rate is irrelevant) with pass-rush snaps. Elite rushers who are subbed out on early downs may be slightly penalized. Pass-rush snap data is not available in public data sources.
 
@@ -88,3 +88,32 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 **Equalizing pressure and sack weights (0.35 / 0.35):** Reviewed per external feedback. Rejected because pressure rate captures more signal than sack rate alone (higher volume, more stable YoY), so it warrants a higher weight.
 
 **Excluding TFL from EDGE:** Initial proposal excluded TFL. Added after review — elite edge rushers do generate real TFL volume on run downs, and excluding it understates their defensive value.
+
+---
+
+## Revision History
+
+### v1.1 (2026-05-14) — OLB-gap closure
+
+Closed the original v1 limitation where nflverse-classified `LB` pass rushers (T.J. Watt, Micah Parsons, Brian Burns, Nik Bonitto, Jared Verse, Josh Sweat, etc.) received **no grades** at any position. They failed the LB grader's target-rate filter (≥3.5%) for being pass-rushers, and the EDGE grader didn't see them because their `position_played` tag was `LB`. ~15-30 elite edge rushers per season were missing from the system.
+
+**Fix:** The EDGE feature SQL now UNIONs two branches:
+1. EDGE-tagged players from `pfr_def_pass_rush` (original v1 source).
+2. LB-tagged pass-rush OLBs from `pfr_def_lb`, filtered to:
+   - `position_played = 'LB'`
+   - `pressures ≥ 25` (real pass-rush production — separates them from blitz-heavy MLBs)
+   - `target_rate < 0.035` (matches the LB grader's exclusion threshold — no player is graded in both)
+
+Both branches feed the same EDGE composite formula. `pfr_def_lb` and `pfr_def_pass_rush` have the same column shape for the components EDGE uses (pressures, sacks, comb_tackles, missed_tackles, tfl), so no other code changes were needed.
+
+**Verification:** No player appears in both LB and EDGE for any season post-fix (the filter thresholds are designed to be mutually exclusive: LB requires target rate ≥3.5%, EDGE-via-OLB-branch requires target rate <3.5%).
+
+**Face-check after fix:**
+- Micah Parsons now graded all 5 seasons (2021 LB 83.9, 2022-2025 EDGE 70.5/81.9/86.8/85.6) instead of just 2.
+- 2025 EDGE top 5: Garrett, Parsons, Sweat, Muhammad, Bonitto, Burns.
+- 2024 EDGE top 5: Hendrickson, Garrett, Anderson, Parsons, Bonitto.
+- 2023 EDGE top 5: Bryce Huff (DPOY runner-up), T.J. Watt, Hendrickson, Hines-Allen, Greenard.
+
+All consensus elite pass rushers now appear in the EDGE leaderboard.
+
+**Why this works data-side without new ingest:** `pfr_def_lb` was already populated for all LB-tagged players with PFR pass-rush data starting in 2018. The fix is purely a query-side change to the EDGE grader. No migration, no re-ingest, ~30 lines of SQL added.

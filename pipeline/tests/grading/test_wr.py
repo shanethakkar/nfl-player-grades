@@ -75,8 +75,10 @@ def _synth_features(
         ]
     )
 
-    n_fumbles = rng.integers(0, 2, size=n_total)
-    fumble_rate = n_fumbles.astype(float) / np.maximum(n_receptions, 1)
+    # FTN drop charting (2022+): catchable ≈ targets * 0.78, drops 0-5.
+    n_catchable_balls = (n_targets * 0.78).astype(int)
+    n_drops = rng.integers(0, 6, size=n_total)
+    drop_rate = n_drops.astype(float) / np.maximum(n_catchable_balls, 1)
 
     skill = np.concatenate(
         [
@@ -106,13 +108,14 @@ def _synth_features(
             "n_receptions": n_receptions.astype(int),
             "n_rec_with_xyac": n_rec_with_xyac.astype(int),
             "n_team_pass_att_active": n_team_pass_att_active.astype(int),
-            "n_fumbles": n_fumbles.astype(int),
+            "n_catchable_balls": n_catchable_balls.astype(int),
+            "n_drops": n_drops.astype(int),
             "rec_epa_per_target": rec_epa,
             "success_rate_per_target": success_rate,
             "yac_over_expected_per_rec": yac_over_exp,
             "separation": separation,
             "target_earn_rate": target_earn_rate,
-            "fumble_rate": fumble_rate,
+            "drop_rate": drop_rate,
         }
     )
 
@@ -147,9 +150,9 @@ class TestComputeGrades:
             "raw_wr_success_rate_per_target",
             "adjusted_wr_success_rate_per_target",
             "z_wr_success_rate_per_target",
-            "raw_wr_fumble_rate",
-            "adjusted_wr_fumble_rate",
-            "z_wr_fumble_rate",
+            "raw_wr_drop_rate",
+            "adjusted_wr_drop_rate",
+            "z_wr_drop_rate",
         }
         missing = expected - set(graded.columns)
         assert not missing, f"missing columns: {missing}"
@@ -186,16 +189,17 @@ class TestComputeGrades:
         )
         assert 0 <= subject["grade"] <= 100
 
-    def test_fumble_penalty_hurts_composite(self) -> None:
-        """Two otherwise-identical WRs — the fumbler should grade
-        below the clean one because fumble rate enters with a negative
-        weight."""
+    def test_drop_penalty_hurts_composite(self) -> None:
+        """Two otherwise-identical WRs — the dropper should grade
+        below the clean-hands one because drop rate enters with a
+        negative weight."""
         base = _synth_features(seed=5).iloc[:2].copy().reset_index(drop=True)
         for col in (
             "n_targets",
             "n_receptions",
             "n_rec_with_xyac",
             "n_team_pass_att_active",
+            "n_catchable_balls",
             "rec_epa_per_target",
             "success_rate_per_target",
             "yac_over_expected_per_rec",
@@ -203,10 +207,10 @@ class TestComputeGrades:
             "target_earn_rate",
         ):
             base.loc[1, col] = base.loc[0, col]
-        base.loc[0, "fumble_rate"] = 0.002
-        base.loc[1, "fumble_rate"] = 0.050
-        base.loc[0, "n_fumbles"] = 0
-        base.loc[1, "n_fumbles"] = 3
+        base.loc[0, "drop_rate"] = 0.005
+        base.loc[1, "drop_rate"] = 0.120
+        base.loc[0, "n_drops"] = 0
+        base.loc[1, "n_drops"] = 8
 
         extras = _synth_features(seed=6).iloc[:8]
         full = pd.concat([base, extras], ignore_index=True)
@@ -214,8 +218,8 @@ class TestComputeGrades:
 
         graded = compute_grades(full)
         clean = graded.iloc[0]
-        fumbler = graded.iloc[1]
-        assert clean["grade"] > fumbler["grade"]
+        dropper = graded.iloc[1]
+        assert clean["grade"] > dropper["grade"]
 
     def test_skill_monotonic_within_wr1s(self) -> None:
         """First n_wr1 rows are WR1s in descending skill order — best
@@ -297,13 +301,14 @@ class TestExtractFeatures:
             "n_receptions",
             "n_rec_with_xyac",
             "n_team_pass_att_active",
-            "n_fumbles",
+            "n_catchable_balls",
+            "n_drops",
             "rec_epa_per_target",
             "success_rate_per_target",
             "yac_over_expected_per_rec",
             "separation",
             "target_earn_rate",
-            "fumble_rate",
+            "drop_rate",
         }
         assert expected.issubset(df.columns)
 
@@ -373,12 +378,17 @@ class TestExtractFeatures:
             f"({total_xyac}/{total_recs}) over WRs with 30+ receptions"
         )
 
-    def test_fumble_totals_are_sane(self, conn, has_2024_wr_data) -> None:
-        """WR fumble totals land in a plausible band. Guards against
-        `fumble` quietly collapsing to all-NULL."""
+    def test_drop_totals_are_sane(self, conn, has_2024_wr_data) -> None:
+        """WR drop totals land in a plausible band when FTN data is
+        present (2022+). Guards against ftn_receiving_charting not
+        being ingested for this season."""
         df = extract_features(conn, 2024)
-        total = int(df["n_fumbles"].sum())
-        assert 5 <= total <= 200, f"WR fumble total out of band: {total}"
+        # FTN data joined via player_id; skip if local DB has no FTN
+        # ingestion (matches WR v1.1 NaN-neutralization for pre-2022).
+        if df["n_catchable_balls"].sum() == 0:
+            pytest.skip("ftn_receiving_charting not ingested for 2024")
+        total = int(df["n_drops"].sum())
+        assert 50 <= total <= 500, f"WR drop total out of band: {total}"
 
     def test_target_earn_rate_distribution(self, conn, has_2024_wr_data) -> None:
         """Target earn rate should have a sensible distribution for

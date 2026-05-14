@@ -1,7 +1,10 @@
-"""TE v1 grading pipeline (ADR-0016).
+"""TE v1.1 grading pipeline (ADR-0016 revised 2026-05-14).
 
 Structure matches WR v1, with TE role labels, per-role ``data_tier`` / ``data_tier_reason``,
 and a blocking-TE composite that omits target earn (weight redistributed to EPA + YAC).
+
+v1.1: removed ``te_fumble_rate`` (noise), added ``te_drop_rate`` (FTN charting, 2022+).
+Pre-2022 seasons NaN-neutralize the drop component.
 """
 
 from __future__ import annotations
@@ -109,10 +112,7 @@ _FEATURES_SQL = text(f"""
             AVG(pl.epa) FILTER (WHERE pl.receiver_player_id IS NOT NULL)
                 AS rec_epa_per_target,
             AVG(pl.success::int) FILTER (WHERE pl.receiver_player_id IS NOT NULL)
-                AS success_rate_per_target,
-            COUNT(*) FILTER (
-                WHERE pl.receiver_player_id IS NOT NULL AND pl.fumble
-            ) AS n_fumbles
+                AS success_rate_per_target
         FROM tes t
         LEFT JOIN plays pl
           ON pl.receiver_player_id = t.gsis_id
@@ -184,7 +184,8 @@ _FEATURES_SQL = text(f"""
         COALESCE(earn_rate_agg.n_team_pass_att_active, 0)
             AS n_team_pass_att_active,
         COALESCE(snap_agg.snaps_offense, 0)          AS snaps_offense,
-        rec_agg.n_fumbles,
+        COALESCE(ftn.catchable_balls, 0)             AS n_catchable_balls,
+        ftn.drops                                    AS n_drops,
         rec_agg.rec_epa_per_target,
         rec_agg.success_rate_per_target,
         rec_yac_agg.yac_over_expected_per_rec,
@@ -196,14 +197,16 @@ _FEATURES_SQL = text(f"""
             rec_agg.n_targets::float
                 / earn_rate_agg.n_team_pass_att_active
         END AS target_earn_rate,
-        CASE WHEN rec_agg.n_receptions > 0 THEN
-            rec_agg.n_fumbles::float / rec_agg.n_receptions
-        END AS fumble_rate
+        CASE WHEN ftn.catchable_balls > 0 THEN
+            ftn.drops::float / ftn.catchable_balls
+        END AS drop_rate
     FROM rec_agg
     LEFT JOIN rec_yac_agg USING (player_id)
     LEFT JOIN earn_rate_agg USING (player_id)
     LEFT JOIN ngs_sep_agg USING (player_id)
     LEFT JOIN snap_agg USING (player_id)
+    LEFT JOIN ftn_receiving_charting ftn
+        ON ftn.player_id = rec_agg.player_id AND ftn.season = :season
     WHERE rec_agg.n_targets >= :min_targets
 """)
 
@@ -248,7 +251,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         "yac_over_expected_per_rec",
         "separation",
         "target_earn_rate",
-        "fumble_rate",
+        "drop_rate",
     )
     for col in float_cols:
         if col in df.columns:
@@ -259,7 +262,8 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         "n_receptions",
         "n_rec_with_xyac",
         "n_team_pass_att_active",
-        "n_fumbles",
+        "n_catchable_balls",
+        "n_drops",
         "snaps_offense",
     )
     for col in int_cols:

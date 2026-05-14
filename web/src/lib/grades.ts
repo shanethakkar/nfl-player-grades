@@ -434,12 +434,13 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Share of targets that stay on schedule (positive EPA). A consistency metric.",
     sampleNoun: "target",
   },
-  te_fumble_rate: {
-    label: "Fumble rate",
+  te_drop_rate: {
+    label: "Drop rate",
     suffix: "%",
-    formatValue: pctFraction(2),
-    description: "Fumbles per reception.",
-    sampleNoun: "reception",
+    formatValue: pctFraction(1),
+    description:
+      "Drops per catchable target. FTN charting (2022+). Light weight: YoY signal is modest (mean r ≈ +0.13) but cross-sectional discrimination and face-check are real.",
+    sampleNoun: "catchable ball",
   },
 };
 
@@ -595,20 +596,20 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   rb_rec_epa_per_target:    0.18,
   rb_yac_over_expected_per_rec: 0.15,
   rb_fumble_rate:          -0.05,
-  // WR v1.1 (ADR-0015 revised)
+  // WR v1.2 (ADR-0015 revised) — drop_rate lowered to -0.05 (matches TE)
   wr_rec_epa_per_target:    0.35,
   wr_yac_over_expected_per_rec: 0.27,
   wr_separation:            0.10,
   wr_target_earn_rate:      0.10,
   wr_success_rate_per_target: 0.08,
-  wr_drop_rate:            -0.08,
-  // TE v1 receiving/balanced path (ADR-0016)
+  wr_drop_rate:            -0.05,
+  // TE v1.1 (ADR-0016 revised) — drop_rate replaces fumble_rate at -0.05
   te_rec_epa_per_target:    0.35,
   te_yac_over_expected_per_rec: 0.27,
   te_separation:            0.07,
   te_target_earn_rate:      0.10,
   te_success_rate_per_target: 0.08,
-  te_fumble_rate:          -0.05,
+  te_drop_rate:            -0.05,
   // CB v1.1 (ADR-0018 revised) — passer rating allowed replaces comp%+INT
   cb_passer_rating_allowed: -0.35,
   cb_yac_per_rec_allowed:   -0.15,
@@ -647,7 +648,7 @@ const TE_BLOCKING_WEIGHTS: Record<string, number> = {
   te_yac_over_expected_per_rec: 0.314,
   te_separation:                0.07,
   te_success_rate_per_target:   0.08,
-  te_fumble_rate:              -0.05,
+  te_drop_rate:                -0.05,
 };
 
 /** Weight of a component in the composite, or null if not in the formula. */

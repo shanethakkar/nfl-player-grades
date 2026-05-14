@@ -83,7 +83,7 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
 **Why a target-rate filter, not a raw-target threshold:** A raw threshold like "targets >= 20" lets pass-rush OLBs sneak through on incidental zone drops. Example: Andrew Van Ginkel 2024 had 22 targets (just above a 20 threshold) but only 922 snaps — a 2.4% target rate. Pure off-ball LBs run 5-9% target rate regardless of total snap count. The 3.5% threshold cleanly separates the two cohorts.
 
-Players failing the filter are **not graded as LB** for that season. They may or may not be graded as EDGE depending on their EDGE-eligibility (`position_played = 'EDGE'` is required; LB-classified pass rushers like T.J. Watt are not graded by any position grader in v1 — same gap noted in ADR-0020).
+Players failing the LB filter are **not graded as LB** for that season. They flow to the EDGE grader instead via the OLB-gap closure branch added in ADR-0020 v1.1 (2026-05-14): the EDGE grader UNIONs `pfr_def_lb` rows where `position_played='LB'`, `pressures ≥ 25`, and `target_rate < 3.5%`. The thresholds are mutually exclusive with the LB filter, so no player is graded twice.
 
 ---
 
@@ -117,7 +117,7 @@ Expected YoY r band: 0.35-0.50. Wider/lower than offensive skill positions. Belo
 
 **Some recognizable LBs may grade lower than fan/expert consensus.** Fred Warner and Roquan Smith both had statistically below-average 2024 seasons relative to their peaks; our formula reflects the stats, not reputation. This is a feature, not a bug, but worth noting for users surprised by individual rankings.
 
-**Pass-rush OLB classification gap (carried from ADR-0020):** T.J. Watt, Micah Parsons, Haason Reddick, etc. are not graded by any v1 position grader. Addressed when manual depth-chart role data or improved nflverse classification becomes available.
+**Pass-rush OLB classification gap (carried from ADR-0020):** ~~Original v1 limitation~~ — **closed 2026-05-14**. T.J. Watt, Micah Parsons, Brian Burns, Nik Bonitto, Jared Verse, Josh Sweat, and ~25 others per season are now graded as EDGE via the OLB-gap closure branch in ADR-0020 v1.1.
 
 ---
 

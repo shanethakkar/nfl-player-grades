@@ -104,6 +104,7 @@ def run(season: int) -> RunResult:
 # ---------------------------------------------------------------------------
 
 _FEATURES_SQL = text("""
+    -- Primary branch: EDGE-tagged players in pfr_def_pass_rush.
     SELECT
         pr.player_id,
         p.full_name,
@@ -125,6 +126,39 @@ _FEATURES_SQL = text("""
     WHERE pr.season = :season
       AND ps.position_played = 'EDGE'
       AND COALESCE(ps.snaps_defense, 0) >= :min_snaps
+
+    UNION ALL
+
+    -- OLB-gap closure branch: LB-tagged pass-rush OLBs.
+    -- nflverse classifies many 3-4 edge rushers (T.J. Watt, Micah Parsons,
+    -- Brian Burns, Nik Bonitto, etc.) as LB. Our LB grader filters them out
+    -- via target_rate >= 3.5% (they don't drop into coverage), so without
+    -- this branch they'd be ungraded entirely.
+    -- Criteria: position_played='LB', has PFR pass-rush data, real pass-rush
+    -- production (>=25 pressures), low coverage usage (target_rate < 3.5%).
+    SELECT
+        lb.player_id,
+        p.full_name,
+        p.gsis_id,
+        COALESCE(ps.snaps_defense, 0)   AS snaps_defense,
+        COALESCE(lb.pressures, 0)        AS pressures,
+        COALESCE(lb.sacks, 0)            AS sacks,
+        COALESCE(lb.comb_tackles, 0)     AS comb_tackles,
+        lb.missed_tackles,
+        lb.tfl
+    FROM pfr_def_lb lb
+    JOIN players p ON p.player_id = lb.player_id
+    LEFT JOIN (
+        SELECT DISTINCT ON (player_id) player_id, snaps_defense, team_id, position_played
+        FROM player_seasons
+        WHERE season = :season
+        ORDER BY player_id, snaps_defense DESC
+    ) ps ON ps.player_id = lb.player_id
+    WHERE lb.season = :season
+      AND ps.position_played = 'LB'
+      AND COALESCE(ps.snaps_defense, 0) >= :min_snaps
+      AND COALESCE(lb.pressures, 0) >= 25
+      AND COALESCE(lb.targets, 0)::float / GREATEST(COALESCE(ps.snaps_defense, 1), 1) < 0.035
 """)
 
 

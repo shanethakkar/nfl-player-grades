@@ -46,7 +46,7 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "wr_separation",                 weight:  0.10 },
     { name: "wr_target_earn_rate",           weight:  0.10 },
     { name: "wr_success_rate_per_target",    weight:  0.08 },
-    { name: "wr_drop_rate",                  weight: -0.08 },
+    { name: "wr_drop_rate",                  weight: -0.05 },
   ],
   TE: [
     { name: "te_rec_epa_per_target",         weight:  0.35 },
@@ -54,7 +54,7 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "te_separation",                 weight:  0.07 },
     { name: "te_target_earn_rate",           weight:  0.10 },
     { name: "te_success_rate_per_target",    weight:  0.08 },
-    { name: "te_fumble_rate",                weight: -0.05 },
+    { name: "te_drop_rate",                  weight: -0.05 },
   ],
   CB: [
     { name: "cb_passer_rating_allowed", weight: -0.35 },
@@ -164,7 +164,7 @@ export default async function MethodologyPage() {
       position: "EDGE",
       headline: "Edge rusher",
       components: POSITION_COMPONENTS.EDGE,
-      availabilityNote: "Data available from 2018. 3-4 OLBs (e.g. T.J. Watt) are classified as LB in the source data and excluded — a known gap addressed in v2.",
+      availabilityNote: "Data available from 2018. Includes both DE/EDGE-tagged players and 3-4 OLB pass rushers (T.J. Watt, Micah Parsons, Brian Burns, etc.) who are tagged as LB in nflverse but have a pass-rush role (≥25 pressures, target rate <3.5%).",
       top: edgeTop,
     },
     {
@@ -178,7 +178,7 @@ export default async function MethodologyPage() {
       position: "LB",
       headline: "Off-ball linebacker",
       components: POSITION_COMPONENTS.LB,
-      availabilityNote: "Data available from 2018. Filtered to off-ball LB (def target rate ≥ 3.5%) — pass-rush OLBs misclassified as LB (T.J. Watt, Micah Parsons, Andrew Van Ginkel) are excluded. Qualified threshold is 600 snaps (vs 400 for other defensive positions) to suppress rotational specialists. LB grades are noisier YoY than QB/WR grades.",
+      availabilityNote: "Data available from 2018. Filtered to off-ball LB (def target rate ≥ 3.5%). LB-tagged pass-rush OLBs (T.J. Watt, Micah Parsons, etc.) are graded as EDGE instead. Qualified threshold is 600 snaps (vs 400 for other defensive positions) to suppress rotational specialists. LB grades are noisier YoY than QB/WR grades.",
       top: lbTop,
     },
   ];

@@ -34,8 +34,10 @@ def _synth_te_cohort(
     n_receptions = (n_targets * 0.68).astype(int)
     n_rec_with_xyac = n_receptions
     n_team_pass = (n_targets * rng.uniform(3.0, 6.0)).astype(int)
-    n_f = rng.integers(0, 2, size=n)
-    fumble_rate = n_f / np.maximum(n_receptions, 1)
+    # FTN drop charting (2022+): catchable balls ≈ targets * 0.75, drops 0-4.
+    n_catchable = (n_targets * 0.75).astype(int)
+    n_drops = rng.integers(0, 4, size=n)
+    drop_rate = n_drops / np.maximum(n_catchable, 1)
     skill = np.linspace(1.0, -0.5, n)
     rec_epa = 0.12 + 0.08 * skill
     yac_oe = 0.1 * skill
@@ -47,6 +49,7 @@ def _synth_te_cohort(
         n_receptions[i] = 16
         n_rec_with_xyac[i] = 16
         n_team_pass[i] = 550
+        n_catchable[i] = 19
     df = pd.DataFrame(
         {
             "player_id": range(1, n + 1),
@@ -57,13 +60,14 @@ def _synth_te_cohort(
             "n_rec_with_xyac": n_rec_with_xyac,
             "n_team_pass_att_active": n_team_pass,
             "snaps_offense": snaps,
-            "n_fumbles": n_f,
+            "n_catchable_balls": n_catchable,
+            "n_drops": n_drops,
             "rec_epa_per_target": rec_epa,
             "yac_over_expected_per_rec": yac_oe,
             "success_rate_per_target": succ,
             "separation": sep,
             "target_earn_rate": n_targets / np.maximum(n_team_pass, 1),
-            "fumble_rate": fumble_rate,
+            "drop_rate": drop_rate,
         }
     )
     df["role"] = [

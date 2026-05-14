@@ -58,7 +58,7 @@ export type DepthChartEntry = DepthChartsRow;
  *        (rb_catch_pct removed v1.1 — confirmed noise)
  *   WR → n_targets, rec_epa_per_target, yac_over_expected_per_rec,
  *        separation, success_rate_per_target, target_earn_rate, drop_rate
- *   TE → same as WR (still uses fumble_rate, see ADR-0016)
+ *   TE → same as WR (drop_rate added v1.1, replacing fumble_rate — ADR-0016)
  *   CB → n_targets, cb_passer_rating_allowed, cb_yac_per_rec_allowed,
  *        cb_target_rate, cb_pbu_rate,
  *        plus `role` (outside_cb / hybrid_cb / slot_cb)
@@ -104,15 +104,13 @@ export type LeaderboardEntry = {
   rb_fumble_rate: number | null;
   // --- WR / TE columns (position-agnostic names; underlying component is
   // wr_* or te_* depending on sg.position) ---
-  // fumble_rate is populated only for TE (WR v1.1 dropped it as noise);
-  // drop_rate is populated only for WR (no TE drop data).
+  // drop_rate from FTN charting (2022+), used by both WR (v1.2) and TE (v1.1).
   n_targets: number | null;
   rec_epa_per_target: number | null;
   yac_over_expected_per_rec: number | null;
   separation: number | null;
   success_rate_per_target: number | null;
   target_earn_rate: number | null;
-  fumble_rate: number | null;
   drop_rate: number | null;
   // --- CB columns ---
   cb_passer_rating_allowed: number | null;

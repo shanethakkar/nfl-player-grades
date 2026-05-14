@@ -119,15 +119,24 @@ RB_V1_CONFIDENCE_FULL_TOUCHES: int = 250
 
 
 # ---------------------------------------------------------------------------
-# WR v1.1 (ADR-0015, revised 2026-05-14).
+# WR v1.2 (ADR-0015, revised 2026-05-14).
 # ---------------------------------------------------------------------------
-# v1.1 changes:
-#   - Added wr_drop_rate (-0.08) from FTN per-play charting joined to PBP.
+# v1.1 changes (shipped earlier 2026-05-14):
+#   - Added wr_drop_rate from FTN per-play charting joined to PBP.
 #     Captures hands/ball-skills, the only real gap in v1's skill coverage.
 #   - Removed wr_fumble_rate (-0.05). YoY r oscillates around 0 (-0.26, +0.09,
 #     -0.40, +0.27 across 2020-2024), 90% of qualified WRs had ≤1 fumble.
-#     Pure noise at WR sample sizes. Fumbles still penalized implicitly via
-#     EPA (a fumble = negative EPA play).
+#     Pure noise at WR sample sizes.
+#
+# v1.2 change (TE v1.1 self-audit, same day):
+#   - Lowered wr_drop_rate from -0.08 → -0.05. v1.1 added it without running
+#     the YoY noise check; when run after the fact, drop_rate YoY mean r
+#     across 2022-2025 was +0.09 — statistically indistinguishable from the
+#     fumble rate we removed. By the methodology's own threshold
+#     (|r| < 0.20 → "weight tiny ≤0.05 or remove"), -0.08 was over-weighted.
+#     Light weight is justified by (a) face-check (Pickens/McLaurin
+#     consistent across years), (b) low correlation with other components,
+#     (c) measurement-error suppression at low catchable-ball denominators.
 #
 # FTN drop data starts 2022; for 2016-2021 the drop_rate component is
 # NaN-neutralized to 0 contribution (grade comes from the other 5
@@ -141,15 +150,15 @@ WR_COMPONENT_TARGET_EARN_RATE: str = "wr_target_earn_rate"
 WR_COMPONENT_SUCCESS_RATE_PER_TARGET: str = "wr_success_rate_per_target"
 WR_COMPONENT_DROP_RATE: str = "wr_drop_rate"
 
-# Sum |abs| = 0.98 (combiner normalizes).
-# Shape: 62% outcome (EPA + YAC), 28% process + usage, 8% hands (negative).
+# Sum |abs| = 0.95 (combiner normalizes).
+# Shape: 65% outcome (EPA + YAC), 29% process + usage, 5% hands (negative).
 WR_V1_WEIGHTS: dict[str, float] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: 0.35,
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.27,
     WR_COMPONENT_SEPARATION: 0.10,
     WR_COMPONENT_TARGET_EARN_RATE: 0.10,
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
-    WR_COMPONENT_DROP_RATE: -0.08,
+    WR_COMPONENT_DROP_RATE: -0.05,
 }
 
 # Empirical Bayes shrinkage strengths.
@@ -207,17 +216,35 @@ WR_V1_CONFIDENCE_FULL_TARGETS: int = 100
 
 
 # ---------------------------------------------------------------------------
-# TE v1 (ADR-0016).
+# TE v1.1 (ADR-0016, revised 2026-05-14).
 # ---------------------------------------------------------------------------
+# v1.1 changes:
+#   - Removed te_fumble_rate (-0.05). YoY mean r = +0.08 across 2020-2025
+#     (oscillates: +0.01, +0.20, +0.07, -0.25, +0.36). ~50% of qualified
+#     TEs have 0 fumbles in a season, max 3. Same noise pattern as WR
+#     fumble rate (removed in WR v1.1).
+#   - Added te_drop_rate from FTN per-play charting at weight -0.05. YoY
+#     mean r = +0.13 across 2022-2025 (modest signal, weaker than the
+#     0.20 threshold but stronger than fumble rate's signal). Light weight
+#     justified by face-check + independence from other components + the
+#     measurement-error caveat at low catchable-ball denominators.
+#
+# Symmetric with WR v1.2 (also at -0.05). The TE-specific intuition that
+# hands matter more than for WRs isn't supported by YoY data — the gap
+# (+0.13 vs +0.09) is within noise at n~30 pairs.
+#
+# FTN drop data starts 2022; for 2016-2021 the drop_rate component is
+# NaN-neutralized to 0 contribution (grade comes from the other 5
+# components only).
 
 TE_COMPONENT_REC_EPA_PER_TARGET: str = "te_rec_epa_per_target"
 TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "te_yac_over_expected_per_rec"
 TE_COMPONENT_SEPARATION: str = "te_separation"
 TE_COMPONENT_TARGET_EARN_RATE: str = "te_target_earn_rate"
 TE_COMPONENT_SUCCESS_RATE_PER_TARGET: str = "te_success_rate_per_target"
-TE_COMPONENT_FUMBLE_RATE: str = "te_fumble_rate"
+TE_COMPONENT_DROP_RATE: str = "te_drop_rate"
 
-# Sum of |weights| = 0.95. Separation 7% (vs WR 10%) — NGS metric is
+# Sum of |weights| = 0.92. Separation 7% (vs WR 10%) — NGS metric is
 # WR-geometry-calibrated; TE matchups are noisier in the same number.
 TE_V1_WEIGHTS: dict[str, float] = {
     TE_COMPONENT_REC_EPA_PER_TARGET: 0.35,
@@ -225,7 +252,7 @@ TE_V1_WEIGHTS: dict[str, float] = {
     TE_COMPONENT_SEPARATION: 0.07,
     TE_COMPONENT_TARGET_EARN_RATE: 0.10,
     TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
-    TE_COMPONENT_FUMBLE_RATE: -0.05,
+    TE_COMPONENT_DROP_RATE: -0.05,
 }
 
 # Blocking-TE (role) path: omit earn in composite; redistribute 0.10 to
@@ -235,18 +262,20 @@ TE_V1_BLOCKING_WEIGHTS: dict[str, float] = {
     TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.314,
     TE_COMPONENT_SEPARATION: 0.07,
     TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
-    TE_COMPONENT_FUMBLE_RATE: -0.05,
+    TE_COMPONENT_DROP_RATE: -0.05,
 }
 
 # Per-position shrinkage: TE target earn k=100 (vs WR 200) for smaller
-# cross-player dispersion in earn-rate.
+# cross-player dispersion in earn-rate. Drop_rate k=30 — TE catchable-ball
+# denominators (median ~47) are smaller than WR (~75), so light shrinkage
+# avoids over-rewarding "0 drops on 27 catchable balls" noise.
 TE_V1_SHRINKAGE_K: dict[str, float] = {
     TE_COMPONENT_REC_EPA_PER_TARGET: 50.0,
     TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 30.0,
     TE_COMPONENT_SEPARATION: 40.0,
     TE_COMPONENT_TARGET_EARN_RATE: 100.0,
     TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 50.0,
-    TE_COMPONENT_FUMBLE_RATE: 100.0,
+    TE_COMPONENT_DROP_RATE: 30.0,
 }
 
 TE_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
@@ -255,7 +284,8 @@ TE_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     TE_COMPONENT_SEPARATION: "n_targets",
     TE_COMPONENT_TARGET_EARN_RATE: "n_team_pass_att_active",
     TE_COMPONENT_SUCCESS_RATE_PER_TARGET: "n_targets",
-    TE_COMPONENT_FUMBLE_RATE: "n_receptions",
+    # NaN for pre-2022 seasons (FTN coverage gap).
+    TE_COMPONENT_DROP_RATE: "n_catchable_balls",
 }
 
 TE_V1_RAW_VALUE_COLS: dict[str, str] = {
@@ -264,7 +294,7 @@ TE_V1_RAW_VALUE_COLS: dict[str, str] = {
     TE_COMPONENT_SEPARATION: "separation",
     TE_COMPONENT_TARGET_EARN_RATE: "target_earn_rate",
     TE_COMPONENT_SUCCESS_RATE_PER_TARGET: "success_rate_per_target",
-    TE_COMPONENT_FUMBLE_RATE: "fumble_rate",
+    TE_COMPONENT_DROP_RATE: "drop_rate",
 }
 
 # Role labels stored on season_grades.role (app convention).

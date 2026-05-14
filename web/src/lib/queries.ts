@@ -178,15 +178,15 @@ async function _getLeaderboard(
   if (position === "WR" || position === "TE") {
     // WR/TE share the same headline columns (same component names modulo
     // the wr_/te_ prefix). Branch on prefix rather than duplicating the
-    // outer scaffolding. The "ball security" slot differs by position:
-    // WR v1.1 uses drop_rate (from FTN); TE v1 still uses fumble_rate.
+    // outer scaffolding. Both positions now use drop_rate (FTN) as the
+    // "hands" slot — WR v1.2 + TE v1.1 (2026-05-14).
     const prefix = position === "WR" ? "wr" : "te";
     const cEpa  = `${prefix}_rec_epa_per_target`;
     const cYac  = `${prefix}_yac_over_expected_per_rec`;
     const cSep  = `${prefix}_separation`;
     const cSucc = `${prefix}_success_rate_per_target`;
     const cEarn = `${prefix}_target_earn_rate`;
-    const cBallSec = position === "WR" ? "wr_drop_rate" : "te_fumble_rate";
+    const cBallSec = `${prefix}_drop_rate`;
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -207,8 +207,7 @@ async function _getLeaderboard(
         sc_sep.raw_value        AS separation,
         sc_succ.raw_value       AS success_rate_per_target,
         sc_earn.raw_value       AS target_earn_rate,
-        CASE WHEN sg.position = 'TE' THEN sc_ball.raw_value END AS fumble_rate,
-        CASE WHEN sg.position = 'WR' THEN sc_ball.raw_value END AS drop_rate
+        sc_ball.raw_value       AS drop_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -1037,7 +1036,6 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     separation: coerceNullableNumber(row.separation),
     success_rate_per_target: coerceNullableNumber(row.success_rate_per_target),
     target_earn_rate: coerceNullableNumber(row.target_earn_rate),
-    fumble_rate: coerceNullableNumber(row.fumble_rate),
     drop_rate: coerceNullableNumber(row.drop_rate),
     // CB-only
     cb_passer_rating_allowed: coerceNullableNumber(row.cb_passer_rating_allowed),

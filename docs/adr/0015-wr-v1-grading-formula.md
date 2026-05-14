@@ -1,6 +1,6 @@
 # 0015 - WR v1 grading formula
 
-- **Status**: Accepted (v1.1 revision — 2026-05-14)
+- **Status**: Accepted (v1.2 revision — 2026-05-14)
 - **Date**: 2026-04-22
 - **Supersedes**: None
 - **Companion to**: ADR-0013 (QB v1), ADR-0014 (RB v1). Same pipeline
@@ -352,3 +352,23 @@ and a new row in the weights dicts; no schema change.
 **New schema:** Migration `0014_ftn_receiving_charting.sql` creates `ftn_receiving_charting` (player_id, season, catchable_balls, drops, contested_balls, created_receptions). Ingest module: `pipeline/src/nfl_grades/ingest/ftn_receiving.py`.
 
 **Research notes:** Audit also considered WOPR (correlated 0.95 with target_share — redundant), RACR (target-depth artifact, not skill), NGS `avg_cushion` and `avg_intended_air_yards` (usage markers, not skills), and contested catch rate (correlated −0.71 with separation). None of these added meaningful independent signal. YPRR and CROE were considered but neither has source data in nflverse.
+
+### v1.2 (2026-05-14) — lower drop_rate weight from −0.08 to −0.05
+
+**Triggered by the TE v1.1 audit.** When auditing whether to add `te_drop_rate` for TE v1.1, we ran the YoY noise check on WR drop_rate after the fact — which v1.1 had skipped. Result across 2022-2025 qualified WRs (catchable_balls ≥ 50):
+
+| Pair | n | r |
+|---|---|---|
+| 2022→2023 | 42 | +0.27 |
+| 2023→2024 | 40 | −0.12 |
+| 2024→2025 | 37 | +0.10 |
+
+Mean YoY r = **+0.09** — statistically indistinguishable from the WR fumble rate we removed (mean −0.07). By the methodology's own rule (`reference_grading_methodology.md` Step 3: |r| < 0.20 → "weight tiny ≤ 0.05 or remove"), the v1.1 weight of −0.08 was over-weighted. The original v1.1 justification leaned on correlation independence + face-check, both of which still hold — but those only justify *inclusion at light weight*, not heavy weight.
+
+**Why not remove entirely:** the metric still has real cross-sectional discrimination (std ~3%, max ~16%), captures a skill no other component covers, and face-checks correctly. At small per-player denominators (catchable median ~75), YoY r is mechanically depressed by measurement error even if the underlying skill is stable — so the face-check is stronger evidence than YoY r here. Light weight (−0.05) captures the real signal without overclaiming.
+
+**Sum |weights| changes 0.98 → 0.95.** Other components unchanged. Re-graded WRs 2016-2025 on Neon. Expected impact: ≤1 grade-point shift per player for most WRs; no major rank shuffles. The biggest deltas land on extreme outliers (heavy droppers ranked slightly higher; clean-hands WRs ranked slightly lower).
+
+**Symmetric with TE v1.1**, which also lands `te_drop_rate` at −0.05 for the same reason. See ADR-0016 and `memory/project_te_v1_1_research.md` for the full self-audit.
+
+**Follow-up:** before any more positions ship, run the YoY noise check across every component in every shipped position. The WR drop_rate gap means other components added without YoY verification may also be over-weighted. Tracked in `memory/project_pending_audits.md`.

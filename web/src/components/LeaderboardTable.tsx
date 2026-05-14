@@ -372,19 +372,9 @@ const WR_COLUMNS: SortableColumn[] = [
   },
 ];
 
-// TEs share WR's columns except the final ball-security slot: TE v1 still
-// uses fumble_rate (no FTN-equivalent for TE drops in our v1 scope).
-const TE_COLUMNS: SortableColumn[] = [
-  ...WR_COLUMNS.slice(0, -1),
-  {
-    key: "fumble_rate",
-    header: "Fum%",
-    hoverLabel: "Fumble Rate — fumbles per reception. Lower is better.",
-    defaultDir: "asc",
-    sortValue: (e) => e.fumble_rate,
-    render: (e) => fmtPct(e.fumble_rate, 2),
-  },
-];
+// TEs share the same columns as WRs: drop_rate (FTN charting) is the
+// hands slot for both positions as of TE v1.1 / WR v1.2 (2026-05-14).
+const TE_COLUMNS: SortableColumn[] = WR_COLUMNS;
 
 const CB_COLUMNS: SortableColumn[] = [
   {
