@@ -1,6 +1,6 @@
 # ADR-0021 — iDL v1 Grading Formula
 
-**Status:** Accepted (v1.1 revision 2026-05-14 — see *Revision History*)  
+**Status:** Accepted (v1.2 rebalance + tackle-volume add — 2026-05-14)
 **Date:** 2026-05-14
 
 ---
@@ -25,18 +25,19 @@ Same `pfr_def_pass_rush` table as EDGE — the ingest covers all DL (both iDL an
 
 ---
 
-## Components
+## Components (v1.2, 2026-05-14)
 
 | Component | Formula | Weight | Direction |
 |---|---|---|---|
-| `idl_tfl_rate` | tfl / snaps_defense | +0.35 | higher = better |
-| `idl_pressure_rate` | pressures / snaps_defense | +0.30 | higher = better |
-| `idl_sack_rate` | sacks / snaps_defense | +0.15 | higher = better |
-| `idl_missed_tackle_rate` | missed / (comb + missed) | −0.15 | lower = better |
+| `idl_pressure_rate` | pressures / snaps_defense | **+0.35** | higher = better |
+| `idl_tfl_rate` | tfl / snaps_defense | **+0.25** | higher = better |
+| `idl_sack_rate` | sacks / snaps_defense | **+0.20** | higher = better |
+| `idl_tackles_per_snap` | comb_tackles / snaps_defense | **+0.05** | higher = better |
+| `idl_missed_tackle_rate` | missed / (comb + missed) | −0.05 | lower = better |
 
-Sum |weights| = 0.95. Normalized dynamically by `composite.combine`.
+Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
-**Relative shares:** TFL 37%, pressure 32%, sack 16%, missed tackles −16%.
+**Relative shares:** pressure 39%, TFL 28%, sack 22%, tackles 6%, missed tackles −6%.
 
 ---
 
@@ -55,23 +56,26 @@ Sum |weights| = 0.95. Normalized dynamically by `composite.combine`.
 | Component | k | Rationale |
 |---|---|---|
 | tfl_rate | 300 snaps | Low per-snap frequency (~1–2%); needs heavy pull toward mean |
-| pressure_rate | 200 snaps | Moderate stability (r ≈ 0.5 YoY) |
+| pressure_rate | 200 snaps | Moderate stability (r ≈ 0.69 YoY — strong) |
 | sack_rate | 350 snaps | Rarer events; heavier pull toward mean |
+| tackles_per_snap | 200 snaps | Stable signal (YoY +0.516); matches pressure_rate's stability tier |
 | missed_tackle_rate | 100 tackle_attempts | Real skill signal; moderate shrinkage |
 
 ---
 
-## Design Rationale
+## Design Rationale (v1.2)
 
-**TFL rate dominant (37%):** Interior penetration that results in a TFL is the defining play for elite iDL players. Aaron Donald, Chris Jones, and Dexter Lawrence generate TFLs at rates well above average. Unlike EDGE where pass rush is the primary skill, for iDL the ability to defeat blocks and disrupt the run is the primary differentiator.
+**Pressure rate primary (39%):** The exhaustive audit (2026-05-14) revealed pressure_rate is both the most reliable iDL signal (YoY r = +0.689 vs TFL's +0.371) AND the most predictive of Pro Bowl voting (validity +0.460 vs TFL's +0.260). The original v1 design assumed "iDL = run-stop primarily," but modern Pro Bowl voting rewards the interior pass-rush archetype (Aaron Donald → Chris Jones → Quinnen Williams → Dexter Lawrence). v1.2 elevates pressure to the primary signal to match both reliability and voter consensus.
 
-**Pressure rate second (32%):** Interior pressure matters — collapsing the pocket forces quicker throws and disrupts timing. Weighted lower than TFL because interior pressure rates are structurally lower than EDGE pressure rates (the center and two guards all work against the same DT that only one tackle faces).
+**TFL rate secondary (28%):** Still a meaningful iDL signal — elite interior players DO generate TFLs at well-above-average rates, and run-stop is a genuine part of the job. Just not the most reliable or most voter-rewarded skill. Kept at substantial weight (28% vs EDGE's 16%) to preserve the design principle that iDL run-stop matters more than EDGE run-stop.
 
-**Sack rate third (16%):** Interior sacks are premium plays. Weighted substantially lower than EDGE (16% vs 33%) because structural sack rates are lower for iDL — Chris Jones had 38 pressures but only 5.5 sacks in a typical season. The position does generate interior sacks, but they're rarer by design.
+**Sack rate third (22%):** Validity audit returned +0.394 — the second-highest in the formula. v1.2 raised it from 15% to 22% to reflect this. Interior sacks remain rarer than EDGE sacks structurally, but the play, when it happens, is a premium signal of elite interior pass rush.
 
-**Missed tackle rate penalty (−16%):** Weighted slightly higher than EDGE (−16% vs −11%) because iDL make more tackles at the line of scrimmage where misses are especially costly. Symmetrically weighted with the sack component.
+**Tackles per snap (+0.05, v1.2 add):** Captures activity / chase-tackles that pressure/sack/TFL miss. The exhaustive audit found this is an independent signal (max correlation +0.532 with pressure_rate) with real validity (+0.281) and strong reliability (YoY +0.516). Voters reward iDLs who show up across the box score. Same finding as EDGE v1.2.
 
-**iDL vs EDGE weighting difference:** The key flip is TFL over pressure as the dominant component. EDGE rushers live primarily in the pass-rush role; iDL players are deployed equally in run and pass situations and must excel at both.
+**Missed tackle rate penalty (−5%):** Lowered from −0.15 → −0.05 in v1.1 (cross-position YoY audit) because YoY r = +0.080 — barely above noise. v1.2 audit confirms validity is weak (−0.125, sign correct). Kept at −0.05 on skill-tree grounds.
+
+**iDL vs EDGE weighting difference:** In v1.2 the two DL formulas have converged in structure (pressure-dominant) but diverge in TFL share: iDL at 28% vs EDGE at 16%. This is the right amount of differentiation — iDL run-stop matters more, just not enough to be the primary signal.
 
 ---
 
@@ -112,6 +116,39 @@ Same pattern as EDGE (see [ADR-0020 § Component Overlap](0020-edge-v1-grading-f
 ---
 
 ## Revision History
+
+### v1.2 (2026-05-14) — exhaustive audit rebalance + tackle-volume add
+
+Two-part change driven by the exhaustive candidate audit ([../grading/audits/2026-05-14-exhaustive-idl.md](../grading/audits/2026-05-14-exhaustive-idl.md)). Ten candidates were scored against four criteria.
+
+**(a) Rebalance of existing positive weights.** The audit revealed the v1.1 weights were MIS-ORDERED relative to both reliability and predictive validity:
+
+| | Weight order (v1.1) | Validity r | YoY r |
+|---|---|---:|---:|
+| Should be primary | tfl_rate (0.35) | +0.260 | +0.371 |
+| Should be secondary | pressure_rate (0.30) | **+0.460** | **+0.689** |
+| Tertiary | sack_rate (0.15) | +0.394 | +0.450 |
+
+The v1 design assumption "iDL = primarily run-stop TFL" reflected an older positional archetype. Modern Pro Bowl voting (Donald → Jones → Quinnen Williams → Dexter Lawrence) rewards interior pressure more, and the YoY data confirms pressure is also the more reliable signal. v1.2 reorders:
+
+- `idl_pressure_rate`: 0.30 → **0.35** (now primary)
+- `idl_tfl_rate`: 0.35 → **0.25** (de-emphasized but still meaningful)
+- `idl_sack_rate`: 0.15 → **0.20** (validity-justified bump)
+
+**(b) Add `idl_tackles_per_snap` at +0.05.** Independent signal (max correlation +0.532 with pressure_rate), real validity (+0.281), strong reliability (YoY +0.516). Same finding as EDGE v1.2 — tackle volume captures activity / chase-tackles that pressure/sack/TFL miss. Path B add (no new ingest — comb_tackles was already pulled by the iDL grader as the missed_tackle denominator); just added `tackles_per_snap = comb_tackles / snaps_defense` to extract_features.
+
+**Rejected candidates (documented in audit doc):**
+- `idl_qb_hits_per_snap` (+0.779 correlation with pressure_rate — sub-component)
+- `idl_hurries_per_snap` (+0.709 correlation with pressure_rate — sub-component)
+- `idl_sack_per_pressure` (YoY r = +0.008 — pure noise at iDL sample sizes; differs from EDGE where this had +0.122 YoY but was still rejected for subsumption)
+- `idl_hit_per_pressure` (validity −0.052, near-zero)
+- `idl_forced_fumble_per_snap` (YoY +0.096 below noise threshold; validity mostly co-occurrence with sack)
+
+**Validity gate:** iDL composite vs next-year Pro Bowl correlation **+0.457 → +0.475 (+0.018)**. **Biggest validity gain from any defensive audit so far.** The rebalance was the right call — voters reward what the data says they reward.
+
+**Face-check 2024:** Top 8 are all 2024 Pro Bowl / All-Pro caliber — Leonard Williams #1 (career year, 11 sacks), Dexter Lawrence (1st Team All-Pro), Chris Jones, Braden Fiske (DROY runner-up), DeForest Buckner, Cameron Heyward, Vita Vea, Quinnen Williams. Coherent.
+
+**Weight totals:** v1.1 sum |abs| = 0.85 → v1.2 sum |abs| = 0.90.
 
 ### v1.1 (2026-05-14) — `idl_missed_tackle_rate` weight lowered (noise)
 

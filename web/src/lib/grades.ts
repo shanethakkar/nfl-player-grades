@@ -400,6 +400,14 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Sacks per defensive snap. Premium pass-rush outcome — interior sacks are rarer than edge sacks but equally impactful.",
     sampleNoun: "defensive snap",
   },
+  idl_tackles_per_snap: {
+    label: "Tackles / snap",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Combined tackles per defensive snap. Captures activity level and chase-tackles — plays that don't show up as pressures, sacks, or TFLs but still measure real run-defense engagement.",
+    sampleNoun: "defensive snap",
+  },
   idl_missed_tackle_rate: {
     label: "Missed tackle rate",
     suffix: "%",
@@ -640,9 +648,10 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   edge_tfl_rate:                      0.15,
   edge_tackles_per_snap:              0.05,
   edge_missed_tackle_rate:           -0.10,
-  idl_tfl_rate:                       0.35,
-  idl_pressure_rate:                  0.30,
-  idl_sack_rate:                      0.15,
+  idl_pressure_rate:                  0.35,
+  idl_tfl_rate:                       0.25,
+  idl_sack_rate:                      0.20,
+  idl_tackles_per_snap:               0.05,
   idl_missed_tackle_rate:            -0.05,
   lb_tfl_rate:                        0.20,
   lb_passer_rating_allowed:          -0.27,

@@ -678,41 +678,61 @@ EDGE_V1_CONFIDENCE_FULL_SNAPS: int = 700
 
 
 # ---------------------------------------------------------------------------
-# iDL v1.1 (ADR-0021, revised 2026-05-14).
+# iDL v1.2 (ADR-0021, revised 2026-05-14 via exhaustive audit).
 # ---------------------------------------------------------------------------
 # Data sources: same pfr_def_pass_rush table as EDGE (both are DL).
-# TFL is the primary iDL differentiator; pass rush down-weighted vs EDGE.
 #
 # v1.1 (cross-position audit 2026-05-14): idl_missed_tackle_rate lowered
-# from -0.15 → -0.05. Mean YoY r = 0.080 across 2018-2025 (one of the
-# weakest signals in the entire system, below even WR/TE drop_rate at
-# ~0.13). At -0.15 weight this was disproportionate noise contribution to
-# the composite. Light weight bounds noise; not removed entirely because
-# missed-tackle technique still has *some* in-season signal (mean r 0.080
-# isn't zero, just low). Sum |w| drops 0.95 → 0.85; the combiner normalizes
-# so the three signal-strong positive components (tfl, pressure, sack) get
-# more effective weight. See project_cross_position_yoy_audit.md.
+# from -0.15 → -0.05.
 #
-# idl_tfl_rate (35%): run-stop TFLs per snap. Interior penetration is what
-#   separates elite DTs (Aaron Donald, Chris Jones) from average starters.
-# idl_pressure_rate (30%): total pressures per snap. Interior pressure
-#   counts but is rarer — an elite DT's pass-rush rate is lower than EDGE.
-# idl_sack_rate (15%): sacks per snap. Interior sacks are premium but
-#   structurally rarer than EDGE sacks; weighted lower than EDGE.
+# v1.2 (2026-05-14, exhaustive audit): two-part change.
+#
+# (a) Rebalance pressure/TFL/sack. The audit revealed weights were
+#     MIS-ORDERED vs predictive validity:
+#       Current weights: tfl 0.35 > pressure 0.30 > sack 0.15
+#       Pro Bowl validity: pressure +0.460 > sack +0.394 > tfl +0.260
+#     The original design assumed "iDL = primarily run-stop." Pro Bowl
+#     voters reward interior PRESSURE more (the Aaron Donald / Chris
+#     Jones / Quinnen Williams archetype that dominates modern Pro Bowl
+#     iDL selections). pressure_rate also has YoY +0.689 — substantially
+#     more reliable than tfl_rate (+0.371). The rebalance brings the
+#     formula in line with both validity and reliability.
+#
+# (b) Add idl_tackles_per_snap at +0.05. YoY +0.516, validity +0.281,
+#     max correlation +0.532 — independent signal. Same finding as EDGE
+#     v1.2: tackle volume captures activity / chase-tackles that
+#     pressure/sack/TFL miss. Voters reward iDLs who show up across the
+#     box score.
+#
+# Rejected new candidates: qb_hits_per_snap (+0.779 with pressure_rate,
+# subsumed), hurries_per_snap (+0.709 with pressure_rate), sack_per_pressure
+# (YoY +0.008 — pure noise at iDL sample sizes), hit_per_pressure (validity
+# -0.052, near-zero), forced_fumble_per_snap (YoY +0.096, rare-event noise).
+#
+# v1.2 weight breakdown:
+# idl_pressure_rate (37%): total pressures per snap. Now primary signal
+#   matching validity. Interior pressure is the modern iDL skill voters reward.
+# idl_tfl_rate (26%): run-stop TFLs per snap. De-prioritized but still real
+#   signal — iDL run-stop matters more than EDGE run-stop, just not the most.
+# idl_sack_rate (21%): sacks per snap. Validity +0.394 justified the bump.
+#   Premium event; intentional partial overlap with pressure_rate.
+# idl_tackles_per_snap (5%): combined tackles per snap. Activity-level signal.
 # idl_missed_tackle_rate (-5%): technique penalty, light weight per YoY noise.
 #
-# Sum |abs| = 0.85. Normalized dynamically by composite.combine.
+# Sum |abs| = 0.90. Normalized dynamically by composite.combine.
 # ---------------------------------------------------------------------------
 
 IDL_COMPONENT_TFL_RATE: str = "idl_tfl_rate"
 IDL_COMPONENT_PRESSURE_RATE: str = "idl_pressure_rate"
 IDL_COMPONENT_SACK_RATE: str = "idl_sack_rate"
+IDL_COMPONENT_TACKLES_PER_SNAP: str = "idl_tackles_per_snap"
 IDL_COMPONENT_MISSED_TACKLE_RATE: str = "idl_missed_tackle_rate"
 
 IDL_V1_WEIGHTS: dict[str, float] = {
-    IDL_COMPONENT_TFL_RATE:           0.35,
-    IDL_COMPONENT_PRESSURE_RATE:      0.30,
-    IDL_COMPONENT_SACK_RATE:          0.15,
+    IDL_COMPONENT_PRESSURE_RATE:      0.35,
+    IDL_COMPONENT_TFL_RATE:           0.25,
+    IDL_COMPONENT_SACK_RATE:          0.20,
+    IDL_COMPONENT_TACKLES_PER_SNAP:   0.05,
     IDL_COMPONENT_MISSED_TACKLE_RATE: -0.05,
 }
 
@@ -720,6 +740,7 @@ IDL_V1_SHRINKAGE_K: dict[str, float] = {
     IDL_COMPONENT_TFL_RATE:           300.0,
     IDL_COMPONENT_PRESSURE_RATE:      200.0,
     IDL_COMPONENT_SACK_RATE:          350.0,
+    IDL_COMPONENT_TACKLES_PER_SNAP:   200.0,
     IDL_COMPONENT_MISSED_TACKLE_RATE: 100.0,
 }
 
@@ -727,6 +748,7 @@ IDL_V1_RAW_VALUE_COLS: dict[str, str] = {
     IDL_COMPONENT_TFL_RATE:           "tfl_rate",
     IDL_COMPONENT_PRESSURE_RATE:      "pressure_rate",
     IDL_COMPONENT_SACK_RATE:          "sack_rate",
+    IDL_COMPONENT_TACKLES_PER_SNAP:   "tackles_per_snap",
     IDL_COMPONENT_MISSED_TACKLE_RATE: "missed_tackle_rate",
 }
 
@@ -734,6 +756,7 @@ IDL_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     IDL_COMPONENT_TFL_RATE:           "snaps_defense",
     IDL_COMPONENT_PRESSURE_RATE:      "snaps_defense",
     IDL_COMPONENT_SACK_RATE:          "snaps_defense",
+    IDL_COMPONENT_TACKLES_PER_SNAP:   "snaps_defense",
     IDL_COMPONENT_MISSED_TACKLE_RATE: "tackle_attempts",
 }
 

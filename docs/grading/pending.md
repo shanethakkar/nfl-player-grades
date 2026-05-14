@@ -18,7 +18,7 @@ Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, th
 | 8 | Exhaustive audit | CB | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-cb.md)) — v1.2: target_rate -0.08→-0.05. Validity +0.219→+0.220. Methodology cleanup; CB has structural weak validity (voter noise ceiling). |
 | 9 | Exhaustive audit | S | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-s.md)) — v1.2: target_rate -0.08→-0.05. Validity +0.253→+0.255. Same finding as CB; both DB positions converged on target_rate cleanup. |
 | 10 | Exhaustive audit | EDGE | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-edge.md)) — v1.2: added edge_tackles_per_snap at +0.05 (validity +0.216, max_r +0.468 — independent signal). Validity +0.420→+0.424. Second Path B ship from the framework. |
-| 11 | Exhaustive audit | iDL | 0.5 day | pending |
+| 11 | Exhaustive audit | iDL | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-idl.md)) — v1.2: rebalance (pressure 0.30→0.35, TFL 0.35→0.25, sack 0.15→0.20) + add tackles_per_snap +0.05. **Validity +0.457→+0.475 — biggest defensive gain.** Voters reward interior pressure more than original "iDL=run-stop" design assumed. |
 | 12 | Exhaustive audit | LB | 0.5 day | pending |
 | 13 | Ship | Apply any v1.X weight changes that emerge (including QB v1.1) | varies | pending |
 | 14 | New position | Kickers v1 (full audit-first process) | 1-1.5 day | pending |

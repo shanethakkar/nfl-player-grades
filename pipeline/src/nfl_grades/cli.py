@@ -432,6 +432,7 @@ def audit_candidates(position: str) -> None:
         format_results_table,
         run_cb_audit,
         run_edge_audit,
+        run_idl_audit,
         run_qb_audit,
         run_rb_audit,
         run_s_audit,
@@ -448,6 +449,7 @@ def audit_candidates(position: str) -> None:
         "CB": run_cb_audit,
         "S": run_s_audit,
         "EDGE": run_edge_audit,
+        "IDL": run_idl_audit,
     }
     if pos not in runners:
         click.echo(

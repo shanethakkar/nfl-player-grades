@@ -1577,6 +1577,152 @@ def run_edge_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# iDL candidates
+# ---------------------------------------------------------------------------
+
+def idl_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full iDL candidate set for the exhaustive audit.
+
+    iDL shares the pfr_def_pass_rush table with EDGE (both are DL). The
+    grader filters to position_played='iDL' or 'DL' aggregations. For
+    audit purposes we pull the qualified iDL cohort from season_grades.
+
+    Candidates:
+      - 4 currently shipped (tfl_rate, pressure_rate, sack_rate,
+        missed_tackle_rate)
+      - PFR-derived: qb_hits_per_snap, hurries_per_snap, tackles_per_snap
+        (the new EDGE v1.2 component — cross-position check),
+        sack_per_pressure, hit_per_pressure
+      - nflvs aggregate: forced_fumble_per_snap
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified iDL IDs + snap counts.
+    idl_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name,
+               ps.snaps_defense
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        LEFT JOIN (
+            SELECT DISTINCT ON (player_id, season) player_id, season, snaps_defense
+            FROM player_seasons
+            ORDER BY player_id, season, snaps_defense DESC NULLS LAST
+        ) ps ON ps.player_id = sg.player_id AND ps.season = sg.season
+        WHERE sg.position = 'iDL' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        idl_ids = pd.read_sql(idl_sql, conn)
+    seasons = sorted(idl_ids["season"].unique())
+
+    # 2. Currently-shipped components.
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'iDL'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'idl_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. Raw pass-rush stats from pfr_def_pass_rush (iDL data is here).
+    raw_sql = text(
+        """
+        SELECT player_id, season, pressures, sacks, qb_hits,
+               hurries, comb_tackles
+        FROM pfr_def_pass_rush
+        """
+    )
+    with engine.connect() as conn:
+        raw = pd.read_sql(raw_sql, conn)
+
+    merged = raw.merge(
+        idl_ids[["player_id", "season", "snaps_defense", "gsis_id"]],
+        on=["player_id", "season"], how="inner",
+    )
+    snaps = merged["snaps_defense"].astype(float).replace(0, np.nan)
+    pressures = merged["pressures"].astype(float).replace(0, np.nan)
+    merged["qb_hits_per_snap"] = merged["qb_hits"] / snaps
+    merged["hurries_per_snap"] = merged["hurries"] / snaps
+    merged["tackles_per_snap"] = merged["comb_tackles"] / snaps
+    merged["sack_per_pressure"] = merged["sacks"] / pressures
+    merged["hit_per_pressure"] = merged["qb_hits"] / pressures
+
+    for col, display, denom_col, min_n in [
+        ("qb_hits_per_snap", "idl_qb_hits_per_snap", "snaps_defense", 200),
+        ("hurries_per_snap", "idl_hurries_per_snap", "snaps_defense", 200),
+        ("tackles_per_snap", "idl_tackles_per_snap", "snaps_defense", 200),
+        ("sack_per_pressure", "idl_sack_per_pressure", "pressures", 10),
+        ("hit_per_pressure", "idl_hit_per_pressure", "pressures", 10),
+    ]:
+        mask = merged[denom_col].fillna(0) >= min_n
+        panel = merged.loc[mask, ["player_id", "season", col]].rename(
+            columns={col: "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append((display, panel, False))
+
+    # 4. nflvs aggregate: forced fumbles per snap.
+    nflvs_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        if "player_id" not in ps.columns or "def_fumbles_forced" not in ps.columns:
+            continue
+        ps = ps[["player_id", "def_fumbles_forced"]].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        agg = ps.groupby("gsis_id", as_index=False).sum(numeric_only=True)
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(idl_ids, on=["gsis_id", "season"], how="inner")
+        snaps2 = nflvs["snaps_defense"].astype(float).replace(0, np.nan)
+        nflvs["forced_fumble_per_snap"] = nflvs.get("def_fumbles_forced", 0) / snaps2
+        mask = nflvs["snaps_defense"].fillna(0) >= 200
+        panel = nflvs.loc[mask, ["player_id", "season", "forced_fumble_per_snap"]].rename(
+            columns={"forced_fumble_per_snap": "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append(("idl_forced_fumble_per_snap", panel, False))
+
+    return candidates
+
+
+def run_idl_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full iDL exhaustive audit."""
+    eng = engine or get_engine()
+    cands = idl_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "iDL",
+            season_pairs=_DEFENSIVE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1595,4 +1741,6 @@ __all__ = [
     "run_s_audit",
     "edge_candidates",
     "run_edge_audit",
+    "idl_candidates",
+    "run_idl_audit",
 ]

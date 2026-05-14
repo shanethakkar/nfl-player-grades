@@ -32,6 +32,7 @@ from nfl_grades.grading.weights import (
     IDL_COMPONENT_MISSED_TACKLE_RATE,
     IDL_COMPONENT_PRESSURE_RATE,
     IDL_COMPONENT_SACK_RATE,
+    IDL_COMPONENT_TACKLES_PER_SNAP,
     IDL_COMPONENT_TFL_RATE,
     IDL_V1_CONFIDENCE_FULL_SNAPS,
     IDL_V1_MIN_SNAPS_TO_GRADE,
@@ -148,6 +149,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     df["pressure_rate"] = df["pressures"] / snaps
     df["sack_rate"] = df["sacks"] / snaps
     df["tfl_rate"] = df["tfl"].fillna(0.0) / snaps
+    df["tackles_per_snap"] = df["comb_tackles"].astype(float) / snaps
 
     tackle_att = (df["comb_tackles"] + df["missed_tackles"].fillna(0)).clip(lower=1)
     df["missed_tackle_rate"] = df["missed_tackles"].fillna(0.0) / tackle_att
