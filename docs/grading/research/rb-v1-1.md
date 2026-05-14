@@ -1,8 +1,8 @@
-# RB v1.1 → v1.3 — Audit + Implementation (2026-05-14)
+# RB v1.1 → v1.4 — Audit + Implementation (2026-05-14)
 
-> **v1.3 ship (2026-05-14, exhaustive audit):** Lowered `rb_rush_success_rate` 0.14 → 0.05 — same EPA-vs-success-rate redundancy as QB and WR. Validity gate +0.243 → +0.247. Top 4 2024 unchanged.
+> **v1.3 ship (2026-05-14, exhaustive audit Path A):** Lowered `rb_rush_success_rate` 0.14 → 0.05 — same EPA-vs-success-rate redundancy as QB and WR. Validity gate +0.243 → +0.247. Top 4 2024 unchanged.
 >
-> **v1.4 queued (Path B schema change):** Exhaustive audit found `rb_pfr_yards_after_contact` as the **highest-validity candidate of any audit so far** (+0.192, higher than any current component). Captures post-contact rushing skill not in the formula. Requires new PFR rush ingest module. Tracked in `pending.md`. Full audit at [`../audits/2026-05-14-exhaustive-rb.md`](../audits/2026-05-14-exhaustive-rb.md).
+> **v1.4 ship (2026-05-14, Path B schema change):** Added `rb_yards_after_contact_per_carry` at +0.10 weight. The exhaustive audit's headline finding — highest-validity candidate of any audit so far (+0.192 vs Pro Bowl, higher than any current RB component). Required a new PFR rush ingest module (`pipeline/.../ingest/pfr_rush.py`), new migration (`db/migrations/0015_pfr_rb_rush.sql`), grader update. Validity +0.247 → +0.259 (+0.012). Face-check 2024: Bucky Irving rose to #3 on elite YAC (2.69/carry); Saquon dropped to #4 because his YAC was below-average (1.97) for an OPOY candidate (his value was explosive pre-contact runs). First Path B ship from the exhaustive audit framework — proves it can surface real new components, not just redundancy diagnostics. Full audit at [`../audits/2026-05-14-exhaustive-rb.md`](../audits/2026-05-14-exhaustive-rb.md).
 
 ---
 

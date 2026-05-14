@@ -188,6 +188,18 @@ _FEATURES_SQL = text(f"""
         FROM ngs_rushing
         WHERE season = :season AND season_type = 'REG' AND week = 0
         GROUP BY player_id
+    ),
+    pfr_rush_agg AS (
+        -- PFR rush advanced stats (2018+). Stores season totals; we derive
+        -- yards_after_contact_per_carry from the per-row carries denominator
+        -- (which may differ slightly from rush_agg.n_carries due to PFR/PBP
+        -- coverage differences — use PFR's own carries for the rate). Pre-
+        -- 2018 LEFT JOIN returns NULL → component is NaN-neutralized.
+        SELECT player_id,
+               carries AS pfr_carries,
+               yards_after_contact
+        FROM pfr_rb_rush
+        WHERE season = :season
     )
     SELECT
         rush_agg.player_id,
@@ -197,6 +209,7 @@ _FEATURES_SQL = text(f"""
         rec_agg.n_targets,
         rec_agg.n_receptions,
         rec_yac_agg.n_rec_with_xyac,
+        COALESCE(pfr_rush_agg.pfr_carries, 0) AS n_pfr_carries,
         (rush_agg.n_carries + rec_agg.n_receptions) AS n_touches,
         (rush_agg.n_rush_fumbles + rec_agg.n_rec_fumbles)
             AS n_fumbles,
@@ -207,6 +220,9 @@ _FEATURES_SQL = text(f"""
             ngs_rush_agg.ngs_ryoe_total::float / ngs_rush_agg.ngs_rush_attempts
         END AS ryoe_per_attempt,
         rec_yac_agg.yac_over_expected_per_rec,
+        CASE WHEN pfr_rush_agg.pfr_carries > 0 THEN
+            pfr_rush_agg.yards_after_contact::float / pfr_rush_agg.pfr_carries
+        END AS yards_after_contact_per_carry,
         CASE WHEN (rush_agg.n_carries + rec_agg.n_receptions) > 0 THEN
             (rush_agg.n_rush_fumbles + rec_agg.n_rec_fumbles)::float
                 / (rush_agg.n_carries + rec_agg.n_receptions)
@@ -215,6 +231,7 @@ _FEATURES_SQL = text(f"""
     JOIN rec_agg USING (player_id)
     LEFT JOIN rec_yac_agg USING (player_id)
     LEFT JOIN ngs_rush_agg USING (player_id)
+    LEFT JOIN pfr_rush_agg USING (player_id)
     WHERE (rush_agg.n_carries + rec_agg.n_receptions) >= :min_touches
 """)
 
@@ -253,6 +270,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         "rec_epa_per_target",
         "ryoe_per_attempt",
         "yac_over_expected_per_rec",
+        "yards_after_contact_per_carry",
         "fumble_rate",
     )
     for col in float_cols:
@@ -264,6 +282,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         "n_targets",
         "n_receptions",
         "n_rec_with_xyac",
+        "n_pfr_carries",
         "n_touches",
         "n_fumbles",
     )

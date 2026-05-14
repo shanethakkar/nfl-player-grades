@@ -47,8 +47,20 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 
 
 # ---------------------------------------------------------------------------
-# RB v1.3 (ADR-0014, revised 2026-05-14).
+# RB v1.4 (ADR-0014, revised 2026-05-14).
 # ---------------------------------------------------------------------------
+# v1.4 change (post-exhaustive-audit Path B ship): added
+# rb_yards_after_contact_per_carry at +0.10. Highest-validity candidate of
+# any audit so far (+0.192 vs next-year Pro Bowl, higher than any current
+# RB component). YoY r +0.313, moderate overlap with RYOE (+0.596 —
+# RYOE includes pre-contact OL yards; yards_after_contact isolates the
+# post-contact RB-skill portion). Schema change: new pfr_rb_rush table
+# + ingest module (pipeline/ingest/pfr_rush.py).
+#
+# Coverage: PFR rush data starts 2018; for 2016-2017 seasons the
+# yards_after_contact component is NaN-neutralized (composite computed
+# from remaining 6 components). Same pre-2018 handling pattern as WR
+# drop_rate's pre-2022 NaN-neutralization.
 # v1.1 (earlier 2026-05-14): removed rb_catch_pct (noise + redundant).
 #   Weight redistributed: rb_yac_over_expected_per_rec 0.12 → 0.15.
 #
@@ -79,15 +91,19 @@ RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: str = "rb_rush_epa_per_attempt"
 RB_COMPONENT_RUSH_SUCCESS_RATE: str = "rb_rush_success_rate"
 RB_COMPONENT_REC_EPA_PER_TARGET: str = "rb_rec_epa_per_target"
 RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "rb_yac_over_expected_per_rec"
+RB_COMPONENT_YARDS_AFTER_CONTACT: str = "rb_yards_after_contact_per_carry"
 RB_COMPONENT_FUMBLE_RATE: str = "rb_fumble_rate"
 
-# Sum |abs| = 0.98 (combiner normalizes). Rush 60% / Rec 33% / Security 5%.
+# Sum |abs| = 0.99 (combiner normalizes).
+# Effective shares: RYOE 28%, rush_EPA 18%, rush_success 5%, rec_EPA 5%,
+# YAC-OE 28%, yards_after_contact 10%, fumble_rate -5%.
 RB_V1_WEIGHTS: dict[str, float] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: 0.28,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: 0.18,
     RB_COMPONENT_RUSH_SUCCESS_RATE: 0.05,
     RB_COMPONENT_REC_EPA_PER_TARGET: 0.05,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.28,
+    RB_COMPONENT_YARDS_AFTER_CONTACT: 0.10,
     RB_COMPONENT_FUMBLE_RATE: -0.05,
 }
 
@@ -98,6 +114,10 @@ RB_V1_SHRINKAGE_K: dict[str, float] = {
     RB_COMPONENT_RUSH_SUCCESS_RATE: 100.0,
     RB_COMPONENT_REC_EPA_PER_TARGET: 40.0,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 30.0,
+    # yards_after_contact: k=80 carries. Per-carry rate is more stable
+    # than per-attempt EPA (post-contact yards are smaller-variance per
+    # play than expected-points outcomes), so slightly less shrinkage.
+    RB_COMPONENT_YARDS_AFTER_CONTACT: 80.0,
     RB_COMPONENT_FUMBLE_RATE: 200.0,
 }
 
@@ -107,6 +127,7 @@ RB_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     RB_COMPONENT_RUSH_SUCCESS_RATE: "n_carries",
     RB_COMPONENT_REC_EPA_PER_TARGET: "n_targets",
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "n_rec_with_xyac",
+    RB_COMPONENT_YARDS_AFTER_CONTACT: "n_pfr_carries",
     RB_COMPONENT_FUMBLE_RATE: "n_touches",
 }
 
@@ -116,6 +137,7 @@ RB_V1_RAW_VALUE_COLS: dict[str, str] = {
     RB_COMPONENT_RUSH_SUCCESS_RATE: "rush_success_rate",
     RB_COMPONENT_REC_EPA_PER_TARGET: "rec_epa_per_target",
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "yac_over_expected_per_rec",
+    RB_COMPONENT_YARDS_AFTER_CONTACT: "yards_after_contact_per_carry",
     RB_COMPONENT_FUMBLE_RATE: "fumble_rate",
 }
 
@@ -128,6 +150,7 @@ RB_V1_PRE_ADJUSTED: dict[str, bool] = {
     RB_COMPONENT_RUSH_SUCCESS_RATE: False,
     RB_COMPONENT_REC_EPA_PER_TARGET: False,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: True,
+    RB_COMPONENT_YARDS_AFTER_CONTACT: False,
     RB_COMPONENT_FUMBLE_RATE: False,
 }
 

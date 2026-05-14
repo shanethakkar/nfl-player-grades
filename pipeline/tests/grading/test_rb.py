@@ -75,6 +75,9 @@ def _synth_features(
     n_touches = n_carries + n_receptions
     n_fumbles = rng.integers(0, 3, size=n_total)
     fumble_rate = n_fumbles.astype(float) / np.maximum(n_touches, 1)
+    # PFR rush data (2018+): yards_after_contact / carries. ~2.5 yards/carry
+    # is typical league average; spread by skill.
+    n_pfr_carries = n_carries.copy()
 
     skill = np.concatenate(
         [
@@ -90,7 +93,7 @@ def _synth_features(
     rec_epa = 0.10 + 0.15 * skill + rng.normal(scale=0.03, size=n_total)
     ryoe = 0.0 + 0.8 * skill + rng.normal(scale=0.2, size=n_total)
     yac_over_exp = 0.0 + 0.3 * skill + rng.normal(scale=0.1, size=n_total)
-    catch_pct = 0.77 + 0.04 * skill + rng.normal(scale=0.02, size=n_total)
+    yards_after_contact = 2.5 + 0.5 * skill + rng.normal(scale=0.15, size=n_total)
 
     return pd.DataFrame(
         {
@@ -101,6 +104,7 @@ def _synth_features(
             "n_targets": n_targets.astype(int),
             "n_receptions": n_receptions.astype(int),
             "n_rec_with_xyac": n_rec_with_xyac.astype(int),
+            "n_pfr_carries": n_pfr_carries.astype(int),
             "n_touches": n_touches.astype(int),
             "n_fumbles": n_fumbles.astype(int),
             "rush_epa_per_attempt": rush_epa,
@@ -108,7 +112,7 @@ def _synth_features(
             "rec_epa_per_target": rec_epa,
             "ryoe_per_attempt": ryoe,
             "yac_over_expected_per_rec": yac_over_exp,
-            "catch_pct": catch_pct,
+            "yards_after_contact_per_carry": yards_after_contact,
             "fumble_rate": fumble_rate,
         }
     )
@@ -146,9 +150,9 @@ class TestComputeGrades:
             "raw_rb_yac_over_expected_per_rec",
             "adjusted_rb_yac_over_expected_per_rec",
             "z_rb_yac_over_expected_per_rec",
-            "raw_rb_catch_pct",
-            "adjusted_rb_catch_pct",
-            "z_rb_catch_pct",
+            "raw_rb_yards_after_contact_per_carry",
+            "adjusted_rb_yards_after_contact_per_carry",
+            "z_rb_yards_after_contact_per_carry",
             "raw_rb_fumble_rate",
             "adjusted_rb_fumble_rate",
             "z_rb_fumble_rate",
@@ -187,7 +191,6 @@ class TestComputeGrades:
         df["n_touches"] = df["n_carries"]  # touches = carries only
         df["rec_epa_per_target"] = np.nan  # undefined (no targets)
         df["yac_over_expected_per_rec"] = np.nan
-        df["catch_pct"] = np.nan
         # Fumbles only on rushes
         df["fumble_rate"] = df["n_fumbles"].astype(float) / np.maximum(df["n_touches"], 1)
 
@@ -223,11 +226,12 @@ class TestComputeGrades:
             "rec_epa_per_target",
             "ryoe_per_attempt",
             "yac_over_expected_per_rec",
-            "catch_pct",
+            "yards_after_contact_per_carry",
             "n_carries",
             "n_targets",
             "n_receptions",
             "n_rec_with_xyac",
+            "n_pfr_carries",
             "n_touches",
         ):
             base.loc[1, col] = base.loc[0, col]
@@ -325,6 +329,7 @@ class TestExtractFeatures:
             "n_targets",
             "n_receptions",
             "n_rec_with_xyac",
+            "n_pfr_carries",
             "n_touches",
             "n_fumbles",
             "rush_epa_per_attempt",
@@ -332,7 +337,7 @@ class TestExtractFeatures:
             "rec_epa_per_target",
             "ryoe_per_attempt",
             "yac_over_expected_per_rec",
-            "catch_pct",
+            "yards_after_contact_per_carry",
             "fumble_rate",
         }
         assert expected.issubset(df.columns)

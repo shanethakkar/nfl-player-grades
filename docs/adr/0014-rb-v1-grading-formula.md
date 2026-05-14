@@ -1,6 +1,6 @@
 # 0014 - RB v1 grading formula
 
-- **Status**: Accepted (v1.3 revision — 2026-05-14)
+- **Status**: Accepted (v1.4 revision — 2026-05-14)
 - **Date**: 2026-04-24
 - **Updated**: 2026-05-14 (v1.1 catch_pct removed, v1.2 rec_EPA weight lowered — see "Revision History")
 - **Supersedes**: None
@@ -381,3 +381,37 @@ The success_rate reduction shipped immediately (pure weight tweak via Path A wor
 **What the audit confirmed about RB v1.2 decisions:** `rb_rec_epa_per_target` had YoY r = +0.010 in this audit — even worse than the +0.027 we measured in the cross-position YoY audit that drove v1.2's reduction. The v1.2 decision to lower this from 0.18 → 0.05 was validated.
 
 **What the audit confirmed about NGS rushing:** all 5 NGS rushing candidates (efficiency, time_to_los, rush_pct_over_expected, pct_eight_defenders, ryoe_per_att) rejected. Either duplicate of RYOE (`ngs_ryoe_per_att` at +0.961), inverse of RYOE (`ngs_efficiency` at −0.653), or style markers with zero validity. Confirmed all the v1.1 research findings using the new validity criterion.
+
+### v1.4 (2026-05-14) — added `rb_yards_after_contact_per_carry` (Path B schema change)
+
+**Added new component:** `rb_yards_after_contact_per_carry` at weight **+0.10**. New sum |w| = 0.99.
+
+| Component | v1.3 | v1.4 | Share v1.3 | Share v1.4 |
+|---|---:|---:|---:|---:|
+| `rb_ryoe_per_attempt` | 0.28 | 0.28 | 32% | 28% |
+| `rb_rush_epa_per_attempt` | 0.18 | 0.18 | 20% | 18% |
+| `rb_rush_success_rate` | 0.05 | 0.05 | 6% | 5% |
+| `rb_rec_epa_per_target` | 0.05 | 0.05 | 6% | 5% |
+| `rb_yac_over_expected_per_rec` | 0.28 | 0.28 | 32% | 28% |
+| **`rb_yards_after_contact_per_carry`** (NEW) | — | **0.10** | — | **10%** |
+| `rb_fumble_rate` | −0.05 | −0.05 | 6% | 5% |
+
+**Why:** the RB exhaustive audit identified this as the **highest-validity candidate of any audit so far** (validity +0.192 — higher than any current RB component, higher than the best QB candidate, comparable to WR's strongest signal). YoY r +0.313 (modest, comparable to RYOE +0.246). Moderate overlap with RYOE (+0.596 — RYOE includes pre-contact OL yards; yards_after_contact isolates the post-contact RB-skill portion). Real new dimension.
+
+**Schema change required (Path B):**
+
+- New migration: [`db/migrations/0015_pfr_rb_rush.sql`](../../db/migrations/0015_pfr_rb_rush.sql) — `pfr_rb_rush` table (carries, yards_after_contact, yards_before_contact, broken_tackles per player-season; 2018+).
+- New ingest source: `pfr_advstats_rush` registered in `pipeline/.../ingest/_cache.py`.
+- New ingest module: [`pipeline/.../ingest/pfr_rush.py`](../../pipeline/src/nfl_grades/ingest/pfr_rush.py) — same pattern as `pfr_dl.py`.
+- New CLI: `nflgrades ingest pfr-rb-rush --season YYYY`.
+- Updated `rb.py` grader: added `pfr_rush_agg` CTE that LEFT JOINs `pfr_rb_rush`, computes `yards_after_contact_per_carry = yards_after_contact / pfr_carries`.
+
+**Pre-2018 handling:** PFR rush data starts 2018. For RB seasons 2016-2017 the `yards_after_contact_per_carry` component is NULL → NaN-neutralized to 0 in composite (same pattern as WR drop_rate's pre-2022 handling).
+
+**Validity gate passed:** RB composite vs next-year Pro Bowl correlation **+0.247 → +0.259** post-ship (+0.012 improvement on top of v1.3's +0.004 improvement; total +0.016 since v1.2). The strongest validity gain of any single weight change in any audit. Other positions unchanged.
+
+**Face-check 2024 top 10:** Henry (YAC 2.80), Gibbs (2.40), Bucky Irving (2.69, **rose 4→3**), Saquon Barkley (1.97, **dropped 3→4** — surprisingly low YAC for the OPOY candidate, his value was explosive pre-contact runs not second-effort yardage), Jacobs, Cook, Bijan, Conner, Mason, Allgeier (2.60). Top names unchanged; Bucky Irving's elite YAC is rewarded; Saquon's grade drops slightly because his style produces fewer post-contact yards than Henry's power running or Irving's tackle-breaking.
+
+**Audit log:** [`docs/grading/audits/2026-05-14-exhaustive-rb.md`](../grading/audits/2026-05-14-exhaustive-rb.md) — full candidate table including the v1.4 candidate's four-criterion scores and the reasoning for shipping.
+
+**This is the first Path B ship that emerged from the exhaustive audit framework.** Demonstrates that the methodology can find new components worth adding (not just weight tweaks on existing ones). The lesson for the broader project: the exhaustive audit is creating value beyond redundancy diagnostics — it surfaces missing skills.

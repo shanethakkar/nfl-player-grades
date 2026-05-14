@@ -86,6 +86,7 @@ SourceName = Literal[
     "ngs_receiving",
     "ftn",  # FTN charting
     "pfr_advstats_def",  # PFR advanced defensive coverage stats (CBs, 2018+)
+    "pfr_advstats_rush",  # PFR advanced rushing stats (RBs, 2018+) — yards after contact, broken tackles
     "nflvs_player_stats",  # nflverse weekly player stats (def_pass_defended for PBU)
 ]
 
@@ -164,6 +165,10 @@ def _build_registry() -> dict[str, SourceSpec]:
         "pfr_advstats_def": SourceSpec(
             season_keyed=True,
             fetch=lambda s: nfl.load_pfr_advstats(stat_type="def", seasons=[s]),
+        ),
+        "pfr_advstats_rush": SourceSpec(
+            season_keyed=True,
+            fetch=lambda s: nfl.load_pfr_advstats(stat_type="rush", seasons=[s]),
         ),
         "nflvs_player_stats": SourceSpec(
             season_keyed=True,

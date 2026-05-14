@@ -173,6 +173,23 @@ def ingest_pfr_def_passrush(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="pfr-rb-rush")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_pfr_rb_rush(season: int, refresh: bool) -> None:
+    """Pull PFR rush-advanced stats for RBs (2018+) — yards_after_contact, broken_tackles."""
+    from .ingest import pfr_rush
+
+    result = pfr_rush.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_pfr_match={result.rows_skipped_no_pfr_match} "
+        f"skipped_not_rb={result.rows_skipped_not_rb}"
+    )
+
+
 @ingest.command(name="pfr-def-lb")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)

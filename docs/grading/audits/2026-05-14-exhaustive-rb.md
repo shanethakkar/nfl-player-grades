@@ -134,16 +134,52 @@ Sum |w|: 0.98 → 0.89. Each surviving component gains a few percentage points o
 
 **Face-check 2024:** Top 4 unchanged (Henry, Gibbs, Saquon, Bucky Irving). Top 10: Henry, Gibbs, Saquon, Bucky, Jacobs, Cook, Bijan, Conner, Mason, Montgomery — all consensus or near-consensus elite. Biggest movers: Joe Mixon +4.17 (explosive), Najee Harris +2.90 (explosive), Bijan Robinson −3.29 (consistent), Montgomery −2.97 (consistent), Allgeier −3.16 (consistent). Same pattern as QB/WR — lowering success_rate weight relaxes the consistency-smoothing, so explosive-but-variable backs rise relative to high-success-rate operators.
 
-## Queued: RB v1.4 — add `rb_yards_after_contact`
+## v1.4 — `rb_yards_after_contact` SHIPPED 2026-05-14
 
-The highest-validity candidate emerged from this audit. To ship:
+The highest-validity candidate from this audit was shipped the same day as the audit itself.
 
-1. New migration: `db/migrations/00XX_pfr_rush_advstats.sql` — table for per-player-season PFR rush data.
-2. New ingest module: `pipeline/src/nfl_grades/ingest/pfr_rush.py` — fetch via `nfl.load_pfr_advstats(stat_type='rush')`, aggregate to season totals.
-3. Update `pipeline/src/nfl_grades/grading/rb.py`: pull yards_after_contact + carries; compute rate; add to stat_components write.
-4. Update `weights.py`: add `RB_COMPONENT_YARDS_AFTER_CONTACT` + entry in `RB_V1_WEIGHTS` at ~0.10. Redistribute from existing components TBD via preview.
-5. Web layer: types/index.ts, lib/grades.ts (label + description), lib/queries.ts (LEFT JOIN), LeaderboardTable.tsx (column), methodology page.
-6. Full grade re-run (not regrade — schema changed).
-7. ADR-0014 v1.4 revision history with the audit data.
+Components added/changed:
 
-Estimated 0.5-1 day. Tracked as a separate item in pending.md.
+- New: `rb_yards_after_contact_per_carry` at +0.10 weight (10% effective share)
+- All other v1.3 weights unchanged
+- New sum |w|: 0.89 → 0.99
+
+**Validity gate passed:** RB composite vs next-year Pro Bowl correlation **+0.247 → +0.259** (+0.012 improvement — the strongest single-change validity gain of any audit so far). Other positions unchanged.
+
+**Schema changes shipped:**
+- `db/migrations/0015_pfr_rb_rush.sql` — new `pfr_rb_rush` table
+- `pipeline/.../ingest/pfr_rush.py` — new ingest module (modeled on pfr_dl.py)
+- `pipeline/.../ingest/_cache.py` — `pfr_advstats_rush` source registered
+- `pipeline/.../grading/rb.py` — `pfr_rush_agg` CTE + new column in features
+- `pipeline/.../grading/weights.py` — new component constant + entry
+- `pipeline/.../cli.py` — `nflgrades ingest pfr-rb-rush` subcommand
+- `web/.../grades.ts` — auto-synced weights + new COMPONENT_FORMATS entry
+- ADR-0014 v1.4 revision history written
+
+**Pre-2018 handling:** PFR rush data starts 2018. RB seasons 2016-2017 NaN-neutralize the new component to 0 in composite (same pattern as WR drop_rate's pre-2022 handling).
+
+**Face-check 2024 top 10 with YAC column:**
+
+| Rank | Player | Grade | YAC/carry |
+|---:|---|---:|---:|
+| 1 | Derrick Henry | 91.89 | 2.80 |
+| 2 | Jahmyr Gibbs | 83.93 | 2.40 |
+| 3 | **Bucky Irving** | **80.51** | **2.69** ← rose from #4 |
+| 4 | **Saquon Barkley** | **78.50** | **1.97** ← dropped from #3 |
+| 5 | Josh Jacobs | 70.22 | 2.37 |
+| 6 | James Cook | 68.60 | 2.31 |
+| 7 | Bijan Robinson | 68.21 | 2.39 |
+| 8 | James Conner | 66.85 | 2.39 |
+| 9 | Jordan Mason | 64.57 | 2.27 |
+| 10 | Tyler Allgeier | 63.40 | 2.60 |
+
+Bucky Irving's #3 ranking is now backed by elite YAC (2.69 — second-best in the top 10). **Saquon Barkley's drop to #4 is the most notable reshuffle** — his 1.97 YAC/carry is below league average. The interpretation: Saquon's 2024 OPOY-candidate season was driven by explosive pre-contact runs (back-flip TD, multiple 50+ yard breakaways) rather than second-effort post-contact yardage. The formula now correctly distinguishes these styles.
+
+## Significance
+
+**This is the first Path B ship that emerged from the exhaustive audit framework.** The methodology demonstrated it can:
+1. Surface missing skills in the formula (yards_after_contact wasn't in any v1.x).
+2. Quantify the addition's value with measurable criteria (four scores).
+3. Decide based on validity gate (the change must improve external alignment).
+
+This is what makes the "do it right" approach worth the cost. The simple Path A audits (QB v1.1, WR v1.3, RB v1.3) found redundancy to fix. The Path B audit found a real new dimension to add.
