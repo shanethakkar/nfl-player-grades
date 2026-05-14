@@ -56,7 +56,7 @@ const DEFAULT_POSITION = "QB";
 /** Short phrase following "{N} qualified starters · composite of ..." */
 const COMPOSITE_BLURB: Record<string, string> = {
   QB: "composite of EPA/dropback, CPOE, and success rate",
-  RB: "composite of rushing efficiency (RYOE / EPA / success), receiving value, and ball security",
+  RB: "composite of rushing efficiency (RYOE / EPA / success / yards-after-contact), receiving value, and ball security (yards-after-contact data 2018+)",
   WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, success rate, and drop rate (2022+; pre-2022 uses v1 formula)",
   TE: "composite of EPA/target, YAC-over-expected, separation, earn rate, and ball security (earn rate dropped for pure blockers — ADR-0016)",
   CB:   "composite of passer rating allowed, YAC/rec allowed, target rate, and PBU rate (data 2018+)",

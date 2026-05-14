@@ -101,6 +101,7 @@ export type LeaderboardEntry = {
   rb_rush_epa_per_attempt: number | null;
   rb_rush_success_rate: number | null;
   rb_yac_over_expected_per_rec: number | null;
+  rb_yards_after_contact_per_carry: number | null;
   rb_fumble_rate: number | null;
   // --- WR / TE columns (position-agnostic names; underlying component is
   // wr_* or te_* depending on sg.position) ---

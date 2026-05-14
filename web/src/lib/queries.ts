@@ -140,6 +140,7 @@ async function _getLeaderboard(
         sc_succ.raw_value       AS rb_rush_success_rate,
         sc_rec_epa.raw_value    AS rec_epa_per_target,
         sc_yac_oe.raw_value     AS rb_yac_over_expected_per_rec,
+        sc_yac_carry.raw_value  AS rb_yards_after_contact_per_carry,
         sc_fumble.raw_value     AS rb_fumble_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
@@ -168,6 +169,10 @@ async function _getLeaderboard(
         ON sc_yac_oe.player_id = sg.player_id
        AND sc_yac_oe.season = sg.season
        AND sc_yac_oe.component_name = 'rb_yac_over_expected_per_rec'
+      LEFT JOIN stat_components sc_yac_carry
+        ON sc_yac_carry.player_id = sg.player_id
+       AND sc_yac_carry.season = sg.season
+       AND sc_yac_carry.component_name = 'rb_yards_after_contact_per_carry'
       WHERE sg.season = ${season}
         AND sg.position = 'RB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -1028,6 +1033,7 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     rb_rush_epa_per_attempt: coerceNullableNumber(row.rb_rush_epa_per_attempt),
     rb_rush_success_rate: coerceNullableNumber(row.rb_rush_success_rate),
     rb_yac_over_expected_per_rec: coerceNullableNumber(row.rb_yac_over_expected_per_rec),
+    rb_yards_after_contact_per_carry: coerceNullableNumber(row.rb_yards_after_contact_per_carry),
     rb_fumble_rate: coerceNullableNumber(row.rb_fumble_rate),
     // WR/TE shared
     n_targets: coerceNullableInt(row.n_targets),

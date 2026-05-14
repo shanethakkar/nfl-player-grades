@@ -304,6 +304,16 @@ const RB_COLUMNS: SortableColumn[] = [
     render: (e) => fmtSigned(e.rb_yac_over_expected_per_rec, 2),
   },
   {
+    key: "rb_yac_carry",
+    header: "YAC/carry",
+    hoverLabel: "Yards After Contact / Carry — post-contact rushing yards per carry (PFR charting). Pure RB skill: tackle-breaking, fall-forward, second-effort yardage. Data 2018+.",
+    defaultDir: "desc",
+    sortValue: (e) => e.rb_yards_after_contact_per_carry,
+    render: (e) => (e.rb_yards_after_contact_per_carry == null
+      ? "—"
+      : e.rb_yards_after_contact_per_carry.toFixed(2)),
+  },
+  {
     key: "rb_fumble",
     header: "Fum%",
     hoverLabel: "Fumble Rate — fumbles per touch. Lower is better.",
