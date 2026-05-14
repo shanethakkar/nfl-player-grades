@@ -1877,6 +1877,128 @@ def run_lb_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# K candidates (new position v1 — audit-first design)
+# ---------------------------------------------------------------------------
+
+_K_SEASONS = [
+    (2016, 2017), (2017, 2018), (2018, 2019), (2019, 2020),
+    (2020, 2021), (2021, 2022), (2022, 2023), (2023, 2024),
+    (2024, 2025),
+]
+
+
+def k_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full K candidate set for the v1 audit.
+
+    No existing components yet — this is a from-scratch audit to drive
+    v1 weight design. All candidates marked is_existing=False.
+
+    Candidates pulled from raw kicker_stats:
+      - Overall accuracy (fg_pct)
+      - Distance-bucketed accuracy (short/med/long/very-long)
+      - Combined "long" buckets (40+, 50+)
+      - XP accuracy (pat_pct)
+      - Power (fg_long)
+      - Clutch (gwfg_pct)
+      - Volume (fg_att_per_game) — usage marker, expected to fail
+    """
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    sql = text(
+        """
+        SELECT player_id, season, games,
+               fg_att, fg_made,
+               fg_att_0_19, fg_made_0_19,
+               fg_att_20_29, fg_made_20_29,
+               fg_att_30_39, fg_made_30_39,
+               fg_att_40_49, fg_made_40_49,
+               fg_att_50_59, fg_made_50_59,
+               fg_att_60_plus, fg_made_60_plus,
+               pat_att, pat_made,
+               gwfg_att, gwfg_made,
+               fg_long
+        FROM kicker_stats
+        """
+    )
+    with engine.connect() as conn:
+        raw = pd.read_sql(sql, conn)
+
+    # Qualified threshold for audit: >= 15 FG attempts (real workload).
+    raw = raw[raw["fg_att"].fillna(0) >= 15].copy()
+    if raw.empty:
+        return candidates
+
+    # Derived metrics
+    raw["fg_pct"] = raw["fg_made"] / raw["fg_att"].replace(0, np.nan)
+    # Distance buckets
+    raw["fg_att_short"] = (
+        raw["fg_att_0_19"].fillna(0)
+        + raw["fg_att_20_29"].fillna(0)
+        + raw["fg_att_30_39"].fillna(0)
+    )
+    raw["fg_made_short"] = (
+        raw["fg_made_0_19"].fillna(0)
+        + raw["fg_made_20_29"].fillna(0)
+        + raw["fg_made_30_39"].fillna(0)
+    )
+    raw["fg_pct_short"] = raw["fg_made_short"] / raw["fg_att_short"].replace(0, np.nan)
+    raw["fg_pct_40_49"] = raw["fg_made_40_49"] / raw["fg_att_40_49"].replace(0, np.nan)
+    raw["fg_pct_50_plus"] = (
+        (raw["fg_made_50_59"].fillna(0) + raw["fg_made_60_plus"].fillna(0))
+        / (raw["fg_att_50_59"].fillna(0) + raw["fg_att_60_plus"].fillna(0)).replace(0, np.nan)
+    )
+    raw["fg_att_50_plus"] = raw["fg_att_50_59"].fillna(0) + raw["fg_att_60_plus"].fillna(0)
+    raw["fg_pct_40_plus"] = (
+        (raw["fg_made_40_49"].fillna(0) + raw["fg_made_50_59"].fillna(0) + raw["fg_made_60_plus"].fillna(0))
+        / (raw["fg_att_40_49"].fillna(0) + raw["fg_att_50_59"].fillna(0) + raw["fg_att_60_plus"].fillna(0)).replace(0, np.nan)
+    )
+    raw["fg_att_40_plus"] = (
+        raw["fg_att_40_49"].fillna(0)
+        + raw["fg_att_50_59"].fillna(0)
+        + raw["fg_att_60_plus"].fillna(0)
+    )
+    raw["pat_pct"] = raw["pat_made"] / raw["pat_att"].replace(0, np.nan)
+    raw["gwfg_pct"] = raw["gwfg_made"] / raw["gwfg_att"].replace(0, np.nan)
+    raw["fg_att_per_game"] = raw["fg_att"] / raw["games"].replace(0, np.nan)
+
+    # (column, candidate name, min sample for that metric)
+    for col, name, min_n_col, min_n in [
+        ("fg_pct", "k_fg_pct_overall", "fg_att", 15),
+        ("fg_pct_short", "k_fg_pct_short", "fg_att_short", 8),
+        ("fg_pct_40_49", "k_fg_pct_40_49", "fg_att_40_49", 5),
+        ("fg_pct_50_plus", "k_fg_pct_50_plus", "fg_att_50_plus", 4),
+        ("fg_pct_40_plus", "k_fg_pct_40_plus", "fg_att_40_plus", 8),
+        ("pat_pct", "k_pat_pct", "pat_att", 15),
+        ("fg_long", "k_fg_long", "fg_att", 15),
+        ("gwfg_pct", "k_gwfg_pct", "gwfg_att", 2),
+        ("fg_att_per_game", "k_fg_att_per_game", "fg_att", 15),
+    ]:
+        mask = raw[min_n_col].fillna(0) >= min_n
+        panel = raw.loc[mask, ["player_id", "season", col]].rename(
+            columns={col: "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append((name, panel, False))
+
+    return candidates
+
+
+def run_k_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the K v1 audit (no existing components — pure candidate screening)."""
+    eng = engine or get_engine()
+    cands = k_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "K",
+            season_pairs=_K_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1899,4 +2021,6 @@ __all__ = [
     "run_idl_audit",
     "lb_candidates",
     "run_lb_audit",
+    "k_candidates",
+    "run_k_audit",
 ]

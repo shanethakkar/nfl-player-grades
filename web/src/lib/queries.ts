@@ -525,6 +525,58 @@ async function _getLeaderboard(
     return rows.map(coerceLeaderboardEntry);
   }
 
+  if (position === "K") {
+    // K headline columns (ADR-0023): FG% 40+, FG%, XP%, FG long.
+    // Sample-size column n_fg_att (kickers have no snap count — FG attempts
+    // are the qualifying sample).
+    // Team resolved via player_seasons (kickers aren't passers/rushers/receivers).
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                        AS team_abbr,
+        sc_fg.sample_size             AS n_fg_att,
+        sc_fg.raw_value               AS k_fg_pct,
+        sc_40.raw_value               AS k_fg_pct_40_plus,
+        sc_pat.raw_value              AS k_pat_pct,
+        sc_long.raw_value             AS k_fg_long
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_fg
+        ON sc_fg.player_id = sg.player_id
+       AND sc_fg.season = sg.season
+       AND sc_fg.component_name = 'k_fg_pct'
+      LEFT JOIN stat_components sc_40
+        ON sc_40.player_id = sg.player_id
+       AND sc_40.season = sg.season
+       AND sc_40.component_name = 'k_fg_pct_40_plus'
+      LEFT JOIN stat_components sc_pat
+        ON sc_pat.player_id = sg.player_id
+       AND sc_pat.season = sg.season
+       AND sc_pat.component_name = 'k_pat_pct'
+      LEFT JOIN stat_components sc_long
+        ON sc_long.player_id = sg.player_id
+       AND sc_long.season = sg.season
+       AND sc_long.component_name = 'k_fg_long'
+      WHERE sg.season = ${season}
+        AND sg.position = 'K'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
   // Any other position — return the minimum shape.
   const rows = await sql<LeaderboardEntry[]>`
     SELECT
@@ -1085,5 +1137,11 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     lb_pbu_rate: coerceNullableNumber(row.lb_pbu_rate),
     lb_tackle_rate: coerceNullableNumber(row.lb_tackle_rate),
     lb_pressure_rate: coerceNullableNumber(row.lb_pressure_rate),
+    // K-only
+    n_fg_att: coerceNullableInt(row.n_fg_att),
+    k_fg_pct: coerceNullableNumber(row.k_fg_pct),
+    k_fg_pct_40_plus: coerceNullableNumber(row.k_fg_pct_40_plus),
+    k_pat_pct: coerceNullableNumber(row.k_pat_pct),
+    k_fg_long: coerceNullableNumber(row.k_fg_long),
   };
 }

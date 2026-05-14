@@ -53,7 +53,7 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop, edgeTop, idlTop, lbTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop, edgeTop, idlTop, lbTop, kTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
@@ -64,6 +64,7 @@ export default async function MethodologyPage() {
     getCurrentTopAtPosition("EDGE"),
     getCurrentTopAtPosition("iDL"),
     getCurrentTopAtPosition("LB"),
+    getCurrentTopAtPosition("K"),
   ]);
 
   const positions: PositionCardData[] = [
@@ -123,6 +124,13 @@ export default async function MethodologyPage() {
       components: positionComponents("LB"),
       availabilityNote: "Data available from 2018. Filtered to off-ball LB (def target rate ≥ 3.5%). LB-tagged pass-rush OLBs (T.J. Watt, Micah Parsons, etc.) are graded as EDGE instead. Qualified threshold is 600 snaps (vs 400 for other defensive positions) to suppress rotational specialists. LB grades are noisier YoY than QB/WR grades.",
       top: lbTop,
+    },
+    {
+      position: "K",
+      headline: "Kicker",
+      components: positionComponents("K"),
+      availabilityNote: "Data available from 2016. Scope is placekicking only (FG + XP) — kickoffs intentionally excluded because the 2024 dynamic-kickoff rule change broke continuity of touchback/return rates. Qualified threshold is 20 FG attempts. K v1 was designed audit-first: every plausible candidate (overall accuracy, distance-bucketed accuracy, XP%, power, clutch GWFG, usage) was scored against four criteria before any weight was locked in. Kicker performance is structurally noisy YoY and Pro Bowl K voting is voter-heavy (only 2 K Pro Bowls per year out of ~30 qualified) — expect the lowest predictive-validity ceiling of any position. Face-check spot-checked: Boswell #1 in 2024 (1st-team All-Pro), Tucker correctly ranked #28 after his 2024 collapse.",
+      top: kTop,
     },
   ];
 
@@ -230,7 +238,7 @@ const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
-  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S" | "EDGE" | "iDL" | "LB";
+  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S" | "EDGE" | "iDL" | "LB" | "K";
   headline: string;
   components: ComponentEntry[];
   /** When true, renders a note about the blocking-TE path. */

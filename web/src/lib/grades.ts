@@ -466,6 +466,40 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Drops per catchable target. FTN charting (2022+). Light weight: YoY signal is modest (mean r ≈ +0.13) but cross-sectional discrimination and face-check are real.",
     sampleNoun: "catchable ball",
   },
+
+  // --- K v1 (ADR-0023) ---
+  k_fg_pct_40_plus: {
+    label: "FG% 40+",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Field goal percentage on attempts of 40 yards or longer. The primary kicker differentiator — everyone makes short FGs, accuracy from 40+ is where elite kickers separate. Highest-validity signal per the v1 audit.",
+    sampleNoun: "40+ yd FG attempt",
+  },
+  k_fg_pct: {
+    label: "FG%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Overall field goal percentage (makes / attempts, all distances). The conventional headline kicker metric. Weak audit validity in isolation but kept as a reader-recognizable summary.",
+    sampleNoun: "FG attempt",
+  },
+  k_pat_pct: {
+    label: "XP%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Extra-point conversion rate. Since the 2015 rule change, XPs are 33-yard FGs and have meaningful variance. Most YoY-reliable signal in the formula (r ≈ +0.21).",
+    sampleNoun: "XP attempt",
+  },
+  k_fg_long: {
+    label: "FG long",
+    suffix: " yd",
+    formatValue: (v) => v.toFixed(0),
+    description:
+      "Longest field goal made on the season — power capability proxy. YoY-stable (r ≈ +0.21): leg strength persists.",
+    sampleNoun: "FG attempt",
+  },
 };
 
 // TE role labels stored on season_grades.role (see ADR-0016). Kept here so
@@ -659,6 +693,10 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   lb_pbu_rate:                        0.05,
   lb_tackle_rate:                     0.13,
   lb_pressure_rate:                   0.10,
+  k_fg_pct_40_plus:                   0.40,
+  k_fg_pct:                           0.25,
+  k_pat_pct:                          0.15,
+  k_fg_long:                          0.10,
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {

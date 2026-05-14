@@ -50,7 +50,7 @@ export async function generateMetadata({
 }
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first.
-const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB"];
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB", "K"];
 const DEFAULT_POSITION = "QB";
 
 /** Short phrase following "{N} qualified starters · composite of ..." */
@@ -64,6 +64,7 @@ const COMPOSITE_BLURB: Record<string, string> = {
   EDGE: "composite of pressure rate, sack rate, run-stop TFL rate, and missed tackle rate (data 2018+)",
   iDL:  "composite of run-stop TFL rate, pressure rate, sack rate, and missed tackle rate (data 2018+)",
   LB:   "composite of TFL rate, coverage damage (yds/tgt), tackle volume + technique, and coverage playmaking (PBU/INT) (data 2018+)",
+  K:    "composite of FG% from 40+ yards, overall FG%, XP%, and longest FG made (data 2016+)",
 };
 
 /** Heading + threshold text used for the below-qualification section. */
@@ -113,6 +114,11 @@ const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = 
     threshold:
       "Fewer than 600 defensive snaps (LB threshold raised to suppress rotational specialists whose per-snap rates outpace every-down LBs). Grades still computed on the same 0-100 scale but treat them as noisy.",
   },
+  K: {
+    heading: "Low-volume kickers",
+    threshold:
+      "Fewer than 20 FG attempts. Grades still computed on the same 0-100 scale but treat them as noisy (rookies, mid-season callups, kickers in heavy committees).",
+  },
 };
 
 /** Noun used in the "{N} qualified X" header under the title. */
@@ -126,6 +132,7 @@ const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
   EDGE: { singular: "qualified edge rusher",  plural: "qualified edge rushers" },
   iDL:  { singular: "qualified interior lineman", plural: "qualified interior linemen" },
   LB:   { singular: "qualified linebacker",       plural: "qualified linebackers" },
+  K:    { singular: "qualified kicker",           plural: "qualified kickers" },
 };
 
 export default async function HomePage({ searchParams }: Props) {

@@ -875,3 +875,77 @@ LB_V1_MIN_TARGET_RATE_FOR_OFFBALL: float = 0.035
 # Also require an absolute minimum of targets so a 200-snap player with
 # 8 targets (4% rate) doesn't sneak in on a noise sample.
 LB_V1_MIN_TARGETS_FOR_OFFBALL: int = 15
+
+
+# ---------------------------------------------------------------------------
+# K v1 (ADR-0023, 2026-05-14, audit-first design).
+# ---------------------------------------------------------------------------
+# Placekicker grading. Scope: FG accuracy + XP accuracy + power.
+# Kickoffs intentionally excluded — 2024 dynamic kickoff rule change broke
+# continuity of touchback/return rates.
+#
+# Data source: kicker_stats (ingested from nflvs_player_stats, season totals).
+# Coverage: 2016+.
+#
+# Exhaustive audit findings (2026-05-14, see audits/2026-05-14-exhaustive-k.md):
+# Kicker stats are STRUCTURALLY NOISY. Most metrics have YoY r < 0.05 and
+# Pro Bowl validity r < 0.13. Only 2 K Pro Bowls per year out of ~30 qualified
+# kickers (~6.5% rate) — voting is voter-noise heavy, similar to LB.
+#
+# Best signals from audit:
+#   - fg_pct_40_plus:  highest validity (+0.126) — long-range is where kickers
+#       separate (everyone hits short FGs)
+#   - pat_pct:         highest YoY (+0.211) — XP accuracy persists most
+#   - fg_long:         decent YoY (+0.206) — power capability persists
+#   - fg_pct overall:  weak both ways (-0.013 YoY, +0.052 validity) — kept on
+#       definitional grounds (conventional headline kicker metric)
+#
+# Rejected: fg_pct_short (NEGATIVE YoY −0.135, regression-to-ceiling),
+# fg_pct_50_plus (small samples + noise), gwfg_pct (pure noise, n=49),
+# fg_att_per_game (usage marker, not skill).
+#
+# Weight breakdown (sum |abs| = 0.90):
+#   k_fg_pct_40_plus (44%): primary — long-range accuracy, highest-validity signal
+#   k_fg_pct (28%): conventional overall accuracy; reader-recognizable
+#   k_pat_pct (17%): XP accuracy; most reliable signal in the formula
+#   k_fg_long (11%): power capability; YoY-stable
+# ---------------------------------------------------------------------------
+
+K_COMPONENT_FG_PCT_40_PLUS: str = "k_fg_pct_40_plus"
+K_COMPONENT_FG_PCT: str = "k_fg_pct"
+K_COMPONENT_PAT_PCT: str = "k_pat_pct"
+K_COMPONENT_FG_LONG: str = "k_fg_long"
+
+K_V1_WEIGHTS: dict[str, float] = {
+    K_COMPONENT_FG_PCT_40_PLUS:  0.40,
+    K_COMPONENT_FG_PCT:          0.25,
+    K_COMPONENT_PAT_PCT:         0.15,
+    K_COMPONENT_FG_LONG:         0.10,
+}
+
+K_V1_SHRINKAGE_K: dict[str, float] = {
+    # Empirical Bayes shrinkage toward league mean.
+    K_COMPONENT_FG_PCT_40_PLUS:  8.0,    # in fg_att_40_plus
+    K_COMPONENT_FG_PCT:          12.0,   # in fg_att
+    K_COMPONENT_PAT_PCT:         15.0,   # in pat_att
+    K_COMPONENT_FG_LONG:         5.0,    # in fg_att (proxy denom)
+}
+
+K_V1_RAW_VALUE_COLS: dict[str, str] = {
+    K_COMPONENT_FG_PCT_40_PLUS:  "fg_pct_40_plus",
+    K_COMPONENT_FG_PCT:          "fg_pct",
+    K_COMPONENT_PAT_PCT:         "pat_pct",
+    K_COMPONENT_FG_LONG:         "fg_long",
+}
+
+K_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    K_COMPONENT_FG_PCT_40_PLUS:  "fg_att_40_plus",
+    K_COMPONENT_FG_PCT:          "fg_att",
+    K_COMPONENT_PAT_PCT:         "pat_att",
+    K_COMPONENT_FG_LONG:         "fg_att",
+}
+
+# Qualification thresholds — FG-attempt based.
+K_V1_MIN_FG_ATT_TO_GRADE: int = 10        # rookie / mid-season callup floor
+K_V1_QUALIFIED_MIN_FG_ATT: int = 20       # main leaderboard threshold
+K_V1_CONFIDENCE_FULL_FG_ATT: int = 30     # full confidence (career-year starter)

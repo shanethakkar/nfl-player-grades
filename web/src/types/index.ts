@@ -70,6 +70,8 @@ export type DepthChartEntry = DepthChartsRow;
  *        idl_tackles_per_snap, idl_missed_tackle_rate (n_snaps reused for snap count)
  *   LB  → lb_tfl_rate, lb_passer_rating_allowed, lb_missed_tackle_rate,
  *        lb_pbu_rate, lb_tackle_rate, lb_pressure_rate (n_snaps reused)
+ *   K   → k_fg_pct_40_plus, k_fg_pct, k_pat_pct, k_fg_long, n_fg_att
+ *        (kickers have no snap count — FG attempts are the qualifying sample)
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -145,6 +147,13 @@ export type LeaderboardEntry = {
   lb_pbu_rate: number | null;
   lb_tackle_rate: number | null;
   lb_pressure_rate: number | null;
+  // --- K columns ---
+  // n_fg_att is the qualifying sample for kickers (FG attempts, not snaps).
+  n_fg_att: number | null;
+  k_fg_pct: number | null;
+  k_fg_pct_40_plus: number | null;
+  k_pat_pct: number | null;
+  k_fg_long: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

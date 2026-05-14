@@ -649,6 +649,49 @@ const LB_COLUMNS: SortableColumn[] = [
   },
 ];
 
+const K_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_fg_att",
+    header: "FG Att",
+    hoverLabel: "Qualifying FG attempts — kickers have no snap count, FG attempts are the qualifying sample",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_fg_att,
+    render: (e) => fmtInt(e.n_fg_att),
+  },
+  {
+    key: "k_fg_pct_40_plus",
+    header: "FG% 40+",
+    hoverLabel: "Field goal percentage on 40+ yard attempts — the primary kicker differentiator",
+    defaultDir: "desc",
+    sortValue: (e) => e.k_fg_pct_40_plus,
+    render: (e) => fmtPct(e.k_fg_pct_40_plus, 1),
+  },
+  {
+    key: "k_fg_pct",
+    header: "FG%",
+    hoverLabel: "Overall field goal percentage (all distances) — conventional kicker headline",
+    defaultDir: "desc",
+    sortValue: (e) => e.k_fg_pct,
+    render: (e) => fmtPct(e.k_fg_pct, 1),
+  },
+  {
+    key: "k_pat_pct",
+    header: "XP%",
+    hoverLabel: "Extra-point conversion rate — most YoY-reliable signal in the formula",
+    defaultDir: "desc",
+    sortValue: (e) => e.k_pat_pct,
+    render: (e) => fmtPct(e.k_pat_pct, 1),
+  },
+  {
+    key: "k_fg_long",
+    header: "FG long",
+    hoverLabel: "Longest field goal made this season — power capability proxy",
+    defaultDir: "desc",
+    sortValue: (e) => e.k_fg_long,
+    render: (e) => (e.k_fg_long == null ? "—" : e.k_fg_long.toFixed(0)),
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB:   QB_COLUMNS,
   RB:   RB_COLUMNS,
@@ -659,6 +702,7 @@ const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   EDGE: EDGE_COLUMNS,
   iDL:  IDL_COLUMNS,
   LB:   LB_COLUMNS,
+  K:    K_COLUMNS,
 };
 
 function Row({

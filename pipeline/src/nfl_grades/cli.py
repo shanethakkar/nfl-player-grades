@@ -222,6 +222,22 @@ def ingest_ftn_receiving(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="kicker-stats")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_kicker_stats(season: int, refresh: bool) -> None:
+    """Pull kicker FG/XP stats from nflvs_player_stats (2016+)."""
+    from .ingest import kicker as kicker_ingest
+
+    result = kicker_ingest.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_match={result.rows_skipped_no_match}"
+    )
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -234,6 +250,7 @@ def ingest_all(season: int, refresh: bool) -> None:
     ctx.invoke(ingest_pbp, season=season, refresh=refresh)
     if season >= 2016:
         ctx.invoke(ingest_ngs, season=season, stat_type="all", refresh=refresh)
+        ctx.invoke(ingest_kicker_stats, season=season, refresh=refresh)
     if season >= 2018:
         ctx.invoke(ingest_pfr_def_coverage, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)
@@ -249,7 +266,7 @@ def ingest_all(season: int, refresh: bool) -> None:
     "--position",
     type=str,
     default=None,
-    help="Limit to a single position (QB, RB, WR, TE, CB, S, EDGE, iDL, LB). Omit to grade all.",
+    help="Limit to a single position (QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K). Omit to grade all.",
 )
 def grade(season: int, position: str | None) -> None:
     """Compute season grades (QB/RB/WR/TE/CB/S/EDGE/iDL/LB v1)."""
@@ -262,12 +279,13 @@ def grade(season: int, position: str | None) -> None:
         _TOTAL_ATTRS = (
             "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total",
             "n_cbs_total", "n_safeties_total", "n_edges_total", "n_idls_total",
-            "n_lbs_total",
+            "n_lbs_total", "n_kickers_total",
         )
         _QUAL_ATTRS = (
             "n_qbs_qualified", "n_rbs_qualified", "n_wrs_qualified",
             "n_tes_qualified", "n_cbs_qualified", "n_safeties_qualified",
             "n_edges_qualified", "n_idls_qualified", "n_lbs_qualified",
+            "n_kickers_qualified",
         )
         total_attr = next((a for a in _TOTAL_ATTRS if hasattr(result, a)), None)
         qualified_attr = next((a for a in _QUAL_ATTRS if hasattr(result, a)), None)
@@ -433,6 +451,7 @@ def audit_candidates(position: str) -> None:
         run_cb_audit,
         run_edge_audit,
         run_idl_audit,
+        run_k_audit,
         run_lb_audit,
         run_qb_audit,
         run_rb_audit,
@@ -452,6 +471,7 @@ def audit_candidates(position: str) -> None:
         "EDGE": run_edge_audit,
         "IDL": run_idl_audit,
         "LB": run_lb_audit,
+        "K": run_k_audit,
     }
     if pos not in runners:
         click.echo(

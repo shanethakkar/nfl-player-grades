@@ -2,7 +2,8 @@
 
 Dispatches to per-position grading modules. QB (ADR-0013), RB
 (ADR-0014), WR (ADR-0015), TE (ADR-0016), CB (ADR-0018), S
-(ADR-0019), EDGE (ADR-0020), iDL (ADR-0021), and LB (ADR-0022) are live.
+(ADR-0019), EDGE (ADR-0020), iDL (ADR-0021), LB (ADR-0022), and K
+(ADR-0023) are live.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from nfl_grades.grading import cb, edge, idl, lb, qb, rb, safety, te, wr
+from nfl_grades.grading import cb, edge, idl, kicker, lb, qb, rb, safety, te, wr
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ POSITION_RUNNERS = {
     "EDGE": edge.run,
     "iDL":  idl.run,
     "LB":   lb.run,
+    "K":    kicker.run,
 }
 
 # Union of per-position RunResult dataclasses — they each carry
@@ -33,7 +35,7 @@ POSITION_RUNNERS = {
 PositionRunResult = (
     qb.RunResult | rb.RunResult | wr.RunResult | te.RunResult
     | cb.RunResult | safety.RunResult | edge.RunResult | idl.RunResult
-    | lb.RunResult
+    | lb.RunResult | kicker.RunResult
 )
 
 
