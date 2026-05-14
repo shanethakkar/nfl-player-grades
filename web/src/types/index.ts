@@ -65,9 +65,9 @@ export type DepthChartEntry = DepthChartsRow;
  *   S  → n_snaps, s_passer_rating_allowed, s_target_rate, s_pbu_rate,
  *        s_tackles_per_snap, s_missed_tackle_rate, s_backfield_disruption_per_snap
  *   EDGE → edge_pressure_rate, edge_sack_rate, edge_tfl_rate,
- *        edge_missed_tackle_rate (n_snaps reused for snap count)
+ *        edge_tackles_per_snap, edge_missed_tackle_rate (n_snaps reused for snap count)
  *   iDL → idl_tfl_rate, idl_pressure_rate, idl_sack_rate,
- *        idl_missed_tackle_rate (n_snaps reused for snap count)
+ *        idl_tackles_per_snap, idl_missed_tackle_rate (n_snaps reused for snap count)
  *   LB  → lb_tfl_rate, lb_passer_rating_allowed, lb_missed_tackle_rate,
  *        lb_pbu_rate, lb_tackle_rate, lb_pressure_rate (n_snaps reused)
  *
@@ -130,11 +130,13 @@ export type LeaderboardEntry = {
   edge_pressure_rate: number | null;
   edge_sack_rate: number | null;
   edge_tfl_rate: number | null;
+  edge_tackles_per_snap: number | null;
   edge_missed_tackle_rate: number | null;
   // --- iDL columns ---
   idl_tfl_rate: number | null;
   idl_pressure_rate: number | null;
   idl_sack_rate: number | null;
+  idl_tackles_per_snap: number | null;
   idl_missed_tackle_rate: number | null;
   // --- LB columns ---
   lb_tfl_rate: number | null;

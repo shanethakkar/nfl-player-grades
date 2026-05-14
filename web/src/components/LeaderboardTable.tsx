@@ -522,6 +522,14 @@ const EDGE_COLUMNS: SortableColumn[] = [
     render: (e) => fmtPct(e.edge_tfl_rate, 2),
   },
   {
+    key: "edge_tackles_per_snap",
+    header: "Tkl/Snap",
+    hoverLabel: "Tackles per defensive snap — chase-tackles and box-score activity beyond pressure/sack/TFL (added v1.2 per exhaustive audit)",
+    defaultDir: "desc",
+    sortValue: (e) => e.edge_tackles_per_snap,
+    render: (e) => fmtPct(e.edge_tackles_per_snap, 1),
+  },
+  {
     key: "edge_missed_tkl",
     header: "MTkl%",
     hoverLabel: "Missed Tackle Rate — missed tackles as a share of tackle attempts. Lower is better.",
@@ -563,6 +571,14 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.idl_sack_rate,
     render: (e) => fmtPct(e.idl_sack_rate, 2),
+  },
+  {
+    key: "idl_tackles_per_snap",
+    header: "Tkl/Snap",
+    hoverLabel: "Tackles per defensive snap — chase-tackles and box-score activity beyond pressure/sack/TFL (added v1.2 per exhaustive audit)",
+    defaultDir: "desc",
+    sortValue: (e) => e.idl_tackles_per_snap,
+    render: (e) => fmtPct(e.idl_tackles_per_snap, 1),
   },
   {
     key: "idl_missed_tkl",

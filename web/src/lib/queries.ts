@@ -376,6 +376,7 @@ async function _getLeaderboard(
         sc_press.raw_value            AS edge_pressure_rate,
         sc_sack.raw_value             AS edge_sack_rate,
         sc_tfl.raw_value              AS edge_tfl_rate,
+        sc_tps.raw_value              AS edge_tackles_per_snap,
         sc_miss.raw_value             AS edge_missed_tackle_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
@@ -394,6 +395,10 @@ async function _getLeaderboard(
         ON sc_tfl.player_id = sg.player_id
        AND sc_tfl.season = sg.season
        AND sc_tfl.component_name = 'edge_tfl_rate'
+      LEFT JOIN stat_components sc_tps
+        ON sc_tps.player_id = sg.player_id
+       AND sc_tps.season = sg.season
+       AND sc_tps.component_name = 'edge_tackles_per_snap'
       LEFT JOIN stat_components sc_miss
         ON sc_miss.player_id = sg.player_id
        AND sc_miss.season = sg.season
@@ -486,6 +491,7 @@ async function _getLeaderboard(
         sc_tfl.raw_value              AS idl_tfl_rate,
         sc_press.raw_value            AS idl_pressure_rate,
         sc_sack.raw_value             AS idl_sack_rate,
+        sc_tps.raw_value              AS idl_tackles_per_snap,
         sc_miss.raw_value             AS idl_missed_tackle_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
@@ -504,6 +510,10 @@ async function _getLeaderboard(
         ON sc_sack.player_id = sg.player_id
        AND sc_sack.season = sg.season
        AND sc_sack.component_name = 'idl_sack_rate'
+      LEFT JOIN stat_components sc_tps
+        ON sc_tps.player_id = sg.player_id
+       AND sc_tps.season = sg.season
+       AND sc_tps.component_name = 'idl_tackles_per_snap'
       LEFT JOIN stat_components sc_miss
         ON sc_miss.player_id = sg.player_id
        AND sc_miss.season = sg.season
@@ -1060,11 +1070,13 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     edge_pressure_rate: coerceNullableNumber(row.edge_pressure_rate),
     edge_sack_rate: coerceNullableNumber(row.edge_sack_rate),
     edge_tfl_rate: coerceNullableNumber(row.edge_tfl_rate),
+    edge_tackles_per_snap: coerceNullableNumber(row.edge_tackles_per_snap),
     edge_missed_tackle_rate: coerceNullableNumber(row.edge_missed_tackle_rate),
     // iDL-only
     idl_tfl_rate: coerceNullableNumber(row.idl_tfl_rate),
     idl_pressure_rate: coerceNullableNumber(row.idl_pressure_rate),
     idl_sack_rate: coerceNullableNumber(row.idl_sack_rate),
+    idl_tackles_per_snap: coerceNullableNumber(row.idl_tackles_per_snap),
     idl_missed_tackle_rate: coerceNullableNumber(row.idl_missed_tackle_rate),
     // LB-only
     lb_tfl_rate: coerceNullableNumber(row.lb_tfl_rate),
