@@ -30,10 +30,8 @@ from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
-    K_COMPONENT_FG_LONG,
-    K_COMPONENT_FG_PCT,
-    K_COMPONENT_FG_PCT_40_PLUS,
-    K_COMPONENT_PAT_PCT,
+    K_COMPONENT_FGOE_PER_ATT,
+    K_V1_1_BASELINES,
     K_V1_CONFIDENCE_FULL_FG_ATT,
     K_V1_MIN_FG_ATT_TO_GRADE,
     K_V1_QUALIFIED_MIN_FG_ATT,
@@ -108,6 +106,12 @@ _FEATURES_SQL = text("""
         COALESCE(ks.fg_att, 0)            AS fg_att,
         COALESCE(ks.fg_made, 0)           AS fg_made,
         ks.fg_long,
+        COALESCE(ks.fg_att_0_19, 0)       AS fg_att_0_19,
+        COALESCE(ks.fg_made_0_19, 0)      AS fg_made_0_19,
+        COALESCE(ks.fg_att_20_29, 0)      AS fg_att_20_29,
+        COALESCE(ks.fg_made_20_29, 0)     AS fg_made_20_29,
+        COALESCE(ks.fg_att_30_39, 0)      AS fg_att_30_39,
+        COALESCE(ks.fg_made_30_39, 0)     AS fg_made_30_39,
         COALESCE(ks.fg_att_40_49, 0)      AS fg_att_40_49,
         COALESCE(ks.fg_made_40_49, 0)     AS fg_made_40_49,
         COALESCE(ks.fg_att_50_59, 0)      AS fg_att_50_59,
@@ -138,6 +142,9 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 
     int_cols = (
         "fg_att", "fg_made",
+        "fg_att_0_19", "fg_made_0_19",
+        "fg_att_20_29", "fg_made_20_29",
+        "fg_att_30_39", "fg_made_30_39",
         "fg_att_40_49", "fg_made_40_49",
         "fg_att_50_59", "fg_made_50_59",
         "fg_att_60_plus", "fg_made_60_plus",
@@ -149,9 +156,9 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     # fg_long is nullable (kicker with no FG attempts has no long).
     df["fg_long"] = df["fg_long"].astype("Float64").astype(float)
 
-    # Compute rate features.
-    fg_att = df["fg_att"].astype(float).clip(lower=1)
-    df["fg_pct"] = df["fg_made"] / fg_att
+    # Context columns (kept for display, not part of the formula).
+    fg_att_safe = df["fg_att"].astype(float).clip(lower=1)
+    df["fg_pct"] = df["fg_made"] / fg_att_safe
 
     fg_att_40p = (
         df["fg_att_40_49"] + df["fg_att_50_59"] + df["fg_att_60_plus"]
@@ -162,8 +169,31 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     df["fg_att_40_plus"] = fg_att_40p.astype(int)
     df["fg_pct_40_plus"] = fg_made_40p / fg_att_40p.replace(0, np.nan)
 
-    pat_att = df["pat_att"].astype(float).clip(lower=1)
-    df["pat_pct"] = df["pat_made"] / pat_att
+    pat_att_safe = df["pat_att"].astype(float).clip(lower=1)
+    df["pat_pct"] = df["pat_made"] / pat_att_safe
+
+    # v1.1 primary feature: FG over expected per attempt.
+    # Need bucket breakouts for 0-19, 20-29, 30-39 too (we already pull
+    # 40-49, 50-59, 60+). Query was missing those — add via a second
+    # lookup since they're needed for the expected-makes calculation.
+    # Actually we have fg_made and fg_att totals; we can derive short
+    # buckets if they're in the source query. Update SQL to include them.
+    # (Done below — see _FEATURES_SQL.)
+    expected = (
+        df["fg_att_0_19"].astype(float)    * K_V1_1_BASELINES["fg_0_19"]
+        + df["fg_att_20_29"].astype(float) * K_V1_1_BASELINES["fg_20_29"]
+        + df["fg_att_30_39"].astype(float) * K_V1_1_BASELINES["fg_30_39"]
+        + df["fg_att_40_49"].astype(float) * K_V1_1_BASELINES["fg_40_49"]
+        + df["fg_att_50_59"].astype(float) * K_V1_1_BASELINES["fg_50_59"]
+        + df["fg_att_60_plus"].astype(float) * K_V1_1_BASELINES["fg_60_plus"]
+        + df["pat_att"].astype(float)      * K_V1_1_BASELINES["xp"]
+    )
+    total_makes = df["fg_made"].astype(float) + df["pat_made"].astype(float)
+    total_att = (df["fg_att"] + df["pat_att"]).astype(int)
+    df["total_att"] = total_att
+    df["fg_expected"] = expected
+    df["fgoe"] = total_makes - expected
+    df["fgoe_per_att"] = df["fgoe"] / total_att.astype(float).clip(lower=1)
 
     return df
 

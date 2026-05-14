@@ -1,6 +1,6 @@
 # K Exhaustive Candidate Audit — 2026-05-14
 
-**Tenth production audit. First new-position audit using the full audit-first process.** Nine candidates scored: 0 existing components (this is v1) + 9 derived from raw kicker_stats.
+**Tenth production audit. First new-position audit using the full audit-first process.** Originally nine candidates scored for v1; **revised same-day to v1.1 after adding FGOE/att as a 10th candidate** — see the "v1 → v1.1 correction" section at the bottom.
 
 **Cohort:** qualified K-seasons 2016-2025 with ≥15 FG attempts (n=323).
 
@@ -140,3 +140,79 @@ Cameron Dicker (NFC Pro Bowl 2024) at #8 is the most arguable placement — his 
 | **K** | **+0.165** | **Lowest — kicker stats inherently noisy + voter reputation weight** |
 
 Every audited position's weights are now defensibly tied to a four-criterion screen of every plausible candidate.
+
+---
+
+## v1 → v1.1 correction (same-day, 2026-05-14)
+
+After shipping v1 (4 raw make-rate components) we recognized a fundamental design flaw: **the formula punished kickers for attempting long FGs.** A 60-yard miss hurt `k_fg_pct` and `k_fg_pct_40_plus` identically to a 35-yard miss, even though one is league-average difficulty and the other is a near-certain make. Brandon Aubrey — who attempted 15 FGs from 50+ in 2024 (most in the league) and made the majority — graded #4 in v1 because the misses dragged his raw rates down. A kicker whose coach never let them try past 45 could grade higher.
+
+This is a **risk-aversion incentive**, not a skill measurement. The fix is structural, not parametric.
+
+### The added candidate: `k_fg_over_expected_per_att`
+
+```
+expected_makes = Σ over distance buckets b of (att_b × baseline_b) + pat_att × baseline_xp
+total_makes    = fg_made + pat_made
+fgoe           = total_makes − expected_makes
+fgoe_per_att   = fgoe / (fg_att + pat_att)
+```
+
+**Baselines** (computed from kicker_stats 2016-2024, frozen as constants):
+
+| Bucket | Baseline | n_att |
+|---|---:|---:|
+| 0-19 | 100.0% | 42 |
+| 20-29 | 98.4% | 2,093 |
+| 30-39 | 93.6% | 2,587 |
+| 40-49 | 79.6% | 2,662 |
+| 50-59 | 69.0% | 1,563 |
+| 60+ | 40.0% | 65 |
+| XP | 94.3% | 10,941 |
+
+Per-attempt mechanics are **risk-asymmetric by construction**:
+- 60-yard make = +0.60 over expected (large reward)
+- 60-yard miss = -0.40 (modest penalty)
+- 25-yard miss = -0.98 (heavy penalty)
+- XP make = +0.06 (rounding error)
+- XP miss = -0.94 (heavy penalty)
+
+### Audit scores for the new candidate
+
+| Metric | Value | vs. best raw-rate v1 component |
+|---|---:|---|
+| YoY r | **+0.126** | Best YoY of any K metric (was +0.211 for pat_pct alone, but pat_pct doesn't capture FGs) |
+| Cross-sectional std | 0.04 | Good discrimination |
+| Validity r vs next-year Pro Bowl | +0.091 | Below fg_pct_40_plus's +0.134 but within noise floor for K |
+
+### v1 → v1.1 face-check (2024)
+
+| Rank change | Player | v1 | v1.1 | Note |
+|---|---|---:|---:|---|
+| → | Chris Boswell | #1 | #1 | 1st-Team All-Pro, formula correctly agrees both ways |
+| **↑ 2** | **Brandon Aubrey** | **#4** | **#2** | **Headline fix** — 50+ accuracy now properly rewarded |
+| ↓ 1 | Nick Folk | #2 | #3 | Slight drop; fewer long attempts |
+| ↓ 1 | Wil Lutz | #5 | #4 | |
+| ↑ 5 | Justin Tucker | #28 | #23 | Still below average; FGOE penalizes his misses less because some were long |
+| → | Jake Moody | #30 | #30 | Bottom-tier (lost his job) both ways |
+| → | Dustin Hopkins | #31 | #31 | Bottom-tier both ways |
+| ↓ 2 | Cameron Dicker | #8 | #10 | NFC Pro Bowl 2024; lower FG volume hurts him slightly more |
+
+### Why v1.1 is the right call despite slightly lower validity
+
+v1.1 composite validity is +0.153 vs v1's +0.165 — a small drop within the K validity noise floor. The drop reflects that Pro Bowl voters reward raw FG% more than FGOE (they don't credit attempt difficulty). But:
+
+1. **"Grading is a definition, not an estimator."** The grade should measure skill, not predict voter behavior. FGOE measures skill correctly; raw rates conflate skill with risk-aversion.
+
+2. **YoY reliability strongly favors FGOE.** v1's best YoY among FG metrics was +0.031 (fg_pct_40_plus). FGOE has YoY +0.126 — 4× more skill-persistent. This means FGOE captures something real that v1's raw rates were diluting.
+
+3. **The risk-aversion incentive in v1 is a coaching corruptor.** A theoretical kicker who refuses any FG over 45 would have grade-maximizing behavior under v1. Under v1.1, they'd cap their grade because they don't accumulate "over expected" value on the long attempts.
+
+### Documentation value
+
+The v1 → v1.1 correction is actually a **stronger article story than a clean v1**. It demonstrates:
+- The methodology catches design errors when challenged
+- An audit log can be revised in light of new framing without losing rigor
+- The four-criterion screen alone isn't enough — domain reasoning still matters
+
+The lesson for future audits: when running candidates, include both rate-form and over-expected-form versions of the same skill. Don't stop at the conventional metric.

@@ -1,6 +1,6 @@
 # ADR-0023 — K v1 Grading Formula
 
-**Status:** Accepted (v1 audit-first release — 2026-05-14)
+**Status:** Accepted (v1.1 FGOE correction — 2026-05-14)
 **Date:** 2026-05-14
 
 ---
@@ -23,18 +23,38 @@ Grain: one row per (player_id, season). Ingest filters to `position='K'`, `seaso
 
 ---
 
-## Components (v1, 2026-05-14)
+## Components (v1.1, 2026-05-14)
 
 | Component | Formula | Weight | Direction |
 |---|---|---|---|
-| `k_fg_pct_40_plus` | (made_40-49 + made_50+) / (att_40-49 + att_50+) | **+0.40** | higher = better |
-| `k_fg_pct` | fg_made / fg_att | **+0.25** | higher = better |
-| `k_pat_pct` | pat_made / pat_att | **+0.15** | higher = better |
-| `k_fg_long` | longest FG made (yards) | **+0.10** | higher = better |
+| `k_fg_over_expected_per_att` | `(total_makes − expected_makes) / total_att` where `expected_makes = Σ attempts_bucket × baseline_bucket` (FG buckets + XP folded in) | **+1.00** | higher = better |
 
-Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
+Single-component formula. Sum \|weights\| = 1.00. No normalization needed.
 
-**Relative shares:** long-range accuracy 44%, overall accuracy 28%, XP accuracy 17%, power 11%.
+### League baselines (computed from kicker_stats 2016-2024)
+
+| Distance bucket | Baseline make rate | n_att in baseline window |
+|---|---:|---:|
+| 0-19 yd | 100.0% | 42 |
+| 20-29 yd | 98.4% | 2,093 |
+| 30-39 yd | 93.6% | 2,587 |
+| 40-49 yd | 79.6% | 2,662 |
+| 50-59 yd | 69.0% | 1,563 |
+| 60+ yd | 40.0% | 65 |
+| XP (post-2015 rule) | 94.3% | 10,941 |
+
+Baselines are frozen as constants (`K_V1_1_BASELINES` in `weights.py`) so grades reproduce season-to-season without recomputing the baseline (era-fixed yardstick).
+
+### Per-attempt mechanics
+
+- **60-yard make** → +0.60 over expected (large reward)
+- **60-yard miss** → -0.40 (modest penalty — it was hard)
+- **30-yard make** → +0.06 (tiny reward — expected)
+- **20-yard miss** → -0.98 (massive penalty — easy kick)
+- **XP make** → +0.06 (rounding error, basically free)
+- **XP miss** → -0.94 (heavily penalized)
+
+This is **risk-asymmetric by construction**. A kicker like Brandon Aubrey who attempts 15 FGs from 50+ doesn't get punished for the misses (low expected baselines) but is heavily rewarded for the makes. A kicker whose coach never lets them try past 45 doesn't get a "safe" path to a high grade — they earn what they kick.
 
 ---
 
@@ -54,22 +74,29 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
 | Component | k | Rationale |
 |---|---|---|
-| `k_fg_pct_40_plus` | 8 attempts (40+) | Matches the minimum sample we trust for the 40+ bucket |
-| `k_fg_pct` | 12 attempts | Light shrinkage — starters have ~30 attempts |
-| `k_pat_pct` | 15 attempts | XPs are 30-50/season; pull toward league mean ~0.97 |
-| `k_fg_long` | 5 attempts (fg_att proxy) | Power surfaces in few attempts; minimal shrink |
+| `k_fg_over_expected_per_att` | 15 attempts (FG + XP total) | Low-workload kickers (rookies, injury fill-ins) get pulled toward FGOE = 0 (league mean) |
 
 ---
 
-## Design Rationale
+## Design Rationale (v1.1)
 
-**Long-range accuracy primary (`k_fg_pct_40_plus`, 44%):** The exhaustive audit found this is both the highest-validity signal (+0.126 vs next-year Pro Bowl) and the cleanest discriminator. Everyone makes short FGs (league average ~95% on 0-39 yards); the kickers who differentiate themselves do so from 40+. Combining the 40-49 and 50+ buckets (rather than weighting them separately) trades some "elite long" signal for much more stable per-kicker samples (8-15 attempts vs 3-8 for 50+ alone).
+**Single principled metric.** The v1.1 formula is one number — FG Over Expected per attempt — that comprehensively captures kicker skill:
 
-**Overall FG% second (`k_fg_pct`, 28%):** Weak audit signal in isolation (YoY r = -0.013, validity r = +0.052) but kept on **definitional grounds**: it's the conventional kicker headline metric every football fan recognizes. Per the locked-plan principle "grading is a definition, not an estimator," we weight overall accuracy meaningfully even though Pro Bowl voters don't reward it strongly relative to other signals. Removing it would produce a formula that no casual reader would understand.
+- **Accuracy:** automatic. Every kick is scored vs its distance baseline.
+- **Range:** automatic. Making a 55-yarder is worth ~9x more than making a 25-yarder.
+- **Risk-asymmetry:** automatic. A 60-yard miss costs little (it was hard); an XP miss is devastating (it shouldn't have been).
+- **XPs:** folded in as a 7th distance bucket (post-2015 rule, ~94% baseline). Missing XPs hurts the grade as much as it should.
 
-**XP accuracy (`k_pat_pct`, 17%):** Has the highest YoY r in the formula (+0.211). Since the 2015 rule change moved XPs to ~33-yard FGs, they have meaningful variance and aren't free points. Reliable XP kickers have reliable form.
+**No additional components needed.** The v1.1 audit confirmed every other plausible kicker metric is either subsumed by FGOE/att or pure noise:
 
-**Long FG (`k_fg_long`, 11%):** YoY r = +0.206 (leg strength persists). Validity ≈ 0 because a long FG attempt is partly opportunity, but as a power proxy in a multi-component formula it captures real ceiling. Small weight reflects the validity caveat.
+- `k_fg_pct` (overall): redundant with FGOE (which uses the same makes but weights by difficulty)
+- `k_fg_pct_40_plus` (the v1 primary): redundant — FGOE handles 40+ explicitly via buckets and is more granular
+- `k_pat_pct`: folded INTO FGOE as the XP bucket
+- `k_fg_long`: validity ≈ 0; conceptual "power" is already expressed through FGOE on 50+ attempts
+- `k_gwfg_pct`: noise (n=49, validity 0.000)
+- `k_fg_pct_short`: anti-skill (negative YoY due to regression to ceiling)
+
+The methodology page surfaces context columns (raw FG%, longest FG, XP%) on the leaderboard for reader recognition, but they're labeled CONTEXT (not in formula) via the two-tier header. The grade itself is FGOE/att alone.
 
 ---
 
@@ -136,9 +163,38 @@ Known NaN sources:
 
 ## Future Work
 
-**v2 candidates (not for v1):**
-- `k_xfg_made_over_expected`: distance-adjusted accuracy (requires a baseline xFG model).
+**v2 candidates (not for v1.1):**
 - Kickoff metrics post-2024 rule change (touchback rate, hangtime if data becomes available).
-- Wind/weather-adjusted FG% (requires per-game weather ingest).
+- Wind/weather/dome-adjusted baselines (requires per-game weather ingest). Currently baselines are pooled across all stadiums/conditions, which mildly disadvantages outdoor cold-weather kickers (Buffalo, Cleveland, Chicago) vs indoor kickers (Detroit, Atlanta, Indy).
+- Per-attempt model: instead of bucketed baselines, fit a smooth function `p_make(distance)` from PBP-level FG data. Marginal precision gain; v1.1's bucketed approach is interpretable and matches how kickers are discussed.
 
 Any v2 add will go through the same four-criterion audit before shipping.
+
+---
+
+## Revision History
+
+### v1.1 (2026-05-14) — FGOE design correction (same-day)
+
+**Replaced the v1 formula entirely.** v1's four-component design (`k_fg_pct_40_plus` +0.40, `k_fg_pct` +0.25, `k_pat_pct` +0.15, `k_fg_long` +0.10) actively punished kickers who attempted long FGs. A 60-yard miss hurt v1's `k_fg_pct` and `k_fg_pct_40_plus` identically to a 35-yard miss, even though the former is league-average difficulty and the latter is a near-certain make. **Brandon Aubrey is the case study:** in 2024 he attempted 15 FGs from 50+ (most in the league) and made most of them; v1 graded him #4 because the missed long-range attempts dragged his raw rates down. A kicker whose coach never sent them past 45 looked better.
+
+**v1.1 fix:** single component, `k_fg_over_expected_per_att`. Each kick is compared to the league baseline for its distance (computed from 2016-2024 data and frozen as constants). Risk-asymmetric by construction.
+
+**Audit support:** the v1 audit had already shipped FGOE as a candidate. Its YoY r = +0.126 is the **highest of any K candidate** (next best `k_pat_pct` at +0.211 was disqualified as standalone since it doesn't capture FG range). Validity r = +0.091 is moderate — within the noise floor for K, but the philosophical case carries. See `docs/grading/audits/2026-05-14-exhaustive-k.md`.
+
+**Face-check 2024 (v1 → v1.1 movement):**
+- Chris Boswell: #1 → #1 (1st-Team All-Pro, consensus #1, formula agrees both ways)
+- **Brandon Aubrey: #4 → #2** (the headline correction — formula now rewards his 50+ make rate properly)
+- Nick Folk: #2 → #3
+- Wil Lutz: #5 → #4
+- Justin Tucker (historic collapse): #28 → #23 — still well below average, but FGOE penalizes his misses less because some were long
+- Jake Moody, Dustin Hopkins: bottom 2 in both versions (lost their jobs)
+- Cameron Dicker (NFC Pro Bowl): #8 → #10 — his lower FG attempt count hurts him slightly more under FGOE
+
+**Validity gate:** v1 composite r = +0.165 → v1.1 r = +0.153 (-0.012). Slight drop in Pro Bowl-prediction strength, well within noise floor for the K validity ceiling. Pro Bowl voting at K is reputation-driven; the drop reflects that voters reward FG% more than FGOE (which is a known voter behavior, not a formula flaw). The philosophical correctness of FGOE is the test, not validity for this position.
+
+**Leaderboard UI change:** added a two-tier "FORMULA / CONTEXT" header pattern to the K leaderboard (PFF-style grouped header). The single FGOE/att column sits under FORMULA; raw FG%, FG% 40+, XP%, and longest FG are shown under CONTEXT for reader recognition without being scored. Pattern is K-only for now; could generalize to other positions later.
+
+### v1.0 (2026-05-14, deprecated same-day)
+
+Initial release with four raw make-rate components. Replaced within hours by v1.1 after recognizing the risk-aversion flaw. Documented here for the audit log.

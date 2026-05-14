@@ -878,71 +878,75 @@ LB_V1_MIN_TARGETS_FOR_OFFBALL: int = 15
 
 
 # ---------------------------------------------------------------------------
-# K v1 (ADR-0023, 2026-05-14, audit-first design).
+# K v1.1 (ADR-0023, revised 2026-05-14 same-day via FGOE design correction).
 # ---------------------------------------------------------------------------
-# Placekicker grading. Scope: FG accuracy + XP accuracy + power.
+# Placekicker grading. Scope: FG accuracy + XP accuracy.
 # Kickoffs intentionally excluded — 2024 dynamic kickoff rule change broke
 # continuity of touchback/return rates.
 #
 # Data source: kicker_stats (ingested from nflvs_player_stats, season totals).
 # Coverage: 2016+.
 #
-# Exhaustive audit findings (2026-05-14, see audits/2026-05-14-exhaustive-k.md):
-# Kicker stats are STRUCTURALLY NOISY. Most metrics have YoY r < 0.05 and
-# Pro Bowl validity r < 0.13. Only 2 K Pro Bowls per year out of ~30 qualified
-# kickers (~6.5% rate) — voting is voter-noise heavy, similar to LB.
+# v1 → v1.1 (same-day correction): the v1 formula used raw make-rate metrics
+# (fg_pct, fg_pct_40_plus, pat_pct, fg_long), which actively PUNISHED kickers
+# for attempting risky long FGs — a 60-yard miss hurt fg_pct identically to a
+# 30-yard miss. A kicker whose coach never let them try past 45 looked better
+# than a kicker who attempted (and made some) 60-yarders.
 #
-# Best signals from audit:
-#   - fg_pct_40_plus:  highest validity (+0.126) — long-range is where kickers
-#       separate (everyone hits short FGs)
-#   - pat_pct:         highest YoY (+0.211) — XP accuracy persists most
-#   - fg_long:         decent YoY (+0.206) — power capability persists
-#   - fg_pct overall:  weak both ways (-0.013 YoY, +0.052 validity) — kept on
-#       definitional grounds (conventional headline kicker metric)
+# v1.1 replaces this with a single principled metric:
+#   k_fg_over_expected_per_att
 #
-# Rejected: fg_pct_short (NEGATIVE YoY −0.135, regression-to-ceiling),
-# fg_pct_50_plus (small samples + noise), gwfg_pct (pure noise, n=49),
-# fg_att_per_game (usage marker, not skill).
+# Computed per kicker per season:
+#   expected_makes = sum over distance buckets of (attempts_b × baseline_b)
+#                  + pat_att × baseline_xp
+#   total_makes    = fg_made + pat_made
+#   fgoe           = total_makes − expected_makes
+#   fgoe_per_att   = fgoe / (fg_att + pat_att)
 #
-# Weight breakdown (sum |abs| = 0.90):
-#   k_fg_pct_40_plus (44%): primary — long-range accuracy, highest-validity signal
-#   k_fg_pct (28%): conventional overall accuracy; reader-recognizable
-#   k_pat_pct (17%): XP accuracy; most reliable signal in the formula
-#   k_fg_long (11%): power capability; YoY-stable
+# League baselines (K_V1_1_BASELINES below) come from kicker_stats 2016-2024.
+#
+# Math automatically rewards making hard kicks heavily (60-yard make = +0.60
+# over expected) and penalizes missing easy kicks heavily (XP miss = -0.94
+# over expected). Risk-asymmetric by construction — no extra weighting needed.
+#
+# Single-component formula (weight 1.0). The audit log shows raw FG%, FG% 40+,
+# fg_long, pat_pct (standalone), fg_pct_short, fg_pct_50_plus, gwfg_pct, and
+# fg_att_per_game were all considered and rejected — either subsumed by FGOE
+# or pure noise. See docs/grading/audits/2026-05-14-exhaustive-k.md.
 # ---------------------------------------------------------------------------
 
-K_COMPONENT_FG_PCT_40_PLUS: str = "k_fg_pct_40_plus"
-K_COMPONENT_FG_PCT: str = "k_fg_pct"
-K_COMPONENT_PAT_PCT: str = "k_pat_pct"
-K_COMPONENT_FG_LONG: str = "k_fg_long"
+K_COMPONENT_FGOE_PER_ATT: str = "k_fg_over_expected_per_att"
 
 K_V1_WEIGHTS: dict[str, float] = {
-    K_COMPONENT_FG_PCT_40_PLUS:  0.40,
-    K_COMPONENT_FG_PCT:          0.25,
-    K_COMPONENT_PAT_PCT:         0.15,
-    K_COMPONENT_FG_LONG:         0.10,
+    K_COMPONENT_FGOE_PER_ATT: 1.0,
 }
 
 K_V1_SHRINKAGE_K: dict[str, float] = {
-    # Empirical Bayes shrinkage toward league mean.
-    K_COMPONENT_FG_PCT_40_PLUS:  8.0,    # in fg_att_40_plus
-    K_COMPONENT_FG_PCT:          12.0,   # in fg_att
-    K_COMPONENT_PAT_PCT:         15.0,   # in pat_att
-    K_COMPONENT_FG_LONG:         5.0,    # in fg_att (proxy denom)
+    # 15 attempts of pseudo-sample — kickers with low workload are shrunk
+    # toward the league mean (FGOE = 0).
+    K_COMPONENT_FGOE_PER_ATT: 15.0,
 }
 
 K_V1_RAW_VALUE_COLS: dict[str, str] = {
-    K_COMPONENT_FG_PCT_40_PLUS:  "fg_pct_40_plus",
-    K_COMPONENT_FG_PCT:          "fg_pct",
-    K_COMPONENT_PAT_PCT:         "pat_pct",
-    K_COMPONENT_FG_LONG:         "fg_long",
+    K_COMPONENT_FGOE_PER_ATT: "fgoe_per_att",
 }
 
 K_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
-    K_COMPONENT_FG_PCT_40_PLUS:  "fg_att_40_plus",
-    K_COMPONENT_FG_PCT:          "fg_att",
-    K_COMPONENT_PAT_PCT:         "pat_att",
-    K_COMPONENT_FG_LONG:         "fg_att",
+    K_COMPONENT_FGOE_PER_ATT: "total_att",  # fg_att + pat_att
+}
+
+# League baselines used to compute expected FG makes by distance.
+# Computed from kicker_stats 2016-2024 (n_att shown). Frozen as constants
+# so grades are reproducible season-to-season without recomputing the
+# baseline (era-fixed yardstick).
+K_V1_1_BASELINES: dict[str, float] = {
+    "fg_0_19":  1.0000,   # n=42
+    "fg_20_29": 0.9838,   # n=2093
+    "fg_30_39": 0.9362,   # n=2587
+    "fg_40_49": 0.7956,   # n=2662
+    "fg_50_59": 0.6903,   # n=1563
+    "fg_60_plus": 0.4000, # n=65
+    "xp":       0.9431,   # n=10941 (post-2015)
 }
 
 # Qualification thresholds — FG-attempt based.

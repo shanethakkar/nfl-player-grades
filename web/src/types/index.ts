@@ -149,7 +149,10 @@ export type LeaderboardEntry = {
   lb_pressure_rate: number | null;
   // --- K columns ---
   // n_fg_att is the qualifying sample for kickers (FG attempts, not snaps).
+  // FGOE / att (k_fg_over_expected_per_att) is the SOLE formula component
+  // post-v1.1. Other K columns are context — displayed but not scored.
   n_fg_att: number | null;
+  k_fg_over_expected_per_att: number | null;
   k_fg_pct: number | null;
   k_fg_pct_40_plus: number | null;
   k_pat_pct: number | null;

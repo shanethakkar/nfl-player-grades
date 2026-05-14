@@ -110,6 +110,27 @@ export function LeaderboardTable({ entries, position }: Props) {
       <div className="overflow-x-auto rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
       <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
         <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-400">
+          {columns.some((c) => c.group) && (
+            <tr className="border-b border-neutral-800/60">
+              {/* Empty cells over Rank, Player, Team, Grade, Pct */}
+              <th colSpan={5} />
+              {computeHeaderGroups(columns).map((g, i) => (
+                <th
+                  key={i}
+                  colSpan={g.count}
+                  className={
+                    g.label
+                      ? g.label === "FORMULA"
+                        ? "px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80 border-l border-r border-neutral-800/60"
+                        : "px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-neutral-500 border-l border-r border-neutral-800/60"
+                      : ""
+                  }
+                >
+                  {g.label}
+                </th>
+              ))}
+            </tr>
+          )}
           <tr>
             <Th className="w-14 text-center">Rank</Th>
             <SortHeader
@@ -183,6 +204,8 @@ export function LeaderboardTable({ entries, position }: Props) {
 //                 conditional JSX.
 // ---------------------------------------------------------------------------
 
+type ColumnGroup = "formula" | "context";
+
 type SortableColumn = {
   key: string;
   header: string;
@@ -192,6 +215,12 @@ type SortableColumn = {
   sortValue: (e: LeaderboardEntry) => number | string | null;
   /** Cell renderer. Stat columns provide one; fixed columns render in JSX. */
   render?: (e: LeaderboardEntry) => string;
+  /**
+   * Optional grouping for a two-tier header (e.g. "FORMULA" / "CONTEXT").
+   * Only K uses this currently — see K_COLUMNS. When absent (other positions),
+   * the table renders a flat single-row header.
+   */
+  group?: ColumnGroup;
 };
 
 const FIXED_COLUMNS: SortableColumn[] = [
@@ -200,6 +229,31 @@ const FIXED_COLUMNS: SortableColumn[] = [
   { key: "grade",  header: "Grade",  defaultDir: "desc", sortValue: (e) => e.composite_grade },
   { key: "percentile", header: "Pct", hoverLabel: "Percentile Rank — composite grade percentile among qualified players at this position", defaultDir: "desc", sortValue: (e) => e.percentile },
 ];
+
+/**
+ * Compute contiguous column-group spans for the two-tier header.
+ * Returns one entry per group span (label + count of columns it covers).
+ * Used when any column in the position's spec declares a `group` field
+ * (currently K only — Formula / Context). Columns without a `group` produce
+ * a `label: null` span (empty top-row cell).
+ */
+function computeHeaderGroups(columns: SortableColumn[]): Array<{ label: string | null; count: number }> {
+  const result: Array<{ label: string | null; count: number }> = [];
+  let current: { label: string | null; count: number } | null = null;
+  for (const c of columns) {
+    const label =
+      c.group === "formula" ? "FORMULA"
+      : c.group === "context" ? "CONTEXT"
+      : null;
+    if (current && current.label === label) {
+      current.count++;
+    } else {
+      current = { label, count: 1 };
+      result.push(current);
+    }
+  }
+  return result;
+}
 const FIXED_COLUMNS_BY_KEY = Object.fromEntries(
   FIXED_COLUMNS.map((c) => [c.key, c]),
 ) as Record<string, SortableColumn>;
@@ -652,43 +706,56 @@ const LB_COLUMNS: SortableColumn[] = [
 const K_COLUMNS: SortableColumn[] = [
   {
     key: "n_fg_att",
-    header: "FG Att",
-    hoverLabel: "Qualifying FG attempts — kickers have no snap count, FG attempts are the qualifying sample",
+    header: "FG/XP Att",
+    hoverLabel: "Total FG + XP attempts — sample size (kickers have no snap count)",
     defaultDir: "desc",
     sortValue: (e) => e.n_fg_att,
     render: (e) => fmtInt(e.n_fg_att),
   },
   {
-    key: "k_fg_pct_40_plus",
-    header: "FG% 40+",
-    hoverLabel: "Field goal percentage on 40+ yard attempts — the primary kicker differentiator",
+    key: "k_fg_over_expected_per_att",
+    header: "FGOE / att",
+    hoverLabel: "Field Goal Over Expected per attempt. League baseline per distance bucket is subtracted from each attempt — 60-yard make worth +0.60, XP miss worth -0.94. Risk-asymmetric: making hard kicks rewarded, missing easy kicks heavily penalized. Sole formula component (v1.1).",
     defaultDir: "desc",
-    sortValue: (e) => e.k_fg_pct_40_plus,
-    render: (e) => fmtPct(e.k_fg_pct_40_plus, 1),
+    sortValue: (e) => e.k_fg_over_expected_per_att,
+    render: (e) => fmtSigned(e.k_fg_over_expected_per_att, 3),
+    group: "formula",
   },
   {
     key: "k_fg_pct",
     header: "FG%",
-    hoverLabel: "Overall field goal percentage (all distances) — conventional kicker headline",
+    hoverLabel: "Overall field goal percentage (all distances). CONTEXT ONLY — not part of the K v1.1 formula.",
     defaultDir: "desc",
     sortValue: (e) => e.k_fg_pct,
     render: (e) => fmtPct(e.k_fg_pct, 1),
+    group: "context",
+  },
+  {
+    key: "k_fg_pct_40_plus",
+    header: "FG% 40+",
+    hoverLabel: "Field goal percentage on 40+ yard attempts. CONTEXT ONLY — not part of the K v1.1 formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.k_fg_pct_40_plus,
+    render: (e) => fmtPct(e.k_fg_pct_40_plus, 1),
+    group: "context",
   },
   {
     key: "k_pat_pct",
     header: "XP%",
-    hoverLabel: "Extra-point conversion rate — most YoY-reliable signal in the formula",
+    hoverLabel: "Extra-point conversion rate. CONTEXT ONLY — XPs are folded into FGOE / att in the formula.",
     defaultDir: "desc",
     sortValue: (e) => e.k_pat_pct,
     render: (e) => fmtPct(e.k_pat_pct, 1),
+    group: "context",
   },
   {
     key: "k_fg_long",
     header: "FG long",
-    hoverLabel: "Longest field goal made this season — power capability proxy",
+    hoverLabel: "Longest field goal made this season. CONTEXT ONLY — not part of the K v1.1 formula.",
     defaultDir: "desc",
     sortValue: (e) => e.k_fg_long,
     render: (e) => (e.k_fg_long == null ? "—" : e.k_fg_long.toFixed(0)),
+    group: "context",
   },
 ];
 

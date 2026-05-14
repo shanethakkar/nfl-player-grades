@@ -64,7 +64,7 @@ const COMPOSITE_BLURB: Record<string, string> = {
   EDGE: "composite of pressure rate, sack rate, run-stop TFL rate, and missed tackle rate (data 2018+)",
   iDL:  "composite of run-stop TFL rate, pressure rate, sack rate, and missed tackle rate (data 2018+)",
   LB:   "composite of TFL rate, coverage damage (yds/tgt), tackle volume + technique, and coverage playmaking (PBU/INT) (data 2018+)",
-  K:    "composite of FG% from 40+ yards, overall FG%, XP%, and longest FG made (data 2016+)",
+  K:    "single-component grade: Field Goal Over Expected per attempt — each kick compared to league baseline make rate for its distance, XPs folded in. Rewards risk-taking, penalizes easy misses (data 2016+)",
 };
 
 /** Heading + threshold text used for the below-qualification section. */

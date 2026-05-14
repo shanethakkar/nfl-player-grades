@@ -526,10 +526,10 @@ async function _getLeaderboard(
   }
 
   if (position === "K") {
-    // K headline columns (ADR-0023): FG% 40+, FG%, XP%, FG long.
-    // Sample-size column n_fg_att (kickers have no snap count — FG attempts
-    // are the qualifying sample).
-    // Team resolved via player_seasons (kickers aren't passers/rushers/receivers).
+    // K v1.1 (ADR-0023 revised): single formula component is FGOE / att.
+    // Context columns (FG%, FG% 40+, XP%, FG long) pulled directly from
+    // kicker_stats — they're displayed for reader recognition but NOT part
+    // of the grade.
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -544,32 +544,31 @@ async function _getLeaderboard(
         sg.data_tier,
         sg.role,
         t.abbr                        AS team_abbr,
-        sc_fg.sample_size             AS n_fg_att,
-        sc_fg.raw_value               AS k_fg_pct,
-        sc_40.raw_value               AS k_fg_pct_40_plus,
-        sc_pat.raw_value              AS k_pat_pct,
-        sc_long.raw_value             AS k_fg_long
+        sc_fgoe.sample_size           AS n_fg_att,
+        sc_fgoe.raw_value             AS k_fg_over_expected_per_att,
+        -- Context columns (not in formula)
+        CASE WHEN COALESCE(ks.fg_att, 0) > 0
+             THEN ks.fg_made::float / ks.fg_att
+             ELSE NULL END            AS k_fg_pct,
+        CASE WHEN COALESCE(ks.fg_att_40_49, 0) + COALESCE(ks.fg_att_50_59, 0) + COALESCE(ks.fg_att_60_plus, 0) > 0
+             THEN (COALESCE(ks.fg_made_40_49, 0) + COALESCE(ks.fg_made_50_59, 0) + COALESCE(ks.fg_made_60_plus, 0))::float
+                  / (COALESCE(ks.fg_att_40_49, 0) + COALESCE(ks.fg_att_50_59, 0) + COALESCE(ks.fg_att_60_plus, 0))
+             ELSE NULL END            AS k_fg_pct_40_plus,
+        CASE WHEN COALESCE(ks.pat_att, 0) > 0
+             THEN ks.pat_made::float / ks.pat_att
+             ELSE NULL END            AS k_pat_pct,
+        ks.fg_long                    AS k_fg_long
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
         ON ps.player_id = sg.player_id AND ps.season = sg.season
       LEFT JOIN teams t ON t.team_id = ps.team_id
-      LEFT JOIN stat_components sc_fg
-        ON sc_fg.player_id = sg.player_id
-       AND sc_fg.season = sg.season
-       AND sc_fg.component_name = 'k_fg_pct'
-      LEFT JOIN stat_components sc_40
-        ON sc_40.player_id = sg.player_id
-       AND sc_40.season = sg.season
-       AND sc_40.component_name = 'k_fg_pct_40_plus'
-      LEFT JOIN stat_components sc_pat
-        ON sc_pat.player_id = sg.player_id
-       AND sc_pat.season = sg.season
-       AND sc_pat.component_name = 'k_pat_pct'
-      LEFT JOIN stat_components sc_long
-        ON sc_long.player_id = sg.player_id
-       AND sc_long.season = sg.season
-       AND sc_long.component_name = 'k_fg_long'
+      LEFT JOIN stat_components sc_fgoe
+        ON sc_fgoe.player_id = sg.player_id
+       AND sc_fgoe.season = sg.season
+       AND sc_fgoe.component_name = 'k_fg_over_expected_per_att'
+      LEFT JOIN kicker_stats ks
+        ON ks.player_id = sg.player_id AND ks.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'K'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -1139,6 +1138,7 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     lb_pressure_rate: coerceNullableNumber(row.lb_pressure_rate),
     // K-only
     n_fg_att: coerceNullableInt(row.n_fg_att),
+    k_fg_over_expected_per_att: coerceNullableNumber(row.k_fg_over_expected_per_att),
     k_fg_pct: coerceNullableNumber(row.k_fg_pct),
     k_fg_pct_40_plus: coerceNullableNumber(row.k_fg_pct_40_plus),
     k_pat_pct: coerceNullableNumber(row.k_pat_pct),

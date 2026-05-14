@@ -1887,6 +1887,18 @@ _K_SEASONS = [
     (2024, 2025),
 ]
 
+# League baselines computed from kicker_stats 2016-2024.
+# Used for FGOE / attempt — see ADR-0023 v1.1.
+_K_BASELINES = {
+    "fg_0_19":  1.0000,   # n=42 (rare, essentially auto)
+    "fg_20_29": 0.9838,
+    "fg_30_39": 0.9362,
+    "fg_40_49": 0.7956,
+    "fg_50_59": 0.6903,
+    "fg_60+":   0.4000,   # n=65, meaningful but small
+    "xp":       0.9431,   # post-2015 rule change baseline
+}
+
 
 def k_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
     """Full K candidate set for the v1 audit.
@@ -1962,6 +1974,26 @@ def k_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
     raw["gwfg_pct"] = raw["gwfg_made"] / raw["gwfg_att"].replace(0, np.nan)
     raw["fg_att_per_game"] = raw["fg_att"] / raw["games"].replace(0, np.nan)
 
+    # v1.1 candidate: FG over expected per attempt — distance-adjusted accuracy.
+    # XPs folded in as a 7th bucket (post-2015 baseline ~94.3%). This is the
+    # principled metric — making a 60-yarder is worth +0.60 over expected;
+    # missing a 25-yarder is worth -0.98. Risk-asymmetric by construction.
+    raw["fg_expected"] = (
+        raw["fg_att_0_19"].fillna(0)    * _K_BASELINES["fg_0_19"]
+        + raw["fg_att_20_29"].fillna(0) * _K_BASELINES["fg_20_29"]
+        + raw["fg_att_30_39"].fillna(0) * _K_BASELINES["fg_30_39"]
+        + raw["fg_att_40_49"].fillna(0) * _K_BASELINES["fg_40_49"]
+        + raw["fg_att_50_59"].fillna(0) * _K_BASELINES["fg_50_59"]
+        + raw["fg_att_60_plus"].fillna(0) * _K_BASELINES["fg_60+"]
+        + raw["pat_att"].fillna(0)      * _K_BASELINES["xp"]
+    )
+    raw["total_makes"] = (
+        raw["fg_made"].fillna(0) + raw["pat_made"].fillna(0)
+    )
+    raw["total_att"] = raw["fg_att"].fillna(0) + raw["pat_att"].fillna(0)
+    raw["fgoe"] = raw["total_makes"] - raw["fg_expected"]
+    raw["fgoe_per_att"] = raw["fgoe"] / raw["total_att"].replace(0, np.nan)
+
     # (column, candidate name, min sample for that metric)
     for col, name, min_n_col, min_n in [
         ("fg_pct", "k_fg_pct_overall", "fg_att", 15),
@@ -1973,6 +2005,8 @@ def k_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
         ("fg_long", "k_fg_long", "fg_att", 15),
         ("gwfg_pct", "k_gwfg_pct", "gwfg_att", 2),
         ("fg_att_per_game", "k_fg_att_per_game", "fg_att", 15),
+        # v1.1 — the principled distance-adjusted candidate
+        ("fgoe_per_att", "k_fg_over_expected_per_att", "total_att", 15),
     ]:
         mask = raw[min_n_col].fillna(0) >= min_n
         panel = raw.loc[mask, ["player_id", "season", col]].rename(

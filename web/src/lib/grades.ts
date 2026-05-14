@@ -467,29 +467,40 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     sampleNoun: "catchable ball",
   },
 
-  // --- K v1 (ADR-0023) ---
-  k_fg_pct_40_plus: {
-    label: "FG% 40+",
-    suffix: "%",
-    formatValue: pctFraction(1),
+  // --- K v1.1 (ADR-0023, revised — single component) ---
+  k_fg_over_expected_per_att: {
+    label: "FGOE / att",
+    suffix: "",
+    formatValue: (v) => signedFixed(v, 3),
     description:
-      "Field goal percentage on attempts of 40 yards or longer. The primary kicker differentiator — everyone makes short FGs, accuracy from 40+ is where elite kickers separate. Highest-validity signal per the v1 audit.",
-    sampleNoun: "40+ yd FG attempt",
+      "Field Goal Over Expected per attempt. Each kick is compared to the league baseline make rate for its distance (0-19 ~100%, 20-29 ~98%, 30-39 ~94%, 40-49 ~80%, 50-59 ~69%, 60+ ~40%, XP ~94%). A 60-yard make is worth +0.60 over expected; an XP miss is worth -0.94. Risk-asymmetric by construction — rewards making hard kicks heavily, penalizes missing easy kicks heavily, doesn't punish kickers for attempting long FGs. Replaces v1's raw make-rate formula (which active punished risk-taking).",
+    sampleNoun: "FG/XP attempt",
   },
+
+  // K context columns (displayed on the K leaderboard but NOT part of the
+  // grading formula — readers see them for recognition).
   k_fg_pct: {
     label: "FG%",
     suffix: "%",
     formatValue: pctFraction(1),
     description:
-      "Overall field goal percentage (makes / attempts, all distances). The conventional headline kicker metric. Weak audit validity in isolation but kept as a reader-recognizable summary.",
+      "Overall field goal percentage (all distances). Context only — not part of the K v1.1 formula. The grade uses FGOE / att instead because raw FG% doesn't account for kick difficulty.",
     sampleNoun: "FG attempt",
+  },
+  k_fg_pct_40_plus: {
+    label: "FG% 40+",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Field goal percentage on attempts of 40+ yards. Context only — not part of the K v1.1 formula. Was the primary v1 component but replaced by FGOE / att, which handles distance gradation continuously.",
+    sampleNoun: "40+ yd FG attempt",
   },
   k_pat_pct: {
     label: "XP%",
     suffix: "%",
     formatValue: pctFraction(1),
     description:
-      "Extra-point conversion rate. Since the 2015 rule change, XPs are 33-yard FGs and have meaningful variance. Most YoY-reliable signal in the formula (r ≈ +0.21).",
+      "Extra-point conversion rate. Context only — XPs are folded into the FGOE / att formula as a 33-yard FG bucket (~94% baseline).",
     sampleNoun: "XP attempt",
   },
   k_fg_long: {
@@ -497,7 +508,7 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     suffix: " yd",
     formatValue: (v) => v.toFixed(0),
     description:
-      "Longest field goal made on the season — power capability proxy. YoY-stable (r ≈ +0.21): leg strength persists.",
+      "Longest field goal made on the season — power capability. Context only — the audit found this signal is subsumed by FGOE / att.",
     sampleNoun: "FG attempt",
   },
 };
@@ -693,10 +704,7 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   lb_pbu_rate:                        0.05,
   lb_tackle_rate:                     0.13,
   lb_pressure_rate:                   0.10,
-  k_fg_pct_40_plus:                   0.40,
-  k_fg_pct:                           0.25,
-  k_pat_pct:                          0.15,
-  k_fg_long:                          0.10,
+  k_fg_over_expected_per_att:         1.00,
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {
