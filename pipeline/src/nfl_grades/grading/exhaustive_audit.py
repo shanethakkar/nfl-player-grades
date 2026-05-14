@@ -475,10 +475,246 @@ def run_qb_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+_WR_OFFENSE_SEASONS = _QB_OFFENSE_SEASONS  # same range
+
+
+def wr_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full WR candidate set for the exhaustive audit.
+
+    Candidates pulled from:
+      - stat_components (current WR formula components, re-scored)
+      - nflvs_player_stats (per-season totals → rates: TD rate, first-down
+        rate, yards/target, catch rate, target share, air-yards share)
+      - ngs_receiving (avg_cushion, avg_intended_air_yards, NGS YAC,
+        air-yards share — to confirm/refute earlier rejections under
+        validity)
+      - ftn_receiving_charting (contested_catch_rate, created_reception_rate,
+        beyond the current drop_rate)
+      - pfr_advstats rec (broken tackles per reception, PFR drop rate,
+        receiver passer rating)
+
+    Skips already-strongly-rejected redundant candidates (wopr, racr — both
+    have detailed prior research showing structural redundancy). Those
+    rejections are documented in research/wr-v1-1.md and don't need
+    re-validation under the four-criterion framework.
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # ---------- 1. Qualified WR ID set ----------
+    wr_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        WHERE sg.position = 'WR' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        wr_ids = pd.read_sql(wr_sql, conn)
+    seasons = sorted(wr_ids["season"].unique())
+
+    # ---------- 2. Currently-shipped components (re-score) ----------
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'WR'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'wr_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # ---------- 3. nflvs_player_stats: per-season WR totals → rates ----------
+    nflvs_frames = []
+    for s in seasons:
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        ps = ps[ps["position"] == "WR"][[
+            "player_id",
+            "targets", "receptions",
+            "receiving_yards", "receiving_air_yards",
+            "receiving_tds", "receiving_first_downs",
+            "target_share", "air_yards_share",
+        ]].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        # Note: target_share / air_yards_share are pre-computed per-game
+        # in nflvs. Summing them per season is wrong; instead recompute
+        # from totals. But the per-game numbers are also reasonable averages.
+        # For this audit we take the max per (gsis_id, season) row (which
+        # for season-aggregate rows is the season figure) — nflreadpy's
+        # load_player_stats returns season totals by default.
+        agg = ps.groupby("gsis_id", as_index=False).agg(
+            targets=("targets", "sum"),
+            receptions=("receptions", "sum"),
+            receiving_yards=("receiving_yards", "sum"),
+            receiving_air_yards=("receiving_air_yards", "sum"),
+            receiving_tds=("receiving_tds", "sum"),
+            receiving_first_downs=("receiving_first_downs", "sum"),
+            target_share=("target_share", "mean"),
+            air_yards_share=("air_yards_share", "mean"),
+        )
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(wr_ids, on=["gsis_id", "season"], how="inner")
+
+        nflvs["td_rate"] = nflvs["receiving_tds"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["first_down_rate"] = nflvs["receiving_first_downs"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["yards_per_target"] = nflvs["receiving_yards"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["catch_rate"] = nflvs["receptions"] / nflvs["targets"].replace(0, np.nan)
+
+        for col, display in [
+            ("td_rate", "wr_td_rate"),
+            ("first_down_rate", "wr_first_down_rate"),
+            ("yards_per_target", "wr_yards_per_target"),
+            ("catch_rate", "wr_catch_rate"),
+            ("target_share", "wr_target_share"),
+            ("air_yards_share", "wr_air_yards_share"),
+        ]:
+            panel = nflvs[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    # ---------- 4. ngs_receiving: NGS week=0 season summary ----------
+    ngs_frames = []
+    for s in seasons:
+        if s < 2017:
+            continue
+        ngs = nfl.load_nextgen_stats(seasons=[int(s)], stat_type="receiving")
+        if hasattr(ngs, "to_pandas"):
+            ngs = ngs.to_pandas()
+        ngs = ngs[ngs["week"] == 0][[
+            "player_gsis_id",
+            "avg_cushion", "avg_intended_air_yards",
+            "avg_yac_above_expectation",
+            "percent_share_of_intended_air_yards",
+            "catch_percentage",
+        ]].copy()
+        ngs["season"] = s
+        ngs_frames.append(ngs)
+    if ngs_frames:
+        ngs_all = pd.concat(ngs_frames, ignore_index=True)
+        ngs_all = ngs_all.rename(columns={"player_gsis_id": "gsis_id"})
+        ngs_all = ngs_all.merge(wr_ids, on=["gsis_id", "season"], how="inner")
+        for col, display in [
+            ("avg_cushion", "wr_ngs_cushion"),
+            ("avg_intended_air_yards", "wr_ngs_intended_air_yards"),
+            ("avg_yac_above_expectation", "wr_ngs_yac_above_expectation"),
+            ("percent_share_of_intended_air_yards", "wr_ngs_air_yards_share"),
+            ("catch_percentage", "wr_ngs_catch_pct"),
+        ]:
+            panel = ngs_all[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    # ---------- 5. FTN charting (2022+): contested + created rates ----------
+    ftn_sql = text(
+        """
+        SELECT player_id, season, catchable_balls, contested_balls,
+               created_receptions
+        FROM ftn_receiving_charting
+        WHERE catchable_balls > 0
+        """
+    )
+    with engine.connect() as conn:
+        ftn = pd.read_sql(ftn_sql, conn)
+    ftn = ftn.merge(
+        wr_ids[["player_id", "season"]], on=["player_id", "season"], how="inner"
+    )
+    if not ftn.empty:
+        ftn["contested_rate"] = ftn["contested_balls"] / ftn["catchable_balls"].replace(0, np.nan)
+        ftn["created_rate"] = ftn["created_receptions"] / ftn["catchable_balls"].replace(0, np.nan)
+        for col, display in [
+            ("contested_rate", "wr_ftn_contested_rate"),
+            ("created_rate", "wr_ftn_created_reception_rate"),
+        ]:
+            panel = ftn[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            # Outlier guard: at least 25 catchable balls
+            panel = panel[ftn["catchable_balls"] >= 25].reset_index(drop=True)
+            candidates.append((display, panel, False))
+
+    # ---------- 6. pfr_advstats rec (2018+): broken tackles, PFR drops ----------
+    pfr_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        pfr = nfl.load_pfr_advstats(seasons=[int(s)], stat_type="rec")
+        if hasattr(pfr, "to_pandas"):
+            pfr = pfr.to_pandas()
+        pfr = pfr[[
+            "pfr_player_name",
+            "receiving_broken_tackles", "receiving_drop", "receiving_rat",
+        ]].copy()
+        agg = pfr.groupby("pfr_player_name", as_index=False).agg(
+            broken_tackles=("receiving_broken_tackles", "sum"),
+            drops_pfr=("receiving_drop", "sum"),
+            receiving_rat=("receiving_rat", "mean"),
+        )
+        agg["season"] = s
+        pfr_frames.append(agg)
+    if pfr_frames and nflvs_frames:
+        pfr_all = pd.concat(pfr_frames, ignore_index=True)
+        wr_names = wr_ids[["player_id", "season", "full_name"]].copy()
+        wr_names["name_norm"] = wr_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_all["name_norm"] = pfr_all["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged = pfr_all.merge(wr_names, on=["name_norm", "season"], how="inner")
+        denom = nflvs[["player_id", "season", "receptions", "targets"]]
+        merged = merged.merge(denom, on=["player_id", "season"], how="left")
+        merged["broken_tackle_per_rec"] = (
+            merged["broken_tackles"] / merged["receptions"].replace(0, np.nan)
+        )
+        merged["pfr_drop_pct"] = (
+            merged["drops_pfr"] / merged["targets"].replace(0, np.nan)
+        )
+        for col, display in [
+            ("broken_tackle_per_rec", "wr_pfr_broken_tackle_per_rec"),
+            ("pfr_drop_pct", "wr_pfr_drop_pct"),
+            ("receiving_rat", "wr_pfr_receiving_rat"),
+        ]:
+            panel = merged[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    return candidates
+
+
+def run_wr_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full WR exhaustive audit."""
+    eng = engine or get_engine()
+    cands = wr_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "WR",
+            season_pairs=_WR_OFFENSE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
     "qb_candidates",
     "run_qb_audit",
     "score_candidate",
+    "wr_candidates",
+    "run_wr_audit",
 ]

@@ -411,17 +411,25 @@ def audit_candidates(position: str) -> None:
     ``grading/exhaustive_audit.py::<pos>_candidates()``. Expand that
     function during each position's audit phase.
     """
-    from .grading.exhaustive_audit import format_results_table, run_qb_audit
+    from .grading.exhaustive_audit import (
+        format_results_table,
+        run_qb_audit,
+        run_wr_audit,
+    )
 
     pos = position.upper()
-    if pos != "QB":
+    runners = {
+        "QB": run_qb_audit,
+        "WR": run_wr_audit,
+    }
+    if pos not in runners:
         click.echo(
-            f"Position {pos!r} not yet implemented. The exhaustive audit "
-            "framework is in place; add a candidate fetcher in "
-            "grading/exhaustive_audit.py to enable other positions."
+            f"Position {pos!r} not yet implemented. Available: {sorted(runners)}. "
+            "Add a <pos>_candidates() function in grading/exhaustive_audit.py "
+            "to enable other positions."
         )
         raise SystemExit(1)
-    results = run_qb_audit()
+    results = runners[pos]()
     click.echo(format_results_table(results))
 
 

@@ -1,4 +1,10 @@
-# WR v1.1 — Research + Implementation (2026-05-14)
+# WR v1.1 → v1.3 — Research + Implementation (2026-05-14)
+
+> **v1.3 ship (2026-05-14, exhaustive audit):** Bumped `wr_target_earn_rate` 0.10 → 0.15 (highest-validity signal in formula, was underweighted); lowered `wr_success_rate_per_target` 0.08 → 0.05 (EPA redundancy, same pattern as QB v1.1). Validity gate passed: +0.280 → +0.300. Top 5 2024 unchanged; alpha-target receivers (Nabers, Kupp, Pickens, Lamb, DJ Moore) rose. Full audit: [`../audits/2026-05-14-exhaustive-wr.md`](../audits/2026-05-14-exhaustive-wr.md). 22 candidates scored, no new components added; `wr_pfr_broken_tackle_per_rec` documented as known YAC-skill gap.
+
+---
+
+
 
 Status: **SHIPPED**. Migration 0014 applied to Neon + local. FTN ingest module live. All 2016-2025 WR seasons re-graded with v1.1 weights. Pre-2022 seasons NaN-neutralize the drop component.
 

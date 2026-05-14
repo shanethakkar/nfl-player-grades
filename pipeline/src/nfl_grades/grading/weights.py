@@ -141,24 +141,31 @@ RB_V1_CONFIDENCE_FULL_TOUCHES: int = 250
 
 
 # ---------------------------------------------------------------------------
-# WR v1.2 (ADR-0015, revised 2026-05-14).
+# WR v1.3 (ADR-0015, revised 2026-05-14).
 # ---------------------------------------------------------------------------
 # v1.1 changes (shipped earlier 2026-05-14):
 #   - Added wr_drop_rate from FTN per-play charting joined to PBP.
-#     Captures hands/ball-skills, the only real gap in v1's skill coverage.
-#   - Removed wr_fumble_rate (-0.05). YoY r oscillates around 0 (-0.26, +0.09,
-#     -0.40, +0.27 across 2020-2024), 90% of qualified WRs had ≤1 fumble.
-#     Pure noise at WR sample sizes.
+#   - Removed wr_fumble_rate (-0.05). YoY noise, max 1-2 fumbles per WR.
 #
 # v1.2 change (TE v1.1 self-audit, same day):
-#   - Lowered wr_drop_rate from -0.08 → -0.05. v1.1 added it without running
-#     the YoY noise check; when run after the fact, drop_rate YoY mean r
-#     across 2022-2025 was +0.09 — statistically indistinguishable from the
-#     fumble rate we removed. By the methodology's own threshold
-#     (|r| < 0.20 → "weight tiny ≤0.05 or remove"), -0.08 was over-weighted.
-#     Light weight is justified by (a) face-check (Pickens/McLaurin
-#     consistent across years), (b) low correlation with other components,
-#     (c) measurement-error suppression at low catchable-ball denominators.
+#   - Lowered wr_drop_rate from -0.08 → -0.05. v1.1 added it without YoY
+#     check; mean YoY r = +0.09 indistinguishable from removed fumble rate.
+#
+# v1.3 change (WR exhaustive audit, same day):
+#   - Bumped wr_target_earn_rate from +0.10 → +0.15. The audit found
+#     earn_rate had the highest validity in the formula (Pro Bowl r +0.285)
+#     and highest YoY r (+0.682) — strongest signal underweighted at 11%.
+#     Now 15% of formula.
+#   - Lowered wr_success_rate_per_target from +0.08 → +0.05. Same EPA-vs-
+#     success-rate redundancy pattern as QB (max |r| = +0.746 with
+#     rec_epa_per_target). Bounded at light weight.
+#
+# Sum |w| 0.95 → 0.97. No net "added weight" — earn_rate gains +0.05,
+# success_rate gives up 0.03; the remaining 0.02 raises the magnitude
+# slightly (formula's signal-to-noise improves). See
+# docs/grading/audits/2026-05-14-exhaustive-wr.md for the full audit log
+# (22 candidates scored, including documented rejections of NGS YAC,
+# contested catch rate, broken-tackles-per-reception, etc.).
 #
 # FTN drop data starts 2022; for 2016-2021 the drop_rate component is
 # NaN-neutralized to 0 contribution (grade comes from the other 5
@@ -172,14 +179,15 @@ WR_COMPONENT_TARGET_EARN_RATE: str = "wr_target_earn_rate"
 WR_COMPONENT_SUCCESS_RATE_PER_TARGET: str = "wr_success_rate_per_target"
 WR_COMPONENT_DROP_RATE: str = "wr_drop_rate"
 
-# Sum |abs| = 0.95 (combiner normalizes).
-# Shape: 65% outcome (EPA + YAC), 29% process + usage, 5% hands (negative).
+# Sum |abs| = 0.97 (combiner normalizes).
+# Effective shares: EPA 36%, YAC 28%, separation 10%, target_earn 15%,
+# success_rate 5%, drop_rate -5%.
 WR_V1_WEIGHTS: dict[str, float] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: 0.35,
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.27,
     WR_COMPONENT_SEPARATION: 0.10,
-    WR_COMPONENT_TARGET_EARN_RATE: 0.10,
-    WR_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
+    WR_COMPONENT_TARGET_EARN_RATE: 0.15,
+    WR_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.05,
     WR_COMPONENT_DROP_RATE: -0.05,
 }
 

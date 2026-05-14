@@ -1,6 +1,6 @@
 # 0015 - WR v1 grading formula
 
-- **Status**: Accepted (v1.2 revision — 2026-05-14)
+- **Status**: Accepted (v1.3 revision — 2026-05-14)
 - **Date**: 2026-04-22
 - **Supersedes**: None
 - **Companion to**: ADR-0013 (QB v1), ADR-0014 (RB v1). Same pipeline
@@ -372,3 +372,30 @@ Mean YoY r = **+0.09** — statistically indistinguishable from the WR fumble ra
 **Symmetric with TE v1.1**, which also lands `te_drop_rate` at −0.05 for the same reason. See ADR-0016 and `memory/project_te_v1_1_research.md` for the full self-audit.
 
 **Follow-up:** before any more positions ship, run the YoY noise check across every component in every shipped position. The WR drop_rate gap means other components added without YoY verification may also be over-weighted. Tracked in `memory/project_pending_audits.md`.
+
+### v1.3 (2026-05-14) — `target_earn_rate` bumped, `success_rate` lowered (exhaustive audit)
+
+**Changes:**
+
+- **Bumped `wr_target_earn_rate` from +0.10 → +0.15** (effective share 11% → 15%).
+- **Lowered `wr_success_rate_per_target` from +0.08 → +0.05** (effective share 8% → 5%).
+
+Sum |weights| changes 0.95 → 0.97. Other components unchanged.
+
+**Why:** WR exhaustive candidate audit ([`docs/grading/audits/2026-05-14-exhaustive-wr.md`](../grading/audits/2026-05-14-exhaustive-wr.md)) scored 22 plausible WR candidates against the four-criterion framework (reliability + cross-sectional discrimination + independence + predictive validity). Two clear findings:
+
+1. **`wr_target_earn_rate` is the strongest signal in the formula.** Pro Bowl validity r = **+0.285** (highest of any candidate, current or proposed). YoY r = +0.682 (highest among current components, second-highest in the audit). At v1.2's 0.10 weight (11% of formula), it was underweighted relative to its signal strength.
+
+2. **`wr_success_rate_per_target` has the same EPA-vs-success-rate redundancy as QB.** max |r| = +0.746 with `wr_rec_epa_per_target` — same mathematical relationship that drove the QB v1.1 reduction earlier the same day (success_rate ≈ fraction of plays with positive EPA; EPA per target = mean). Validity moderate (+0.159) but redundant. Bounded at 0.05 weight.
+
+**Validity gate passed:** WR composite vs next-year Pro Bowl correlation **improved from +0.280 → +0.300** post-regrade (the audit's recommended decision criterion). The shift toward earn_rate (highest-validity signal) measurably aligns the formula more closely with consensus-elite recognition.
+
+**Face-check 2024:** Top 5 unchanged (A.J. Brown, Chris Godwin, Marvin Mims, Khalil Shakir, Puka Nacua). Biggest movers up are alpha-target receivers: Malik Nabers +4.13, Keenan Allen +2.90, Cooper Kupp +2.83, George Pickens +2.78, CeeDee Lamb +2.45, DJ Moore +2.40, Davante Adams +2.38. Biggest movers down are rotational role players or deep threats with low target share: Devaughn Vele −2.68, Tutu Atwell −2.14. Coherent.
+
+**What the audit also found and rejected** (per the article-defensible methodology — documented in the audit log):
+
+- **`wr_separation` has near-zero Pro Bowl validity (+0.003)** despite strong YoY (+0.560). Either it's universal at qualified-WR level, or Pro Bowl voters reward production not process. **Kept at current weight** (don't reverse-engineer validity).
+- **`wr_pfr_broken_tackle_per_rec`** — measures YAC-skill via tackle-breaking, independent of existing components (max_r +0.40 with YAC-OE), modest YoY (+0.298), modest validity (+0.144). Real WR skill not in the formula but signal is weak — documented as future consideration (same shape as the `qb_rush_epa_per_rush` mobile-QB gap).
+- **18 other candidates rejected** with documented reasoning — duplicates (NGS YAC-OE, target_share, WOPR), style markers (intended_air_yards), defense-driven metrics (NGS cushion), or noise (PFR drop_pct). Full table in the audit log.
+
+**Tooling:** shipped via the validity-gated preview/regrade workflow ([`iteration-workflow.md`](../grading/iteration-workflow.md)). End-to-end ~2 minutes mechanical work plus the ~half day of audit analysis.
