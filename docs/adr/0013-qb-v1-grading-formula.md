@@ -1,7 +1,8 @@
 # 0013 - QB v1 grading formula
 
-- **Status**: Accepted (supersedable — v1 of the formula)
+- **Status**: Accepted (v1.1 revision — 2026-05-14)
 - **Date**: 2026-04-23
+- **Updated**: 2026-05-14 (v1.1 success_rate weight lowered — see *Revision History*)
 - **Supersedes**: None
 - **Formalizes**: `docs/grading/qb-v1-proposal.md` (strawman approved
   by the user 2026-04-23)
@@ -145,3 +146,28 @@ variance weighting. Those go in v2 and get their own ADR.
   intentionally for explainability
 - `db/migrations/0001_init.sql` — `stat_components` and `season_grades`
   tables (pre-existing)
+
+## Revision History
+
+### v1.1 (2026-05-14) — `qb_success_rate` weight lowered (correlation finding)
+
+**Lowered `qb_success_rate` from +0.25 → +0.10.** Kept EPA at +0.50, CPOE at +0.25. Sum |w| drops 1.00 → 0.85; combiner normalizes so EPA effectively grows from 50% → 59% of the formula. CPOE keeps its 29% share. Success rate is now 12%.
+
+**Why:** Two independent audits converged on this finding.
+
+1. **Cross-position pairwise correlation audit (2026-05-14):** found `qb_epa_per_dropback` ↔ `qb_success_rate` at Pearson r = **+0.883** — the strongest redundancy in the entire grader system. Mathematically related (success_rate ≈ "fraction of plays with positive EPA"; EPA per dropback = mean EPA). See [`docs/grading/audits/2026-05-14-correlation.md`](../grading/audits/2026-05-14-correlation.md).
+
+2. **QB exhaustive candidate audit (2026-05-14):** scored every plausible QB candidate stat (19 candidates from nflvs / NGS / PFR) against four criteria — reliability (YoY r), cross-sectional discrimination, independence from existing components, and downstream predictive validity (next-year Pro Bowl). Confirmed:
+   - **success_rate has the lowest validity** of the three current components (Pro Bowl r = +0.130 vs EPA +0.158 and CPOE +0.146).
+   - **success_rate is the most redundant** (+0.848 with EPA, +0.726 with CPOE).
+   - **No new candidates emerged as compelling adds** — TD rate had highest validity (+0.260) but +0.729 with EPA; INT rate was noise; NGS metrics were style markers with weak validity; PFR bad_throw_pct duplicated CPOE; OL-conflated metrics (sack_rate, pressure_rate_faced) couldn't be cleanly attributed.
+   
+   Full audit log: [`docs/grading/audits/2026-05-14-exhaustive-qb.md`](../grading/audits/2026-05-14-exhaustive-qb.md). Article-defensible — every candidate has a documented verdict.
+
+**Validity check after re-grade:** QB composite vs next-year Pro Bowl correlation **improved from +0.237 to +0.244** across 2017-2023. The change is real signal, not just a redistribution.
+
+**Face-check 2024:** top 5 unchanged (Lamar Jackson, Jared Goff, Joe Burrow, Tua Tagovailoa, Josh Allen). Biggest movers up are explosive-but-inconsistent QBs (Jalen Hurts +2.46, Derek Carr +3.37, Justin Herbert +2.37); biggest movers down are clean-but-unexplosive operators (Matthew Stafford −2.91, Kirk Cousins −2.39, Kyler Murray −2.72). Coherent — the formula now leans further into explosive-play EPA over consistency, matching the redundancy structure success_rate was double-counting.
+
+**Known limitation surfaced (not addressed in v1.1):** the audit found `qb_rush_epa_per_rush` to be an independent signal (YoY 0.398, max_r −0.08 with existing) measuring **mobile-QB value** — a real skill not in v1 (Lamar/Allen/Hurts get incomplete credit). Weak Pro Bowl validity (+0.04) and per-rush attribution issues (scramble vs designed-rush) kept it out for now. Documented for revisit in a future revision once we have better data.
+
+**Tooling:** shipped via the new preview/regrade workflow ([`docs/grading/iteration-workflow.md`](../grading/iteration-workflow.md)). End-to-end ~2 minutes mechanical work.

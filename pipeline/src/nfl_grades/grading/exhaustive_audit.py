@@ -90,12 +90,15 @@ def _max_r_with_existing(
     panel: pd.DataFrame,
     position: str,
     engine: Engine,
+    *,
+    exclude_self: str | None = None,
 ) -> tuple[float, str]:
     """Compute the largest absolute Pearson r between the candidate and any
     currently-shipped component for this position.
 
     Returns (max_abs_r, partner_component_name). If no existing components,
-    returns (0.0, "—").
+    returns (0.0, "—"). Pass ``exclude_self`` when scoring a component that
+    is already in the formula (avoids self-correlation = 1.0).
     """
     if panel.empty:
         return 0.0, "—"
@@ -120,6 +123,10 @@ def _max_r_with_existing(
         )
     if existing.empty:
         return 0.0, "—"
+    if exclude_self:
+        existing = existing[existing["component_name"] != exclude_self]
+        if existing.empty:
+            return 0.0, "—"
     wide = existing.pivot_table(
         index=["player_id", "season"],
         columns="component_name",
@@ -173,13 +180,13 @@ def _verdict_hint(yoy_mean: float, xsect: float, max_r: float, validity: float) 
     if pd.isna(yoy_mean) or pd.isna(xsect):
         return "INSUFFICIENT DATA"
     if yoy_mean < 0.20 and (pd.isna(validity) or validity < 0.10):
-        return "NOISE — reject or weight ≤0.05"
+        return "NOISE - reject or weight <=0.05"
     if abs(max_r) >= 0.85:
         return "STRONG REDUNDANCY with existing component"
     if abs(max_r) >= 0.60:
-        return "MEANINGFUL OVERLAP — consider replacement"
+        return "MEANINGFUL OVERLAP - consider replacement"
     if yoy_mean < 0.20 and xsect >= 0.5 and not pd.isna(validity) and validity >= 0.15:
-        return "CONTEXT-DEPENDENT — light weight ok"
+        return "CONTEXT-DEPENDENT - light weight ok"
     if yoy_mean >= 0.20 and abs(max_r) < 0.60:
         if not pd.isna(validity) and validity >= 0.15:
             return "STRONG ADD candidate"
@@ -194,19 +201,26 @@ def score_candidate(
     *,
     season_pairs: list[tuple[int, int]],
     engine: Engine | None = None,
+    is_existing_component: bool = False,
 ) -> CandidateScore:
     """Score one candidate panel against the four criteria.
 
     ``panel`` must have columns: player_id, season, value (the candidate's
     raw rate or efficiency for the qualified cohort). Pass only qualified
     player-seasons.
+
+    ``is_existing_component`` should be True when ``name`` is already in
+    ``stat_components`` for this position — the existing-component
+    correlation check will then exclude the candidate from the comparison
+    set (avoids self-correlation = 1.0).
     """
     eng = engine or get_engine()
     yoy = _yoy_pairs(panel, season_pairs)
     rs = [r for *_, r in yoy if not pd.isna(r)]
     yoy_mean = float(np.mean(rs)) if rs else float("nan")
     xsect = _xsect_std(panel)
-    max_r, partner = _max_r_with_existing(panel, position, eng)
+    exclude = name if is_existing_component else None
+    max_r, partner = _max_r_with_existing(panel, position, eng, exclude_self=exclude)
     validity = _validity_r(panel, position, eng)
     n = int(panel["value"].notna().sum())
     return CandidateScore(
@@ -248,21 +262,32 @@ def format_results_table(scores: list[CandidateScore]) -> str:
 # to cover every plausible QB candidate from the data inventory.
 # ---------------------------------------------------------------------------
 
-def qb_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame]]:
-    """Worked example: a small set of QB candidate panels.
+def qb_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full QB candidate set for the exhaustive audit.
 
-    Returns list of (candidate_name, panel) where panel has columns
-    player_id, season, value. Filters to QB-qualified player-seasons.
+    Returns list of (candidate_name, panel, is_existing_component) tuples.
+    Panel columns: player_id, season, value. Filters to QB-qualified
+    player-seasons only.
 
-    This is a STARTER set for the foundation phase. Expanding to the full
-    QB candidate inventory (NGS aggressiveness, time_to_throw, sack_rate,
-    pressure_faced_rate, bad_throw_rate, red_zone_efficiency, etc.) happens
-    during the QB exhaustive audit itself.
+    Candidates pulled from:
+      - stat_components (current QB formula components, re-scored)
+      - nflvs_player_stats (per-season totals: TD rate, INT rate, first-down rate,
+        sack rate, sack fumble rate, PACR, rush EPA per rush attempt)
+      - ngs_passing (aggressiveness, time-to-throw, air-yards-to-sticks,
+        air-yards-differential, intended air yards, expected completion %)
+      - pfr_advstats pass (bad throw %, pressure rate faced)
+
+    Existing-component candidates are flagged with is_existing_component=True
+    so the correlation check excludes self-correlation.
     """
-    # 1. Get the set of qualified QB seasons we're allowed to score.
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # ---------- 1. Qualified QB ID set ----------
     qb_sql = text(
         """
-        SELECT sg.player_id, sg.season, p.gsis_id
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name
         FROM season_grades sg
         JOIN players p USING (player_id)
         WHERE sg.position = 'QB' AND sg.qualified = true
@@ -270,64 +295,161 @@ def qb_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame]]:
     )
     with engine.connect() as conn:
         qb_ids = pd.read_sql(qb_sql, conn)
+    seasons = sorted(qb_ids["season"].unique())
 
-    candidates: list[tuple[str, pd.DataFrame]] = []
+    # ---------- 2. Currently-shipped components (re-score) ----------
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'QB'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'qb_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
 
-    # --- Candidate A: NGS aggressiveness ---
-    # `aggressiveness` = % of attempts where the closest defender within 1
-    # yard at catch point. Higher = throws into tighter windows.
-    import nflreadpy as nfl
+    # ---------- 3. nflvs_player_stats: per-season totals → rates ----------
+    nflvs_frames = []
+    for s in seasons:
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        ps = ps[ps["position"] == "QB"][[
+            "player_id", "attempts", "completions", "passing_tds",
+            "passing_interceptions", "passing_first_downs",
+            "sacks_suffered", "sack_fumbles",
+            "passing_yards", "passing_air_yards",
+            "rushing_epa", "carries",
+        ]].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        agg = ps.groupby("gsis_id", as_index=False).sum(numeric_only=True)
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(qb_ids, on=["gsis_id", "season"], how="inner")
+        # dropbacks ≈ attempts + sacks
+        nflvs["dropbacks"] = nflvs["attempts"] + nflvs["sacks_suffered"]
 
+        nflvs["td_rate"] = nflvs["passing_tds"] / nflvs["attempts"].replace(0, np.nan)
+        nflvs["int_rate"] = nflvs["passing_interceptions"] / nflvs["attempts"].replace(0, np.nan)
+        nflvs["first_down_rate"] = nflvs["passing_first_downs"] / nflvs["dropbacks"].replace(0, np.nan)
+        nflvs["sack_rate_suffered"] = nflvs["sacks_suffered"] / nflvs["dropbacks"].replace(0, np.nan)
+        nflvs["sack_fumble_rate"] = (
+            nflvs["sack_fumbles"] / nflvs["sacks_suffered"].replace(0, np.nan)
+        )
+        # PACR = passing yards / passing air yards (air-yards conversion)
+        nflvs["pacr"] = nflvs["passing_yards"] / nflvs["passing_air_yards"].replace(0, np.nan)
+        nflvs["rush_epa_per_rush"] = (
+            nflvs["rushing_epa"] / nflvs["carries"].replace(0, np.nan)
+        )
+
+        for col, display in [
+            ("td_rate", "qb_td_rate"),
+            ("int_rate", "qb_int_rate"),
+            ("first_down_rate", "qb_first_down_rate"),
+            ("sack_rate_suffered", "qb_sack_rate_suffered"),
+            ("sack_fumble_rate", "qb_sack_fumble_rate"),
+            ("pacr", "qb_pacr"),
+            ("rush_epa_per_rush", "qb_rush_epa_per_rush"),
+        ]:
+            panel = nflvs[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            # Outlier guard: at least 50 plays of the denominator
+            if col == "rush_epa_per_rush":
+                panel = panel[nflvs["carries"] >= 10].reset_index(drop=True)
+            elif col == "sack_fumble_rate":
+                panel = panel[nflvs["sacks_suffered"] >= 5].reset_index(drop=True)
+            candidates.append((display, panel, False))
+
+    # ---------- 4. ngs_passing: NGS season-summary metrics (week=0) ----------
     ngs_frames = []
-    for season in sorted(qb_ids["season"].unique()):
-        if season < 2017:  # NGS data starts 2017 for stable QB coverage
+    for s in seasons:
+        if s < 2017:
             continue
-        ngs = nfl.load_nextgen_stats(seasons=[int(season)], stat_type="passing")
-        # nflreadpy returns polars by default; coerce to pandas
+        ngs = nfl.load_nextgen_stats(seasons=[int(s)], stat_type="passing")
         if hasattr(ngs, "to_pandas"):
             ngs = ngs.to_pandas()
-        # week=0 row is season aggregate; we want that one
-        ngs = ngs[ngs["week"] == 0][["player_gsis_id", "aggressiveness", "avg_time_to_throw"]]
-        ngs["season"] = season
+        ngs = ngs[ngs["week"] == 0][[
+            "player_gsis_id",
+            "aggressiveness", "avg_time_to_throw",
+            "avg_air_yards_to_sticks", "avg_air_yards_differential",
+            "avg_intended_air_yards", "expected_completion_percentage",
+            "completion_percentage_above_expectation",
+        ]].copy()
+        ngs["season"] = s
         ngs_frames.append(ngs)
     if ngs_frames:
         ngs_all = pd.concat(ngs_frames, ignore_index=True)
         ngs_all = ngs_all.rename(columns={"player_gsis_id": "gsis_id"})
         ngs_all = ngs_all.merge(qb_ids, on=["gsis_id", "season"], how="inner")
-
         for col, display in [
             ("aggressiveness", "qb_ngs_aggressiveness"),
             ("avg_time_to_throw", "qb_ngs_time_to_throw"),
+            ("avg_air_yards_to_sticks", "qb_ngs_air_yards_to_sticks"),
+            ("avg_air_yards_differential", "qb_ngs_air_yards_differential"),
+            ("avg_intended_air_yards", "qb_ngs_intended_air_yards"),
+            ("expected_completion_percentage", "qb_ngs_expected_completion_pct"),
+            ("completion_percentage_above_expectation", "qb_ngs_cpoe"),
         ]:
             panel = ngs_all[["player_id", "season", col]].rename(columns={col: "value"})
             panel = panel.dropna(subset=["value"])
-            candidates.append((display, panel))
+            candidates.append((display, panel, False))
 
-    # --- Candidate B: sack rate avoided (lower = better; high → bad QB) ---
-    # Pull from nflvs_player_stats. sacks_suffered / dropbacks
-    sack_frames = []
-    for season in sorted(qb_ids["season"].unique()):
-        ps = nfl.load_player_stats(seasons=[int(season)])
-        if hasattr(ps, "to_pandas"):
-            ps = ps.to_pandas()
-        ps = ps[ps["position"] == "QB"][
-            ["player_id", "attempts", "sacks_suffered"]
-        ].copy()
-        ps = ps.rename(columns={"player_id": "gsis_id"})
-        # season totals (player_stats is per-player-season for this loader)
-        agg = ps.groupby("gsis_id", as_index=False).agg(
-            attempts=("attempts", "sum"),
-            sacks=("sacks_suffered", "sum"),
+    # ---------- 5. pfr_advstats pass (2018+): bad throw rate, pressure rate ----------
+    pfr_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        pfr = nfl.load_pfr_advstats(seasons=[int(s)], stat_type="pass")
+        if hasattr(pfr, "to_pandas"):
+            pfr = pfr.to_pandas()
+        pfr = pfr[[
+            "pfr_player_id", "pfr_player_name",
+            "passing_bad_throws", "passing_bad_throw_pct",
+            "times_pressured", "times_pressured_pct",
+            "times_sacked",
+        ]].copy()
+        # PFR per-game → sum to season
+        agg = pfr.groupby("pfr_player_name", as_index=False).agg(
+            bad_throws=("passing_bad_throws", "sum"),
+            times_pressured=("times_pressured", "sum"),
+            times_sacked=("times_sacked", "sum"),
+            n_games=("pfr_player_id", "count"),
         )
-        agg["season"] = season
-        sack_frames.append(agg)
-    if sack_frames:
-        sack_all = pd.concat(sack_frames, ignore_index=True)
-        sack_all["sack_rate"] = sack_all["sacks"] / (sack_all["attempts"] + sack_all["sacks"]).replace(0, np.nan)
-        sack_all = sack_all.merge(qb_ids, on=["gsis_id", "season"], how="inner")
-        panel = sack_all[["player_id", "season", "sack_rate"]].rename(columns={"sack_rate": "value"})
-        panel = panel.dropna(subset=["value"])
-        candidates.append(("qb_sack_rate_suffered", panel))
+        agg["season"] = s
+        pfr_frames.append(agg)
+    if pfr_frames:
+        pfr_all = pd.concat(pfr_frames, ignore_index=True)
+        # Match PFR name to our player name (PFR uses different gsis-equivalent)
+        qb_names = qb_ids[["player_id", "season", "full_name"]].copy()
+        qb_names["name_norm"] = qb_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_all["name_norm"] = pfr_all["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged = pfr_all.merge(qb_names, on=["name_norm", "season"], how="inner")
+        # Rates need a denominator: roughly attempts. Pull from nflvs.
+        if nflvs_frames:
+            denom = nflvs[["player_id", "season", "attempts", "dropbacks"]]
+            merged = merged.merge(denom, on=["player_id", "season"], how="left")
+            merged["bad_throw_pct"] = merged["bad_throws"] / merged["attempts"].replace(0, np.nan)
+            merged["pressure_rate_faced"] = merged["times_pressured"] / merged["dropbacks"].replace(0, np.nan)
+            for col, display in [
+                ("bad_throw_pct", "qb_pfr_bad_throw_pct"),
+                ("pressure_rate_faced", "qb_pfr_pressure_rate_faced"),
+            ]:
+                panel = merged[["player_id", "season", col]].rename(columns={col: "value"})
+                panel = panel.dropna(subset=["value"])
+                candidates.append((display, panel, False))
 
     return candidates
 
@@ -339,16 +461,17 @@ _QB_OFFENSE_SEASONS = [
 
 
 def run_qb_audit(engine: Engine | None = None) -> list[CandidateScore]:
-    """Worked-example end-to-end audit for QB (with the small candidate set
-    defined in ``qb_candidates``). Expand the candidate set when running
-    the real QB exhaustive audit.
-    """
+    """Run the full QB exhaustive audit using ``qb_candidates`` as input."""
     eng = engine or get_engine()
     cands = qb_candidates(eng)
     return [
-        score_candidate(name, panel, "QB",
-                        season_pairs=_QB_OFFENSE_SEASONS, engine=eng)
-        for name, panel in cands
+        score_candidate(
+            name, panel, "QB",
+            season_pairs=_QB_OFFENSE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
     ]
 
 

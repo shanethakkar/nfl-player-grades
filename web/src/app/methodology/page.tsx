@@ -1,7 +1,13 @@
 import type React from "react";
 import Link from "next/link";
 
-import { componentDescription, componentLabel, gradeColor } from "@/lib/grades";
+import {
+  componentDescription,
+  componentLabel,
+  componentSharePercent,
+  gradeColor,
+  positionComponents,
+} from "@/lib/grades";
 import {
   getCurrentTopAtPosition,
   getGradeTierExamples,
@@ -19,78 +25,15 @@ export const metadata = {
     "Every NFL player on a 0-100 scale, computed from play-by-play data. Here's what goes into the number, what each tier means, and what we don't measure yet.",
 };
 
-// ---------------------------------------------------------------------------
-// Per-position component lists (mirrors pipeline/grading/weights.py).
-// Negative weights penalize the grade (e.g. fumble rate).
-// ---------------------------------------------------------------------------
+// Component lists are now derived from the auto-synced weights in
+// `web/src/lib/grades.ts` (which is itself kept in sync with
+// `pipeline/grading/weights.py` by `sync_weights_to_web.py`). The page
+// shows each component as a share-of-formula percentage via
+// `componentSharePercent` — e.g. QB EPA reads as "59%", not "50%", because
+// the composite normalizes by sum-of-magnitudes. Adding/removing a
+// component anywhere is a single change to `weights.py` + sync script.
 
 type ComponentEntry = { name: string; weight: number };
-
-const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
-  QB: [
-    { name: "qb_epa_per_dropback", weight: 0.50 },
-    { name: "qb_cpoe",             weight: 0.25 },
-    { name: "qb_success_rate",     weight: 0.25 },
-  ],
-  RB: [
-    { name: "rb_ryoe_per_attempt",         weight:  0.28 },
-    { name: "rb_rush_epa_per_attempt",     weight:  0.18 },
-    { name: "rb_rush_success_rate",        weight:  0.14 },
-    { name: "rb_rec_epa_per_target",       weight:  0.18 },
-    { name: "rb_yac_over_expected_per_rec",weight:  0.15 },
-    { name: "rb_fumble_rate",              weight: -0.05 },
-  ],
-  WR: [
-    { name: "wr_rec_epa_per_target",         weight:  0.35 },
-    { name: "wr_yac_over_expected_per_rec",  weight:  0.27 },
-    { name: "wr_separation",                 weight:  0.10 },
-    { name: "wr_target_earn_rate",           weight:  0.10 },
-    { name: "wr_success_rate_per_target",    weight:  0.08 },
-    { name: "wr_drop_rate",                  weight: -0.05 },
-  ],
-  TE: [
-    { name: "te_rec_epa_per_target",         weight:  0.35 },
-    { name: "te_yac_over_expected_per_rec",  weight:  0.27 },
-    { name: "te_separation",                 weight:  0.07 },
-    { name: "te_target_earn_rate",           weight:  0.10 },
-    { name: "te_success_rate_per_target",    weight:  0.08 },
-    { name: "te_drop_rate",                  weight: -0.05 },
-  ],
-  CB: [
-    { name: "cb_passer_rating_allowed", weight: -0.35 },
-    { name: "cb_yac_per_rec_allowed",   weight: -0.15 },
-    { name: "cb_target_rate",           weight: -0.08 },
-    { name: "cb_pbu_rate",              weight:  0.12 },
-  ],
-  S: [
-    { name: "s_passer_rating_allowed",         weight: -0.30 },
-    { name: "s_pbu_rate",                      weight:  0.12 },
-    { name: "s_target_rate",                   weight: -0.08 },
-    { name: "s_tackles_per_snap",              weight:  0.07 },
-    { name: "s_missed_tackle_rate",            weight: -0.09 },
-    { name: "s_backfield_disruption_per_snap", weight:  0.09 },
-  ],
-  EDGE: [
-    { name: "edge_pressure_rate",       weight:  0.35 },
-    { name: "edge_sack_rate",           weight:  0.30 },
-    { name: "edge_tfl_rate",            weight:  0.15 },
-    { name: "edge_missed_tackle_rate",  weight: -0.10 },
-  ],
-  iDL: [
-    { name: "idl_tfl_rate",            weight:  0.35 },
-    { name: "idl_pressure_rate",       weight:  0.30 },
-    { name: "idl_sack_rate",           weight:  0.15 },
-    { name: "idl_missed_tackle_rate",  weight: -0.15 },
-  ],
-  LB: [
-    { name: "lb_tfl_rate",                weight:  0.20 },
-    { name: "lb_passer_rating_allowed",   weight: -0.27 },
-    { name: "lb_missed_tackle_rate",      weight: -0.15 },
-    { name: "lb_pbu_rate",                weight:  0.08 },
-    { name: "lb_tackle_rate",             weight:  0.13 },
-    { name: "lb_pressure_rate",           weight:  0.07 },
-  ],
-};
 
 // ---------------------------------------------------------------------------
 // Z-score → grade lookup (sigmoid: grade = 100 / (1 + e^{-1.15z})).
@@ -127,57 +70,57 @@ export default async function MethodologyPage() {
     {
       position: "QB",
       headline: "Quarterback",
-      components: POSITION_COMPONENTS.QB,
+      components: positionComponents("QB"),
       top: qbTop,
     },
     {
       position: "RB",
       headline: "Running back",
-      components: POSITION_COMPONENTS.RB,
+      components: positionComponents("RB"),
       top: rbTop,
     },
     {
       position: "WR",
       headline: "Wide receiver",
-      components: POSITION_COMPONENTS.WR,
+      components: positionComponents("WR"),
       top: wrTop,
     },
     {
       position: "TE",
       headline: "Tight end",
-      components: POSITION_COMPONENTS.TE,
+      components: positionComponents("TE"),
       top: teTop,
     },
     {
       position: "CB",
       headline: "Cornerback",
-      components: POSITION_COMPONENTS.CB,
+      components: positionComponents("CB"),
       top: cbTop,
     },
     {
       position: "S",
       headline: "Safety",
-      components: POSITION_COMPONENTS.S,
+      components: positionComponents("S"),
       top: sTop,
     },
     {
       position: "EDGE",
       headline: "Edge rusher",
-      components: POSITION_COMPONENTS.EDGE,
+      components: positionComponents("EDGE"),
       availabilityNote: "Data available from 2018. Includes both DE/EDGE-tagged players and 3-4 OLB pass rushers (T.J. Watt, Micah Parsons, Brian Burns, etc.) who are tagged as LB in nflverse but have a pass-rush role (≥25 pressures, target rate <3.5%).",
       top: edgeTop,
     },
     {
       position: "iDL",
       headline: "Interior defensive lineman",
-      components: POSITION_COMPONENTS.iDL,
+      components: positionComponents("iDL"),
       availabilityNote: "Data available from 2018. Covers players classified as iDL (DT/NT) in the source roster data.",
       top: idlTop,
     },
     {
       position: "LB",
       headline: "Off-ball linebacker",
-      components: POSITION_COMPONENTS.LB,
+      components: positionComponents("LB"),
       availabilityNote: "Data available from 2018. Filtered to off-ball LB (def target rate ≥ 3.5%). LB-tagged pass-rush OLBs (T.J. Watt, Micah Parsons, etc.) are graded as EDGE instead. Qualified threshold is 600 snaps (vs 400 for other defensive positions) to suppress rotational specialists. LB grades are noisier YoY than QB/WR grades.",
       top: lbTop,
     },
@@ -353,7 +296,12 @@ function PositionCard({ data }: { data: PositionCardData }) {
 function WeightChip({ name, weight }: ComponentEntry) {
   const label = componentLabel(name);
   const desc = componentDescription(name);
-  const pct = Math.round(Math.abs(weight) * 100);
+  // Display the component's share of its position's composite (sum-of-
+  // magnitudes denominator). This is what readers expect — "EPA is 59% of
+  // the QB grade" — vs the raw weight (e.g. 0.50) which is only meaningful
+  // relative to the formula's total. The negative sign is preserved so
+  // penalties stay visible.
+  const share = componentSharePercent(name);
   const neg = weight < 0;
   return (
     <span className="group/chip relative">
@@ -366,7 +314,7 @@ function WeightChip({ name, weight }: ComponentEntry) {
       >
         <span>{label}</span>
         <span className={`font-mono font-semibold ${neg ? "text-red-400" : "text-neutral-500"}`}>
-          {neg ? "−" : ""}{pct}%
+          {share}
         </span>
       </span>
       {desc && (

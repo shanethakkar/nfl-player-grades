@@ -10,7 +10,7 @@ Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, th
 | 1a | Foundation | Run validity baseline on all 9 shipped positions | 10 min | **SHIPPED 2026-05-14** ([baseline](audits/2026-05-14-validity-baseline.md)) |
 | 2 | Foundation | Build "exhaustive candidate" audit tool | 1-2 days | **SHIPPED 2026-05-14** (framework + QB starter; per-position fetchers fill in during phase 4-12) |
 | 3 | Foundation | Hold-out validation norm + audit-playbook codification | 1 hour | **SHIPPED 2026-05-14** ([playbook](audit-playbook.md)) |
-| 4 | Exhaustive audit | QB (smallest formula, validates tooling first) | 0.5 day | pending |
+| 4 | Exhaustive audit | QB (smallest formula, validates tooling first) | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-qb.md), [research](research/qb-v1-1.md)) |
 | 5 | Exhaustive audit | WR (largest cohort, validates scaling) | 0.5 day | pending |
 | 6 | Exhaustive audit | RB | 0.5 day | pending |
 | 7 | Exhaustive audit | TE | 0.5 day | pending |
@@ -66,3 +66,5 @@ Output per position: `docs/grading/audits/2026-XX-XX-exhaustive-<pos>.md` with f
 - ~~EDGE/iDL "designed component overlap" notes~~ — done. ADR-0020 and ADR-0021 have explicit Component Overlap sections.
 - ~~Downstream predictive validity check~~ — done. See [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md).
 - ~~Exhaustive-candidate audit framework~~ — done. Framework lives in `pipeline/src/nfl_grades/grading/exhaustive_audit.py`; per-position candidate fetchers added incrementally during each position's audit (queue items 4-12).
+- ~~QB exhaustive audit + QB v1.1 ship~~ — done. See [audits/2026-05-14-exhaustive-qb.md](audits/2026-05-14-exhaustive-qb.md) and [research/qb-v1-1.md](research/qb-v1-1.md). 19 candidates scored, success_rate lowered 0.25→0.10, validity improved +0.237→+0.244.
+- ~~Methodology-page percentage-share display~~ — done. Weights now display as "share of formula" (sums to 100%) on the methodology page, derived from auto-synced grades.ts; hardcoded POSITION_COMPONENTS list removed. Math unchanged; reader experience cleaner.

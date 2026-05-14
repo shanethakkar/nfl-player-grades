@@ -589,7 +589,7 @@ export function formatPercentile(z: number | null): string {
 const COMPONENT_WEIGHTS: Record<string, number> = {
   qb_epa_per_dropback:               0.50,
   qb_cpoe:                           0.25,
-  qb_success_rate:                   0.25,
+  qb_success_rate:                   0.10,
   rb_ryoe_per_attempt:               0.28,
   rb_rush_epa_per_attempt:           0.18,
   rb_rush_success_rate:              0.14,
@@ -649,7 +649,91 @@ export function componentWeight(name: string, role?: string | null): number | nu
   return COMPONENT_WEIGHTS[name] ?? null;
 }
 
-/** Formats a weight as a percentage, e.g. "50%" or "−50%" (minus sign for negative). */
+// ---------------------------------------------------------------------------
+// Percentage / share helpers.
+//
+// The composite combiner normalizes by sum(|weights|). What a reader cares
+// about is "this component is X% of the grade" — i.e., the weight divided
+// by the sum of magnitudes for THIS position's formula. Helpers below
+// surface that share-of-formula percentage so the methodology page and
+// future article writeups can claim "EPA is 59% of the QB grade" without
+// the reader needing to know the denominator.
+// ---------------------------------------------------------------------------
+
+/** Lowercase position prefix used in component names (e.g. "qb", "wr", "idl"). */
+function positionPrefix(positionKey: string): string {
+  return positionKey.toLowerCase();
+}
+
+/** Sum of |weights| for the position's main composite. */
+function positionWeightTotal(positionKey: string): number {
+  const prefix = positionPrefix(positionKey);
+  let total = 0;
+  for (const [name, w] of Object.entries(COMPONENT_WEIGHTS)) {
+    if (name.startsWith(`${prefix}_`)) total += Math.abs(w);
+  }
+  return total;
+}
+
+const TE_BLOCKING_TOTAL = Object.values(TE_BLOCKING_WEIGHTS).reduce(
+  (a, w) => a + Math.abs(w),
+  0,
+);
+
+/**
+ * Component's share of its position's composite, as a signed percentage
+ * string. E.g. "59%" for QB EPA in v1.1 (0.50 / 0.85); "−5%" for WR drop
+ * rate (0.05 / 0.95). Returns "—" if the component or position isn't in
+ * the formula.
+ */
+export function componentSharePercent(
+  name: string,
+  role?: string | null,
+): string {
+  let raw: number | undefined;
+  let total: number;
+  if (role === "blocking_te") {
+    raw = TE_BLOCKING_WEIGHTS[name];
+    total = TE_BLOCKING_TOTAL;
+  } else {
+    raw = COMPONENT_WEIGHTS[name];
+    const positionKey = name.split("_")[0];
+    total = positionWeightTotal(positionKey);
+  }
+  if (raw === undefined || total === 0) return "—";
+  const pct = Math.round((Math.abs(raw) / total) * 100);
+  return raw < 0 ? `−${pct}%` : `${pct}%`;
+}
+
+/**
+ * All components in the formula for a position, in their canonical order.
+ * Reads from the auto-synced COMPONENT_WEIGHTS / TE_BLOCKING_WEIGHTS dicts
+ * so the methodology page never drifts from weights.py.
+ */
+export function positionComponents(
+  positionKey: string,
+  role?: string | null,
+): Array<{ name: string; weight: number }> {
+  if (role === "blocking_te" && positionKey.toUpperCase() === "TE") {
+    return Object.entries(TE_BLOCKING_WEIGHTS).map(([name, weight]) => ({
+      name,
+      weight,
+    }));
+  }
+  const prefix = positionPrefix(positionKey);
+  return Object.entries(COMPONENT_WEIGHTS)
+    .filter(([name]) => name.startsWith(`${prefix}_`))
+    .map(([name, weight]) => ({ name, weight }));
+}
+
+/**
+ * Formats a raw weight as a percentage of 1.0, e.g. "50%" or "−50%".
+ *
+ * NOTE: this is the *raw weight* expressed as a percent (i.e., the weight
+ * value times 100). Use ``componentSharePercent`` instead when you want
+ * "share of the formula" — that's what readers expect when they see the
+ * methodology page.
+ */
 export function formatWeight(w: number | null): string {
   if (w === null) return "—";
   const pct = Math.round(Math.abs(w) * 100);

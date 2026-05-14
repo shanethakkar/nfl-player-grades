@@ -10,11 +10,25 @@ they must match what ``grading/qb.py`` et al. write to the DB.
 
 from __future__ import annotations
 
-# ADR-0013: QB v1 weights. 50% EPA / 25% CPOE / 25% success rate.
+# QB v1.1 (ADR-0013, revised 2026-05-14): EPA 59% / CPOE 29% / success_rate 12%.
+#
+# v1.1 change: lowered qb_success_rate from 0.25 → 0.10. Cross-position
+# correlation audit (2026-05-14) found qb_epa_per_dropback ↔ qb_success_rate
+# at Pearson r = +0.883 — strongest redundancy in the entire system.
+# Mathematically: success_rate ≈ fraction of plays with positive EPA;
+# EPA per dropback = mean EPA. They measure the same skill from two
+# vantage points. Exhaustive QB audit confirmed success_rate has the lowest
+# validity of the three components (Pro Bowl r = +0.130 vs EPA +0.158
+# and CPOE +0.146).
+#
+# Sum |w| drops 1.00 → 0.85; combiner normalizes so EPA effectively grows
+# from 50% → 59% of the formula. CPOE keeps its 29% share. See
+# `docs/grading/audits/2026-05-14-exhaustive-qb.md` for the full audit and
+# rejected-candidates log.
 QB_V1_WEIGHTS: dict[str, float] = {
     "qb_epa_per_dropback": 0.50,
     "qb_cpoe": 0.25,
-    "qb_success_rate": 0.25,
+    "qb_success_rate": 0.10,
 }
 
 # Empirical Bayes shrinkage strengths (ADR-0013). Units = "equivalent
