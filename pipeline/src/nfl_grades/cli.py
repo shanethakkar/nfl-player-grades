@@ -156,6 +156,55 @@ def ingest_pfr_def_coverage_s(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="pfr-def-passrush")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_pfr_def_passrush(season: int, refresh: bool) -> None:
+    """Pull PFR pass-rush stats for EDGE and iDL players (2018+)."""
+    from .ingest import pfr_dl
+
+    result = pfr_dl.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_pfr_match={result.rows_skipped_no_pfr_match} "
+        f"skipped_not_dl={result.rows_skipped_not_dl}"
+    )
+
+
+@ingest.command(name="pfr-def-lb")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_pfr_def_lb(season: int, refresh: bool) -> None:
+    """Pull PFR + nflvs stats for LB players (2018+)."""
+    from .ingest import pfr_lb
+
+    result = pfr_lb.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_pfr_match={result.rows_skipped_no_pfr_match} "
+        f"skipped_not_lb={result.rows_skipped_not_lb}"
+    )
+
+
+@ingest.command(name="ftn-receiving")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_ftn_receiving(season: int, refresh: bool) -> None:
+    """Pull FTN charting receiver flags joined to PBP (2022+)."""
+    from .ingest import ftn_receiving
+
+    result = ftn_receiving.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_gsis_match={result.rows_skipped_no_gsis_match}"
+    )
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -171,7 +220,10 @@ def ingest_all(season: int, refresh: bool) -> None:
     if season >= 2018:
         ctx.invoke(ingest_pfr_def_coverage, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)
-    # ftn — to be added when its ingest module lands.
+        ctx.invoke(ingest_pfr_def_passrush, season=season, refresh=refresh)
+        ctx.invoke(ingest_pfr_def_lb, season=season, refresh=refresh)
+    if season >= 2022:
+        ctx.invoke(ingest_ftn_receiving, season=season, refresh=refresh)
 
 
 @main.command()
@@ -180,10 +232,10 @@ def ingest_all(season: int, refresh: bool) -> None:
     "--position",
     type=str,
     default=None,
-    help="Limit to a single position (QB, RB, WR, TE, CB, S). Omit to grade all.",
+    help="Limit to a single position (QB, RB, WR, TE, CB, S, EDGE, iDL, LB). Omit to grade all.",
 )
 def grade(season: int, position: str | None) -> None:
-    """Compute season grades (QB/RB/WR/TE/CB/S v1)."""
+    """Compute season grades (QB/RB/WR/TE/CB/S/EDGE/iDL/LB v1)."""
     from .grading import run as grading_run
 
     summary = grading_run.run(season=season, position=position)
@@ -192,11 +244,13 @@ def grade(season: int, position: str | None) -> None:
         # counters (n_qbs_total, n_rbs_total, …). Probe generically.
         _TOTAL_ATTRS = (
             "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total",
-            "n_cbs_total", "n_safeties_total",
+            "n_cbs_total", "n_safeties_total", "n_edges_total", "n_idls_total",
+            "n_lbs_total",
         )
         _QUAL_ATTRS = (
             "n_qbs_qualified", "n_rbs_qualified", "n_wrs_qualified",
             "n_tes_qualified", "n_cbs_qualified", "n_safeties_qualified",
+            "n_edges_qualified", "n_idls_qualified", "n_lbs_qualified",
         )
         total_attr = next((a for a in _TOTAL_ATTRS if hasattr(result, a)), None)
         qualified_attr = next((a for a in _QUAL_ATTRS if hasattr(result, a)), None)

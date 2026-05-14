@@ -140,7 +140,6 @@ async function _getLeaderboard(
         sc_succ.raw_value       AS rb_rush_success_rate,
         sc_rec_epa.raw_value    AS rec_epa_per_target,
         sc_yac_oe.raw_value     AS rb_yac_over_expected_per_rec,
-        sc_catch.raw_value      AS rb_catch_pct,
         sc_fumble.raw_value     AS rb_fumble_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
@@ -169,10 +168,6 @@ async function _getLeaderboard(
         ON sc_yac_oe.player_id = sg.player_id
        AND sc_yac_oe.season = sg.season
        AND sc_yac_oe.component_name = 'rb_yac_over_expected_per_rec'
-      LEFT JOIN stat_components sc_catch
-        ON sc_catch.player_id = sg.player_id
-       AND sc_catch.season = sg.season
-       AND sc_catch.component_name = 'rb_catch_pct'
       WHERE sg.season = ${season}
         AND sg.position = 'RB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -183,14 +178,15 @@ async function _getLeaderboard(
   if (position === "WR" || position === "TE") {
     // WR/TE share the same headline columns (same component names modulo
     // the wr_/te_ prefix). Branch on prefix rather than duplicating the
-    // outer scaffolding.
+    // outer scaffolding. The "ball security" slot differs by position:
+    // WR v1.1 uses drop_rate (from FTN); TE v1 still uses fumble_rate.
     const prefix = position === "WR" ? "wr" : "te";
     const cEpa  = `${prefix}_rec_epa_per_target`;
     const cYac  = `${prefix}_yac_over_expected_per_rec`;
     const cSep  = `${prefix}_separation`;
     const cSucc = `${prefix}_success_rate_per_target`;
     const cEarn = `${prefix}_target_earn_rate`;
-    const cFum  = `${prefix}_fumble_rate`;
+    const cBallSec = position === "WR" ? "wr_drop_rate" : "te_fumble_rate";
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -211,7 +207,8 @@ async function _getLeaderboard(
         sc_sep.raw_value        AS separation,
         sc_succ.raw_value       AS success_rate_per_target,
         sc_earn.raw_value       AS target_earn_rate,
-        sc_fum.raw_value        AS fumble_rate
+        CASE WHEN sg.position = 'TE' THEN sc_ball.raw_value END AS fumble_rate,
+        CASE WHEN sg.position = 'WR' THEN sc_ball.raw_value END AS drop_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -235,10 +232,10 @@ async function _getLeaderboard(
         ON sc_earn.player_id = sg.player_id
        AND sc_earn.season = sg.season
        AND sc_earn.component_name = ${cEarn}
-      LEFT JOIN stat_components sc_fum
-        ON sc_fum.player_id = sg.player_id
-       AND sc_fum.season = sg.season
-       AND sc_fum.component_name = ${cFum}
+      LEFT JOIN stat_components sc_ball
+        ON sc_ball.player_id = sg.player_id
+       AND sc_ball.season = sg.season
+       AND sc_ball.component_name = ${cBallSec}
       WHERE sg.season = ${season}
         AND sg.position = ${position}
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -247,9 +244,7 @@ async function _getLeaderboard(
   }
 
   if (position === "CB") {
-    // CB headline columns (ADR-0018): comp% allowed, INT rate, targets.
-    // Team resolved via player_seasons (snap-count ingest populates this for
-    // all CBs regardless of whether they recorded an interception).
+    // CB headline columns (ADR-0018 v1.1): passer rating allowed, YAC, target rate, PBU.
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -264,21 +259,20 @@ async function _getLeaderboard(
         sg.data_tier,
         sg.role,
         t.abbr                   AS team_abbr,
-        sc_comp.sample_size      AS n_targets,
-        sc_comp.raw_value        AS cb_comp_pct_allowed,
+        sc_pra.sample_size       AS n_targets,
+        sc_pra.raw_value         AS cb_passer_rating_allowed,
         sc_yac.raw_value         AS cb_yac_per_rec_allowed,
         sc_tgt.raw_value         AS cb_target_rate,
-        sc_pbu.raw_value         AS cb_pbu_rate,
-        sc_int.raw_value         AS cb_int_rate
+        sc_pbu.raw_value         AS cb_pbu_rate
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
         ON ps.player_id = sg.player_id AND ps.season = sg.season
       LEFT JOIN teams t ON t.team_id = ps.team_id
-      LEFT JOIN stat_components sc_comp
-        ON sc_comp.player_id = sg.player_id
-       AND sc_comp.season = sg.season
-       AND sc_comp.component_name = 'cb_comp_pct_allowed'
+      LEFT JOIN stat_components sc_pra
+        ON sc_pra.player_id = sg.player_id
+       AND sc_pra.season = sg.season
+       AND sc_pra.component_name = 'cb_passer_rating_allowed'
       LEFT JOIN stat_components sc_yac
         ON sc_yac.player_id = sg.player_id
        AND sc_yac.season = sg.season
@@ -291,10 +285,6 @@ async function _getLeaderboard(
         ON sc_pbu.player_id = sg.player_id
        AND sc_pbu.season = sg.season
        AND sc_pbu.component_name = 'cb_pbu_rate'
-      LEFT JOIN stat_components sc_int
-        ON sc_int.player_id = sg.player_id
-       AND sc_int.season = sg.season
-       AND sc_int.component_name = 'cb_int_rate'
       WHERE sg.season = ${season}
         AND sg.position = 'CB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -303,8 +293,7 @@ async function _getLeaderboard(
   }
 
   if (position === "S") {
-    // Safety headline columns (ADR-0019): comp% allowed, PBU rate, tackles/snap.
-    // Team resolved via player_seasons (safeties don't appear in plays table).
+    // Safety headline columns (ADR-0019 v1.1): passer rating allowed, PBU, tackles/snap.
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -320,11 +309,9 @@ async function _getLeaderboard(
         sg.role,
         t.abbr                        AS team_abbr,
         sc_tgt.sample_size            AS n_snaps,
-        sc_comp.raw_value             AS s_comp_pct_allowed,
-        sc_yds.raw_value              AS s_yards_per_target_allowed,
+        sc_pra.raw_value              AS s_passer_rating_allowed,
         sc_tgt.raw_value              AS s_target_rate,
         sc_pbu.raw_value              AS s_pbu_rate,
-        sc_int.raw_value              AS s_int_rate,
         sc_tkl.raw_value              AS s_tackles_per_snap,
         sc_miss.raw_value             AS s_missed_tackle_rate,
         sc_dis.raw_value              AS s_backfield_disruption_per_snap
@@ -337,22 +324,14 @@ async function _getLeaderboard(
         ON sc_tgt.player_id = sg.player_id
        AND sc_tgt.season = sg.season
        AND sc_tgt.component_name = 's_target_rate'
-      LEFT JOIN stat_components sc_comp
-        ON sc_comp.player_id = sg.player_id
-       AND sc_comp.season = sg.season
-       AND sc_comp.component_name = 's_comp_pct_allowed'
-      LEFT JOIN stat_components sc_yds
-        ON sc_yds.player_id = sg.player_id
-       AND sc_yds.season = sg.season
-       AND sc_yds.component_name = 's_yards_per_target_allowed'
+      LEFT JOIN stat_components sc_pra
+        ON sc_pra.player_id = sg.player_id
+       AND sc_pra.season = sg.season
+       AND sc_pra.component_name = 's_passer_rating_allowed'
       LEFT JOIN stat_components sc_pbu
         ON sc_pbu.player_id = sg.player_id
        AND sc_pbu.season = sg.season
        AND sc_pbu.component_name = 's_pbu_rate'
-      LEFT JOIN stat_components sc_int
-        ON sc_int.player_id = sg.player_id
-       AND sc_int.season = sg.season
-       AND sc_int.component_name = 's_int_rate'
       LEFT JOIN stat_components sc_tkl
         ON sc_tkl.player_id = sg.player_id
        AND sc_tkl.season = sg.season
@@ -367,6 +346,166 @@ async function _getLeaderboard(
        AND sc_dis.component_name = 's_backfield_disruption_per_snap'
       WHERE sg.season = ${season}
         AND sg.position = 'S'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
+  if (position === "EDGE") {
+    // EDGE headline columns (ADR-0020): pressure rate, sack rate, TFL rate.
+    // Team resolved via player_seasons (EDGE players don't appear in plays as offensive players).
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                        AS team_abbr,
+        sc_press.sample_size          AS n_snaps,
+        sc_press.raw_value            AS edge_pressure_rate,
+        sc_sack.raw_value             AS edge_sack_rate,
+        sc_tfl.raw_value              AS edge_tfl_rate,
+        sc_miss.raw_value             AS edge_missed_tackle_rate
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_press
+        ON sc_press.player_id = sg.player_id
+       AND sc_press.season = sg.season
+       AND sc_press.component_name = 'edge_pressure_rate'
+      LEFT JOIN stat_components sc_sack
+        ON sc_sack.player_id = sg.player_id
+       AND sc_sack.season = sg.season
+       AND sc_sack.component_name = 'edge_sack_rate'
+      LEFT JOIN stat_components sc_tfl
+        ON sc_tfl.player_id = sg.player_id
+       AND sc_tfl.season = sg.season
+       AND sc_tfl.component_name = 'edge_tfl_rate'
+      LEFT JOIN stat_components sc_miss
+        ON sc_miss.player_id = sg.player_id
+       AND sc_miss.season = sg.season
+       AND sc_miss.component_name = 'edge_missed_tackle_rate'
+      WHERE sg.season = ${season}
+        AND sg.position = 'EDGE'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
+  if (position === "LB") {
+    // LB headline columns (ADR-0022).
+    // Team resolved via player_seasons.
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                        AS team_abbr,
+        sc_tfl.sample_size            AS n_snaps,
+        sc_tfl.raw_value              AS lb_tfl_rate,
+        sc_pra.raw_value              AS lb_passer_rating_allowed,
+        sc_miss.raw_value             AS lb_missed_tackle_rate,
+        sc_pbu.raw_value              AS lb_pbu_rate,
+        sc_tkl.raw_value              AS lb_tackle_rate,
+        sc_prs.raw_value              AS lb_pressure_rate
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_tfl
+        ON sc_tfl.player_id = sg.player_id
+       AND sc_tfl.season = sg.season
+       AND sc_tfl.component_name = 'lb_tfl_rate'
+      LEFT JOIN stat_components sc_pra
+        ON sc_pra.player_id = sg.player_id
+       AND sc_pra.season = sg.season
+       AND sc_pra.component_name = 'lb_passer_rating_allowed'
+      LEFT JOIN stat_components sc_miss
+        ON sc_miss.player_id = sg.player_id
+       AND sc_miss.season = sg.season
+       AND sc_miss.component_name = 'lb_missed_tackle_rate'
+      LEFT JOIN stat_components sc_pbu
+        ON sc_pbu.player_id = sg.player_id
+       AND sc_pbu.season = sg.season
+       AND sc_pbu.component_name = 'lb_pbu_rate'
+      LEFT JOIN stat_components sc_tkl
+        ON sc_tkl.player_id = sg.player_id
+       AND sc_tkl.season = sg.season
+       AND sc_tkl.component_name = 'lb_tackle_rate'
+      LEFT JOIN stat_components sc_prs
+        ON sc_prs.player_id = sg.player_id
+       AND sc_prs.season = sg.season
+       AND sc_prs.component_name = 'lb_pressure_rate'
+      WHERE sg.season = ${season}
+        AND sg.position = 'LB'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
+  if (position === "iDL") {
+    // iDL headline columns (ADR-0021): TFL rate, pressure rate, sack rate, missed tackle rate.
+    // Team resolved via player_seasons (iDL players don't appear in plays as offensive players).
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                        AS team_abbr,
+        sc_tfl.sample_size            AS n_snaps,
+        sc_tfl.raw_value              AS idl_tfl_rate,
+        sc_press.raw_value            AS idl_pressure_rate,
+        sc_sack.raw_value             AS idl_sack_rate,
+        sc_miss.raw_value             AS idl_missed_tackle_rate
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      LEFT JOIN teams t ON t.team_id = ps.team_id
+      LEFT JOIN stat_components sc_tfl
+        ON sc_tfl.player_id = sg.player_id
+       AND sc_tfl.season = sg.season
+       AND sc_tfl.component_name = 'idl_tfl_rate'
+      LEFT JOIN stat_components sc_press
+        ON sc_press.player_id = sg.player_id
+       AND sc_press.season = sg.season
+       AND sc_press.component_name = 'idl_pressure_rate'
+      LEFT JOIN stat_components sc_sack
+        ON sc_sack.player_id = sg.player_id
+       AND sc_sack.season = sg.season
+       AND sc_sack.component_name = 'idl_sack_rate'
+      LEFT JOIN stat_components sc_miss
+        ON sc_miss.player_id = sg.player_id
+       AND sc_miss.season = sg.season
+       AND sc_miss.component_name = 'idl_missed_tackle_rate'
+      WHERE sg.season = ${season}
+        AND sg.position = 'iDL'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
     return rows.map(coerceLeaderboardEntry);
@@ -890,7 +1029,6 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     rb_rush_epa_per_attempt: coerceNullableNumber(row.rb_rush_epa_per_attempt),
     rb_rush_success_rate: coerceNullableNumber(row.rb_rush_success_rate),
     rb_yac_over_expected_per_rec: coerceNullableNumber(row.rb_yac_over_expected_per_rec),
-    rb_catch_pct: coerceNullableNumber(row.rb_catch_pct),
     rb_fumble_rate: coerceNullableNumber(row.rb_fumble_rate),
     // WR/TE shared
     n_targets: coerceNullableInt(row.n_targets),
@@ -900,21 +1038,36 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     success_rate_per_target: coerceNullableNumber(row.success_rate_per_target),
     target_earn_rate: coerceNullableNumber(row.target_earn_rate),
     fumble_rate: coerceNullableNumber(row.fumble_rate),
+    drop_rate: coerceNullableNumber(row.drop_rate),
     // CB-only
-    cb_comp_pct_allowed: coerceNullableNumber(row.cb_comp_pct_allowed),
+    cb_passer_rating_allowed: coerceNullableNumber(row.cb_passer_rating_allowed),
     cb_yac_per_rec_allowed: coerceNullableNumber(row.cb_yac_per_rec_allowed),
     cb_target_rate: coerceNullableNumber(row.cb_target_rate),
     cb_pbu_rate: coerceNullableNumber(row.cb_pbu_rate),
-    cb_int_rate: coerceNullableNumber(row.cb_int_rate),
     // S-only
     n_snaps: coerceNullableInt(row.n_snaps),
-    s_comp_pct_allowed: coerceNullableNumber(row.s_comp_pct_allowed),
-    s_yards_per_target_allowed: coerceNullableNumber(row.s_yards_per_target_allowed),
+    s_passer_rating_allowed: coerceNullableNumber(row.s_passer_rating_allowed),
     s_target_rate: coerceNullableNumber(row.s_target_rate),
     s_pbu_rate: coerceNullableNumber(row.s_pbu_rate),
-    s_int_rate: coerceNullableNumber(row.s_int_rate),
     s_tackles_per_snap: coerceNullableNumber(row.s_tackles_per_snap),
     s_missed_tackle_rate: coerceNullableNumber(row.s_missed_tackle_rate),
     s_backfield_disruption_per_snap: coerceNullableNumber(row.s_backfield_disruption_per_snap),
+    // EDGE-only
+    edge_pressure_rate: coerceNullableNumber(row.edge_pressure_rate),
+    edge_sack_rate: coerceNullableNumber(row.edge_sack_rate),
+    edge_tfl_rate: coerceNullableNumber(row.edge_tfl_rate),
+    edge_missed_tackle_rate: coerceNullableNumber(row.edge_missed_tackle_rate),
+    // iDL-only
+    idl_tfl_rate: coerceNullableNumber(row.idl_tfl_rate),
+    idl_pressure_rate: coerceNullableNumber(row.idl_pressure_rate),
+    idl_sack_rate: coerceNullableNumber(row.idl_sack_rate),
+    idl_missed_tackle_rate: coerceNullableNumber(row.idl_missed_tackle_rate),
+    // LB-only
+    lb_tfl_rate: coerceNullableNumber(row.lb_tfl_rate),
+    lb_passer_rating_allowed: coerceNullableNumber(row.lb_passer_rating_allowed),
+    lb_missed_tackle_rate: coerceNullableNumber(row.lb_missed_tackle_rate),
+    lb_pbu_rate: coerceNullableNumber(row.lb_pbu_rate),
+    lb_tackle_rate: coerceNullableNumber(row.lb_tackle_rate),
+    lb_pressure_rate: coerceNullableNumber(row.lb_pressure_rate),
   };
 }

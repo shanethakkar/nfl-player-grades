@@ -51,13 +51,11 @@ from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
     S_COMPONENT_BACKFIELD_DISRUPTION,
-    S_COMPONENT_COMP_PCT_ALLOWED,
-    S_COMPONENT_INT_RATE,
     S_COMPONENT_MISSED_TACKLE_RATE,
+    S_COMPONENT_PASSER_RATING_ALLOWED,
     S_COMPONENT_PBU_RATE,
     S_COMPONENT_TACKLES_PER_SNAP,
     S_COMPONENT_TARGET_RATE,
-    S_COMPONENT_YARDS_PER_TARGET,
     S_V1_CONFIDENCE_FULL_SNAPS,
     S_V1_MIN_SNAPS_TO_GRADE,
     S_V1_QUALIFIED_MIN_SNAPS,
@@ -140,6 +138,7 @@ _FEATURES_SQL = text("""
         s.targets,
         s.completions,
         s.yards,
+        s.tds_allowed,
         s.ints,
         s.pass_breakups,
         s.comb_tackles,
@@ -173,11 +172,11 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     S_V1_MIN_SNAPS_TO_GRADE defensive snaps.
 
     Columns returned:
-        player_id, full_name, games, targets, completions, yards, ints,
-        pass_breakups, comb_tackles, tfl, sacks, missed_tackles,
+        player_id, full_name, games, targets, completions, yards, tds_allowed,
+        ints, pass_breakups, comb_tackles, tfl, sacks, missed_tackles,
         snaps_defense,
-        comp_pct_allowed, yards_per_target_allowed, pbu_rate, int_rate,
-        target_rate, tackles_per_snap, missed_tackle_rate,
+        passer_rating_allowed, pbu_rate, target_rate,
+        tackles_per_snap, missed_tackle_rate,
         backfield_disruption_per_snap, tackle_attempts
     """
     rows = (
@@ -192,9 +191,9 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     if df.empty:
         return df
 
-    int_cols = ("games", "targets", "completions", "yards", "ints",
-                "pass_breakups", "comb_tackles", "tfl", "missed_tackles",
-                "snaps_defense")
+    int_cols = ("games", "targets", "completions", "yards", "tds_allowed",
+                "ints", "pass_breakups", "comb_tackles", "tfl",
+                "missed_tackles", "snaps_defense")
     for col in int_cols:
         if col in df.columns:
             df[col] = df[col].fillna(0).astype(int)
@@ -204,28 +203,27 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype("Float64").astype(float)
 
-    # Derived rate columns (NaN when denominator is zero or data is missing).
-    df["comp_pct_allowed"] = np.where(
+    # NFL passer rating allowed when targeted (v1.1). Replaces separate
+    # comp_pct_allowed, yards_per_target_allowed, and int_rate components.
+    targets = df["targets"].astype(float).clip(lower=1)
+    comp_pct = df["completions"].astype(float) / targets
+    ypa = df["yards"].astype(float) / targets
+    td_pct = df["tds_allowed"].astype(float) / targets
+    int_pct = df["ints"].astype(float) / targets
+    a = ((comp_pct - 0.30) * 5).clip(lower=0.0, upper=2.375)
+    b = ((ypa - 3.0) * 0.25).clip(lower=0.0, upper=2.375)
+    c = (td_pct * 20).clip(lower=0.0, upper=2.375)
+    d = (2.375 - int_pct * 25).clip(lower=0.0, upper=2.375)
+    df["passer_rating_allowed"] = np.where(
         df["targets"] > 0,
-        df["completions"] / df["targets"],
+        ((a + b + c + d) / 6.0 * 100.0).astype(float),
         np.nan,
     )
 
-    df["yards_per_target_allowed"] = np.where(
-        df["targets"] > 0,
-        df["yards"] / df["targets"],
-        np.nan,
-    )
-
+    # PBU rate (PBU-only — INTs are captured inside passer_rating_allowed).
     df["pbu_rate"] = np.where(
         (df["targets"] > 0) & df["pass_breakups"].notna(),
         df["pass_breakups"] / df["targets"],
-        np.nan,
-    )
-
-    df["int_rate"] = np.where(
-        df["targets"] > 0,
-        df["ints"] / df["targets"],
         np.nan,
     )
 

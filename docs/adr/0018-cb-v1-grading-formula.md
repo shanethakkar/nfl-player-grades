@@ -1,6 +1,6 @@
 # ADR-0018: CB v1 Grading Formula
 
-**Status:** Accepted (v1.1 — 2026-05-13)
+**Status:** Accepted (v1.1 — 2026-05-13; passer-rating revision — 2026-05-14)
 **Date:** 2026-05-12
 
 ## Context
@@ -27,18 +27,17 @@ Seasons 2016–2017 have no CB grades.
 
 ## Decision
 
-### Metric Set (v1.1)
+### Metric Set (v1.1 passer-rating revision, 2026-05-14)
 
 | Component | Weight | k (shrinkage) | Direction | Rationale |
 |---|---|---|---|---|
-| `cb_comp_pct_allowed` | −0.22 | 50 targets | Lower is better | Primary coverage quality signal. Completion % allowed is the most direct measure of whether the CB won his rep. k=50 ≈ half-season of targets. Highest weight in the formula. |
-| `cb_yac_per_rec_allowed` | −0.18 | 50 targets | Lower is better | Post-catch YAC reflects cushion allowed and tackling quality near the catch point — a distinct skill from preventing the catch. If a CB allows completions but limits YAC, they're still doing something right. PFR publishes this for most seasons; missing values are NaN-neutralized. |
-| `cb_target_rate` | −0.08 | 150 snaps | Lower is better | Targets per defensive snap. Elite CBs get avoided — QBs scheme away from them before the ball is snapped, independent of what happens when they do throw. This signal is not captured by comp% (which only measures targeted plays). Denominator is defensive snaps (not coverage snaps, which are unavailable in public data), so the metric conflates avoidance with role depth; modest weight reflects this limitation. |
-| `cb_int_rate` | +0.10 | 80 targets | Higher is better | INTs per target. Highly variable — luck (drops, tipped balls) dominates at low sample sizes — but the ultimate positive play: a turnover that ends the drive. k=80 shrinks heavily for low-target CBs. |
-| `cb_pbu_rate` | +0.12 | 80 targets | Higher is better | Pass breakups per target. ~3× more frequent than INTs and more stable (higher YoY r at the same k). Active defense that stops the play without a turnover. Weighted above INT because its reliability justifies more composite influence. Sourced from nflverse `def_pass_defended`. |
+| `cb_passer_rating_allowed` | **−0.35** | 40 targets | Lower is better | NFL passer rating allowed when targeted. Industry-standard coverage damage metric combining comp%, yards per attempt, TDs allowed, and INTs into one number. Replaces separate `cb_comp_pct_allowed` and `cb_int_rate` components. The single cleanest CB skill signal in our dataset (2024 top 10 by this metric = consensus elite CBs: Stingley, Surtain, Humphrey, Wiggins, McDuffie, Gonzalez). k=40 because passer rating swings 25+ points off a single TD or INT in a 50-target sample. |
+| `cb_yac_per_rec_allowed` | −0.15 | 50 targets | Lower is better | Post-catch YAC reflects cushion allowed and tackling quality near the catch point — a distinct skill from preventing the catch. Distinct from passer rating allowed (which measures yards on the throw, not yards-after-catch). PFR publishes this for most seasons; missing values are NaN-neutralized. |
+| `cb_target_rate` | −0.08 | 150 snaps | Lower is better | Targets per defensive snap. Elite CBs get avoided — QBs scheme away from them before the ball is snapped, independent of what happens when they do throw. Denominator is defensive snaps (not coverage snaps, which are unavailable in public data), so the metric conflates avoidance with role depth; modest weight reflects this limitation. |
+| `cb_pbu_rate` | +0.12 | 80 targets | Higher is better | Pass breakups per target. Active defense that breaks up the catch. INTs are now captured inside `cb_passer_rating_allowed`, so this is PBU-only (vs v1 which counted PBU and INT separately). Sourced from nflverse `def_pass_defended`. |
 
-**Weight magnitudes:** comp% 31% + YAC 26% + PBU 17% + INT 14% + target rate 11% = 100%
-(the combiner normalizes by sum of |weights| = 0.70).
+**Weight magnitudes:** passer rating 50% + YAC 21% + PBU 17% + target rate 11% = 100%
+(combiner normalizes by sum of |weights| = 0.70 — same total as v1).
 
 ### Why no tackling component?
 
@@ -168,3 +167,11 @@ label provides context without distorting the z-score distribution.
   NaN-neutralized gracefully.
 - v1.1 formula changes require re-running `nflgrades grade --position CB` for all
   2018–2025 seasons to update stat_components and season_grades.
+
+## Revision History
+
+**2026-05-14 (passer-rating revision):** Replaced two components — `cb_comp_pct_allowed` (−0.22) and `cb_int_rate` (+0.10) — with a single `cb_passer_rating_allowed` component at weight −0.35. Computed season-long from comp/targets/yards/TDs/INTs using the standard NFL passer rating formula. YAC weight reduced slightly (−0.18 → −0.15) to keep total |weights| at 0.70 (unchanged from v1).
+
+**Why:** Passer rating allowed is the industry-standard NFL coverage metric. It captures all four sub-stats (comp%, yards/attempt, TDs, INTs) in one number with proper weighting — and critically, it penalizes TDs allowed (v1 didn't) while rewarding INTs (v1 did separately). 2024 face-check confirmed Marlon Humphrey moved #13 → #4, Christian Gonzalez #14 → #10; consensus elite CBs (Stingley, Surtain, Wiggins, McDuffie, Q. Mitchell) all in the top 10.
+
+**No data backfill needed** — `pfr_def_coverage` already stored TDs allowed; v1 just didn't use them. Re-graded all 2018-2025 seasons.

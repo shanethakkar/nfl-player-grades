@@ -1,6 +1,6 @@
 # ADR-0019: Safety v1 Grading Formula
 
-**Status:** Accepted  
+**Status:** Accepted (v1.1 passer-rating revision — 2026-05-14)
 **Date:** 2026-05-13
 
 ## Context
@@ -26,23 +26,21 @@ problem as CB, resolved the same way: use PFR's per-player coverage stats).
 
 ## Decision
 
-### Metric Set (v1)
+### Metric Set (v1.1 passer-rating revision, 2026-05-14)
 
 | Component | Weight | Direction | Rationale |
 |---|---|---|---|
-| `s_comp_pct_allowed` | −0.13 | Lower = better | Primary coverage signal — did the safety win the rep when targeted? |
-| `s_yards_per_target_allowed` | −0.08 | Lower = better | Total yards allowed per target. Captures depth of target and run-after-catch damage. Simpler than the YAC decomposition used for CBs. |
-| `s_pbu_rate` | +0.15 | Higher = better | Pass breakups per target. Highest single weight — reflects that PBU is the most stable positive-play metric (more frequent than INTs) and the clearest proof of active coverage at safety depth. |
-| `s_int_rate` | +0.13 | Higher = better | INTs per target. Turnover creation; valuable but noisy (k=80 shrinks heavily). |
+| `s_passer_rating_allowed` | **−0.30** | Lower = better | NFL passer rating allowed when targeted. Industry-standard coverage damage metric combining comp%, yards per attempt, TDs allowed, and INTs into one number. Replaces separate `s_comp_pct_allowed`, `s_yards_per_target_allowed`, and `s_int_rate` components. 2024 face-check confirmed Kerby Joseph (9 INTs, All-Pro) #1, McKinney #2, Derwin James #3, Brian Branch #5 — consensus elites all in top 5. |
+| `s_pbu_rate` | +0.12 | Higher = better | Pass breakups per target. Active play that breaks up the catch. INTs now captured inside passer rating allowed; this is PBU-only (down from v1 PBU+INT bundle at 0.15). |
 | `s_target_rate` | −0.08 | Lower = better | Targets per defensive snap. QB avoidance signal. Denominator is snaps_defense (not coverage snaps, unavailable in public data), so it conflates avoidance with scheme role. Modest weight reflects this limitation. |
 | `s_tackles_per_snap` | +0.07 | Higher = better | Combined tackles per snap. Run support and box coverage both require reliable tackling. |
-| `s_missed_tackle_rate` | −0.09 | Lower = better | Missed tackles / tackle attempts. Open-field technique matters most for safeties: a miss in space typically becomes a big gain. Second-highest tackling weight. |
+| `s_missed_tackle_rate` | −0.09 | Lower = better | Missed tackles / tackle attempts. Open-field technique matters most for safeties: a miss in space typically becomes a big gain. |
 | `s_backfield_disruption_per_snap` | +0.09 | Higher = better | (TFL + sacks) / snaps_defense. Measures pass-rush versatility from depth. Combined into one metric because TFL and sacks measure the same skill; combining doubles the event count and improves stability. |
 
-**Weight breakdown:**  
-Coverage (70%): `|−0.13| + |−0.08| + |0.15| + |0.13| + |−0.08|` = 0.57  
-Tackling (30%): `|0.07| + |−0.09| + |0.09|` = 0.25  
-Sum |abs| = 0.82
+**Weight breakdown:**
+Coverage (67%): `|−0.30| + |0.12| + |−0.08|` = 0.50
+Tackling (33%): `|0.07| + |−0.09| + |0.09|` = 0.25
+Sum |abs| = 0.75
 
 ### Why yards/target instead of YAC/rec?
 
@@ -134,3 +132,13 @@ data for missed tackles. The raw rate is accepted as-is.
 - Seasons 2016–2017 return no Safety grades (same PFR limitation as CB).
 - To regenerate grades: `nflgrades grade --position S --season <year>` for
   all seasons 2018–2025.
+
+## Revision History
+
+**2026-05-14 (passer-rating revision):** Replaced three components — `s_comp_pct_allowed` (−0.13), `s_yards_per_target_allowed` (−0.08), and `s_int_rate` (+0.13) — with a single `s_passer_rating_allowed` component at weight −0.30. Reduced `s_pbu_rate` from +0.15 (PBU+INT bundle) to +0.12 (PBU-only) since INTs are now inside passer rating allowed. Tackling components unchanged. Required schema migration `0013_safety_tds_allowed.sql` to add `tds_allowed` to `pfr_def_coverage_s` (CB table already had it).
+
+**Why:** Passer rating allowed is the industry-standard NFL coverage metric and is the single cleanest safety skill signal we have. It penalizes TDs allowed (v1 didn't capture this at all) while still rewarding INTs and forced incompletions. 2024 face-check confirmed Kerby Joseph (9 INTs, First-Team All-Pro) #1, Xavier McKinney (8 INTs, Pro Bowl) #2, Derwin James #3, Brian Branch #5.
+
+**Known limitation:** Kyle Hamilton (universally regarded top-3 safety) grades #13 in 2024 because his disguised-coverage style produces fewer direct target events. This is the same "stats vs film" gap noted for LB v1.1.
+
+**Weight totals:** v1 sum |abs| = 0.82 → v1.1 sum |abs| = 0.75. Same coverage/tackling proportion (~67/33).

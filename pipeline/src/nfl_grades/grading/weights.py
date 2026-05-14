@@ -33,85 +33,73 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 
 
 # ---------------------------------------------------------------------------
-# RB v1 (ADR-0014).
+# RB v1.1 (ADR-0014, revised 2026-05-14).
 # ---------------------------------------------------------------------------
+# v1.1 change: removed rb_catch_pct (+0.05). YoY r oscillates around 0
+# (-0.015, +0.035, +0.120, -0.322, mean ≈ -0.05 across 2020-2024) — noise
+# at RB sample sizes. Also correlates 0.61 with rb_rush_success_rate
+# (partly redundant). Weight redistributed: rb_yac_over_expected_per_rec
+# bumped from 0.12 → 0.15 (receiving share stays ~33%).
+#
+# Audit also rejected NGS rushing candidates (efficiency, rush_pct_over_
+# expected, avg_time_to_los, percent_eight_defenders) — all redundant
+# with RYOE or non-skill usage markers. See project_rb_v1_1_research.md.
 
-# Component names — these strings are written to stat_components.component_name
-# and string-matched by the web app, so they're part of the public contract.
+# Component names — strings written to stat_components.component_name.
 RB_COMPONENT_RYOE_PER_ATTEMPT: str = "rb_ryoe_per_attempt"
 RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: str = "rb_rush_epa_per_attempt"
 RB_COMPONENT_RUSH_SUCCESS_RATE: str = "rb_rush_success_rate"
 RB_COMPONENT_REC_EPA_PER_TARGET: str = "rb_rec_epa_per_target"
 RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "rb_yac_over_expected_per_rec"
-RB_COMPONENT_CATCH_PCT: str = "rb_catch_pct"
 RB_COMPONENT_FUMBLE_RATE: str = "rb_fumble_rate"
 
-# ADR-0014: weights sum to 1.0. Rush 60% / Rec 35% / Security 5% (negative).
-# Fumble rate enters with a *negative* weight — fewer fumbles is better.
+# Sum |abs| = 0.98 (combiner normalizes). Rush 60% / Rec 33% / Security 5%.
 RB_V1_WEIGHTS: dict[str, float] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: 0.28,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: 0.18,
     RB_COMPONENT_RUSH_SUCCESS_RATE: 0.14,
     RB_COMPONENT_REC_EPA_PER_TARGET: 0.18,
-    RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.12,
-    RB_COMPONENT_CATCH_PCT: 0.05,
+    RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.15,
     RB_COMPONENT_FUMBLE_RATE: -0.05,
 }
 
-# Empirical Bayes shrinkage strengths. Larger k = more pull toward the
-# league mean for low-sample players. Fumble rate gets a large k because
-# year-over-year reliability of fumble rate is poor (~r=0.1-0.2) even
-# with the recovery coin-flip removed by using `fumble` rather than
-# `fumble_lost`.
+# Empirical Bayes shrinkage strengths.
 RB_V1_SHRINKAGE_K: dict[str, float] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: 100.0,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: 100.0,
     RB_COMPONENT_RUSH_SUCCESS_RATE: 100.0,
     RB_COMPONENT_REC_EPA_PER_TARGET: 40.0,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 30.0,
-    RB_COMPONENT_CATCH_PCT: 40.0,
     RB_COMPONENT_FUMBLE_RATE: 200.0,
 }
 
-# Which `n` column in the feature DataFrame pairs with each component.
-# extract_features() must populate these columns.
 RB_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: "n_carries",
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: "n_carries",
     RB_COMPONENT_RUSH_SUCCESS_RATE: "n_carries",
     RB_COMPONENT_REC_EPA_PER_TARGET: "n_targets",
-    # YAC-over-expected is derived from plays.xyac_mean_yardage, so the
-    # relevant n is receptions where the xYAC model produced a prediction.
-    # In practice this is ~99% of RB completions, but we track the exact
-    # count so shrinkage reflects measured receptions.
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "n_rec_with_xyac",
-    RB_COMPONENT_CATCH_PCT: "n_targets",
     RB_COMPONENT_FUMBLE_RATE: "n_touches",
 }
 
-# Which raw-value column in the feature DataFrame pairs with each component.
 RB_V1_RAW_VALUE_COLS: dict[str, str] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: "ryoe_per_attempt",
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: "rush_epa_per_attempt",
     RB_COMPONENT_RUSH_SUCCESS_RATE: "rush_success_rate",
     RB_COMPONENT_REC_EPA_PER_TARGET: "rec_epa_per_target",
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "yac_over_expected_per_rec",
-    RB_COMPONENT_CATCH_PCT: "catch_pct",
     RB_COMPONENT_FUMBLE_RATE: "fumble_rate",
 }
 
-# NGS RYOE/att and YAC-over-expected are already context-adjusted upstream
-# by Next Gen Stats' own models. When opponent adjustment is added in v2,
-# these components must be SKIPPED (flag = True) to avoid double-adjusting.
-# Purely documentary for v1 (no opp-adj implemented yet), but baked in now
-# so v2 doesn't have to retrofit.
+# NGS RYOE/att and YAC-over-expected are pre-adjusted upstream by NGS's
+# own models. When opponent adjustment is added in v2, these components
+# must be SKIPPED (flag = True) to avoid double-adjusting.
 RB_V1_PRE_ADJUSTED: dict[str, bool] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: True,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: False,
     RB_COMPONENT_RUSH_SUCCESS_RATE: False,
     RB_COMPONENT_REC_EPA_PER_TARGET: False,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: True,
-    RB_COMPONENT_CATCH_PCT: False,
     RB_COMPONENT_FUMBLE_RATE: False,
 }
 
@@ -131,8 +119,19 @@ RB_V1_CONFIDENCE_FULL_TOUCHES: int = 250
 
 
 # ---------------------------------------------------------------------------
-# WR v1 (ADR-0015).
+# WR v1.1 (ADR-0015, revised 2026-05-14).
 # ---------------------------------------------------------------------------
+# v1.1 changes:
+#   - Added wr_drop_rate (-0.08) from FTN per-play charting joined to PBP.
+#     Captures hands/ball-skills, the only real gap in v1's skill coverage.
+#   - Removed wr_fumble_rate (-0.05). YoY r oscillates around 0 (-0.26, +0.09,
+#     -0.40, +0.27 across 2020-2024), 90% of qualified WRs had ≤1 fumble.
+#     Pure noise at WR sample sizes. Fumbles still penalized implicitly via
+#     EPA (a fumble = negative EPA play).
+#
+# FTN drop data starts 2022; for 2016-2021 the drop_rate component is
+# NaN-neutralized to 0 contribution (grade comes from the other 5
+# components only).
 
 # Component names — part of the public contract with the web app.
 WR_COMPONENT_REC_EPA_PER_TARGET: str = "wr_rec_epa_per_target"
@@ -140,64 +139,50 @@ WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "wr_yac_over_expected_per_rec"
 WR_COMPONENT_SEPARATION: str = "wr_separation"
 WR_COMPONENT_TARGET_EARN_RATE: str = "wr_target_earn_rate"
 WR_COMPONENT_SUCCESS_RATE_PER_TARGET: str = "wr_success_rate_per_target"
-WR_COMPONENT_FUMBLE_RATE: str = "wr_fumble_rate"
+WR_COMPONENT_DROP_RATE: str = "wr_drop_rate"
 
-# ADR-0015: sum of magnitudes = 0.95 (composite combiner normalizes by
-# magnitude sum, so fumble contributes at its designed 5.3% share).
-# Rough shape: 62% outcome (EPA + YAC), 28% process + usage
-# (separation + earn rate + success), 5% ball security (negative).
+# Sum |abs| = 0.98 (combiner normalizes).
+# Shape: 62% outcome (EPA + YAC), 28% process + usage, 8% hands (negative).
 WR_V1_WEIGHTS: dict[str, float] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: 0.35,
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.27,
     WR_COMPONENT_SEPARATION: 0.10,
     WR_COMPONENT_TARGET_EARN_RATE: 0.10,
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
-    WR_COMPONENT_FUMBLE_RATE: -0.05,
+    WR_COMPONENT_DROP_RATE: -0.08,
 }
 
-# Empirical Bayes shrinkage strengths. Target earn rate uses "team pass
-# attempts while active" as its sample unit (the natural denominator of
-# the rate), not games — the EB formulation wants to shrink toward
-# league-mean target share weighted by the number of observations.
-# Separation's k is slightly lower than EPA/success because NGS
-# separation has higher year-over-year reliability than raw per-play
-# efficiency metrics (a player's movement skill is more stable than
-# their play-to-play outcomes).
+# Empirical Bayes shrinkage strengths.
+# - drop_rate: k=50 catchable balls. FTN is conservative; some WRs at 0
+#   drops are real, some are data gaps. Moderate shrinkage avoids
+#   over-rewarding "0 drops on 35 catchable balls" noise.
 WR_V1_SHRINKAGE_K: dict[str, float] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: 50.0,
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 30.0,
     WR_COMPONENT_SEPARATION: 40.0,
     WR_COMPONENT_TARGET_EARN_RATE: 200.0,
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: 50.0,
-    WR_COMPONENT_FUMBLE_RATE: 100.0,
+    WR_COMPONENT_DROP_RATE: 50.0,
 }
 
-# Which `n` column in the feature DataFrame pairs with each component.
-# extract_features() must populate these columns.
 WR_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: "n_targets",
-    # YAC-over-expected is derived from plays.xyac_mean_yardage (same
-    # pattern as RB v1.1), so n is completions where xYAC was scored.
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "n_rec_with_xyac",
     WR_COMPONENT_SEPARATION: "n_targets",
-    # Team pass attempts while the WR was active — the natural
-    # denominator of target earn rate and the right EB sample unit.
     WR_COMPONENT_TARGET_EARN_RATE: "n_team_pass_att_active",
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: "n_targets",
-    # WRs only touch the ball on completions, so fumble denominator is
-    # receptions (not targets). Keeps the rate comparable across
-    # possession/deep-threat archetypes.
-    WR_COMPONENT_FUMBLE_RATE: "n_receptions",
+    # Drop rate denominator is catchable balls (only well-thrown passes
+    # count as drop opportunities). NaN for pre-2022 seasons.
+    WR_COMPONENT_DROP_RATE: "n_catchable_balls",
 }
 
-# Which raw-value column in the feature DataFrame pairs with each component.
 WR_V1_RAW_VALUE_COLS: dict[str, str] = {
     WR_COMPONENT_REC_EPA_PER_TARGET: "rec_epa_per_target",
     WR_COMPONENT_YAC_OVER_EXPECTED_PER_REC: "yac_over_expected_per_rec",
     WR_COMPONENT_SEPARATION: "separation",
     WR_COMPONENT_TARGET_EARN_RATE: "target_earn_rate",
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: "success_rate_per_target",
-    WR_COMPONENT_FUMBLE_RATE: "fumble_rate",
+    WR_COMPONENT_DROP_RATE: "drop_rate",
 }
 
 # YAC-over-expected (xYAC model) and separation (NGS's DB-proximity
@@ -209,7 +194,7 @@ WR_V1_PRE_ADJUSTED: dict[str, bool] = {
     WR_COMPONENT_SEPARATION: True,
     WR_COMPONENT_TARGET_EARN_RATE: False,
     WR_COMPONENT_SUCCESS_RATE_PER_TARGET: False,
-    WR_COMPONENT_FUMBLE_RATE: False,
+    WR_COMPONENT_DROP_RATE: False,
 }
 
 # ADR-0015: two qualification tiers.
@@ -303,88 +288,76 @@ TE_V1_MIN_SNAPS_FOR_BLOCKING_LABEL: int = 200
 
 
 # ---------------------------------------------------------------------------
-# CB v1 (ADR-0018).
+# CB v1.1 (ADR-0018, revised 2026-05-14).
 # ---------------------------------------------------------------------------
-# Data source: PFR advanced defensive coverage stats (pfr_def_coverage table)
-# + nflverse player stats (def_pass_defended for PBU) + player_seasons
-# (snaps_defense for target rate denominator).
-# Coverage begins 2018 — earliest year PFR published per-CB target/comp data.
+# Data source: PFR advanced defensive coverage stats (pfr_def_coverage table —
+# includes comp%, yards, YAC, TDs, INTs) + nflverse player stats
+# (def_pass_defended for PBU) + player_seasons (snaps_defense).
+# Coverage begins 2018.
 #
-# Negative weights = lower is better (fewer completions/YAC/targets is good).
-# Positive weights = higher is better (more INTs/PBUs is good).
+# Negative weights = lower is better. Positive weights = higher is better.
 #
-# Formula rationale (ADR-0018):
-#   comp_pct_allowed (31%): primary coverage quality signal — did the CB win
-#     the rep? Most direct measure available.
-#   yac_per_rec_allowed (26%): post-catch damage. Captures cushion allowed and
-#     tackling quality at the catch point. Different from comp% — a CB can
-#     allow the catch but limit YAC.
-#   target_rate (11%): targets per defensive snap. Elite CBs get avoided;
-#     QBs scheme away from them. Independent of what happens when they do
-#     throw — comp% doesn't capture avoidance. Denominator: defensive snaps
-#     (not coverage snaps, which aren't in the data) so it conflates avoidance
-#     with role depth. Modest weight reflects this limitation.
-#   int_rate (14%): INTs per target. Highly variable but the ultimate positive
-#     play. k=80 shrinks heavily for low-target CBs.
-#   pbu_rate (17%): pass breakups per target. ~3× more frequent than INTs so
-#     more stable. Captures active coverage that stops plays short of INT.
-#     Higher weight than INT because reliability is better at same k.
+# v1.1 swap: replaced comp_pct_allowed (-0.22) + int_rate (+0.10) with a
+# single passer_rating_allowed component (-0.35). Rationale:
+#   - passer rating allowed naturally captures comp%, yds/att, TDs allowed,
+#     and INTs as four sub-components.
+#   - v1 didn't penalize TDs allowed at all. v1.1 does (heavily — a TD swings
+#     passer rating ~20 points).
+#   - INTs are now captured inside passer rating; v1.1 keeps pbu_rate
+#     separately for the active "broke up the catch" play.
 #
-# TD rate was dropped in v1.1: TDs allowed are rare (2–5/season), highly
-# variable (r<0.15 YoY), and partially redundant with comp% and YAC. At 7%
-# weight, noise contribution exceeded signal contribution.
+# Formula rationale:
+#   passer_rating_allowed (50%): industry-standard coverage damage metric.
+#     The single cleanest CB skill signal. k=40 targets (heavy shrinkage
+#     because passer rating swings 25+ points off one TD or INT).
+#   yac_per_rec_allowed (21%): post-catch damage. Captures cushion and tackle
+#     quality at the catch point. Distinct from passer rating (which is
+#     yards/attempt, not yards-after-catch).
+#   target_rate (11%): elite CBs get avoided; QBs scheme away from them.
+#     Independent of what happens when they're targeted.
+#   pbu_rate (17%): active play that broke up the catch. INT events are
+#     in passer rating; PBU rate captures the rest.
 #
-# The composite combiner normalizes by sum of |weights|, so magnitudes here
-# are proportional shares, not percentage points.
+# The composite combiner normalizes by sum of |weights|.
 # ---------------------------------------------------------------------------
 
-CB_COMPONENT_COMP_PCT_ALLOWED: str = "cb_comp_pct_allowed"
+CB_COMPONENT_PASSER_RATING_ALLOWED: str = "cb_passer_rating_allowed"
 CB_COMPONENT_YAC_PER_REC_ALLOWED: str = "cb_yac_per_rec_allowed"
 CB_COMPONENT_TARGET_RATE: str = "cb_target_rate"
-CB_COMPONENT_INT_RATE: str = "cb_int_rate"
 CB_COMPONENT_PBU_RATE: str = "cb_pbu_rate"
 
 CB_V1_WEIGHTS: dict[str, float] = {
-    CB_COMPONENT_COMP_PCT_ALLOWED:    -0.22,
-    CB_COMPONENT_YAC_PER_REC_ALLOWED: -0.18,
-    CB_COMPONENT_TARGET_RATE:         -0.08,
-    CB_COMPONENT_INT_RATE:             0.10,
-    CB_COMPONENT_PBU_RATE:             0.12,
+    CB_COMPONENT_PASSER_RATING_ALLOWED: -0.35,
+    CB_COMPONENT_YAC_PER_REC_ALLOWED:   -0.15,
+    CB_COMPONENT_TARGET_RATE:           -0.08,
+    CB_COMPONENT_PBU_RATE:               0.12,
 }
 
 # Empirical Bayes shrinkage strengths.
-# - comp% and YAC: k=50 targets (~3-game workload).
-# - INT and PBU rates: k=80 (rare/noisy events, r<0.25 YoY).
-# - target_rate: k=150 snaps. QB avoidance is more stable than rate stats
-#   (scheme-driven, not event-driven), so less shrinkage is needed; but the
-#   snap denominator doesn't isolate coverage snaps, warranting some pull
-#   toward the mean for low-snap players.
+# - passer_rating_allowed: k=40. Heavy shrinkage because PR swings 25+ pts
+#   on one TD or INT for a 50-target sample.
+# - YAC: k=50 targets.
+# - PBU: k=80 (rare/noisy events).
+# - target_rate: k=150 snaps. Scheme-driven, more stable than event rates.
 CB_V1_SHRINKAGE_K: dict[str, float] = {
-    CB_COMPONENT_COMP_PCT_ALLOWED:    50.0,
-    CB_COMPONENT_YAC_PER_REC_ALLOWED: 50.0,
-    CB_COMPONENT_TARGET_RATE:         150.0,
-    CB_COMPONENT_INT_RATE:            80.0,
-    CB_COMPONENT_PBU_RATE:            80.0,
+    CB_COMPONENT_PASSER_RATING_ALLOWED: 40.0,
+    CB_COMPONENT_YAC_PER_REC_ALLOWED:   50.0,
+    CB_COMPONENT_TARGET_RATE:           150.0,
+    CB_COMPONENT_PBU_RATE:              80.0,
 }
 
-# Which raw computed column in the feature DataFrame pairs with each component.
 CB_V1_RAW_VALUE_COLS: dict[str, str] = {
-    CB_COMPONENT_COMP_PCT_ALLOWED:    "comp_pct_allowed",
-    CB_COMPONENT_YAC_PER_REC_ALLOWED: "yac_per_rec_allowed",
-    CB_COMPONENT_TARGET_RATE:         "target_rate",
-    CB_COMPONENT_INT_RATE:            "int_rate",
-    CB_COMPONENT_PBU_RATE:            "pbu_rate",
+    CB_COMPONENT_PASSER_RATING_ALLOWED: "passer_rating_allowed",
+    CB_COMPONENT_YAC_PER_REC_ALLOWED:   "yac_per_rec_allowed",
+    CB_COMPONENT_TARGET_RATE:           "target_rate",
+    CB_COMPONENT_PBU_RATE:              "pbu_rate",
 }
 
-# Sample-size denominator for each component's EB shrinkage.
-# target_rate uses snaps_defense (not targets) because its natural
-# denominator is opportunities to be targeted, not actual targets.
 CB_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
-    CB_COMPONENT_COMP_PCT_ALLOWED:    "targets",
-    CB_COMPONENT_YAC_PER_REC_ALLOWED: "targets",
-    CB_COMPONENT_TARGET_RATE:         "snaps_defense",
-    CB_COMPONENT_INT_RATE:            "targets",
-    CB_COMPONENT_PBU_RATE:            "targets",
+    CB_COMPONENT_PASSER_RATING_ALLOWED: "targets",
+    CB_COMPONENT_YAC_PER_REC_ALLOWED:   "targets",
+    CB_COMPONENT_TARGET_RATE:           "snaps_defense",
+    CB_COMPONENT_PBU_RATE:              "targets",
 }
 
 # Qualification thresholds.
@@ -439,74 +412,59 @@ CB_V1_SLOT_HI: float = 0.65
 # The combiner normalizes by sum of |weights| so magnitudes are proportional.
 # ---------------------------------------------------------------------------
 
-S_COMPONENT_COMP_PCT_ALLOWED: str = "s_comp_pct_allowed"
-S_COMPONENT_YARDS_PER_TARGET: str = "s_yards_per_target_allowed"
+S_COMPONENT_PASSER_RATING_ALLOWED: str = "s_passer_rating_allowed"
 S_COMPONENT_PBU_RATE: str = "s_pbu_rate"
-S_COMPONENT_INT_RATE: str = "s_int_rate"
 S_COMPONENT_TARGET_RATE: str = "s_target_rate"
 S_COMPONENT_TACKLES_PER_SNAP: str = "s_tackles_per_snap"
 S_COMPONENT_MISSED_TACKLE_RATE: str = "s_missed_tackle_rate"
 S_COMPONENT_BACKFIELD_DISRUPTION: str = "s_backfield_disruption_per_snap"
 
+# v1.1 (2026-05-14): replaced comp_pct_allowed + yards_per_target + int_rate
+# with a single passer_rating_allowed component. INTs are now captured inside
+# passer rating (hammers it ~25 pts per INT), so PBU rate dropped from
+# pbu+int bundle (v1: 0.15) → PBU-only (v1.1: 0.12).
 S_V1_WEIGHTS: dict[str, float] = {
-    S_COMPONENT_COMP_PCT_ALLOWED:  -0.13,
-    S_COMPONENT_YARDS_PER_TARGET:  -0.08,
-    S_COMPONENT_PBU_RATE:           0.15,
-    S_COMPONENT_INT_RATE:           0.13,
-    S_COMPONENT_TARGET_RATE:       -0.08,
-    S_COMPONENT_TACKLES_PER_SNAP:   0.07,
-    S_COMPONENT_MISSED_TACKLE_RATE:-0.09,
-    S_COMPONENT_BACKFIELD_DISRUPTION: 0.09,
+    S_COMPONENT_PASSER_RATING_ALLOWED: -0.30,
+    S_COMPONENT_PBU_RATE:               0.12,
+    S_COMPONENT_TARGET_RATE:           -0.08,
+    S_COMPONENT_TACKLES_PER_SNAP:       0.07,
+    S_COMPONENT_MISSED_TACKLE_RATE:    -0.09,
+    S_COMPONENT_BACKFIELD_DISRUPTION:   0.09,
 }
 
 # Empirical Bayes shrinkage strengths.
-# Coverage rates use targets as pseudo-sample denominator (consistent with CB).
-# Tackling rates use snaps_defense.
-# - comp% / yards-per-target (k=50 targets): moderate shrinkage, reasonable
-#   stability after ~3 games of targets.
-# - PBU / INT rates (k=80 targets): heavy shrinkage; rare, noisy events.
-# - target_rate (k=150 snaps): scheme-driven avoidance, less snap noise than
-#   event-driven rates; denominator includes run-defense snaps.
-# - tackles_per_snap (k=200 snaps): stable across weeks once sample grows.
-# - missed_tackle_rate (k=100 tackle_attempts): moderate shrinkage; technique
-#   is a real skill but luck (bounce, angle) introduces noise.
-# - backfield_disruption (k=300 snaps): TFL + sacks are rare per-snap; heavy
-#   shrinkage needed to avoid over-weighting early multi-sack games.
+# - passer_rating_allowed (k=40 targets): heavy shrinkage; PR swings ~25 pts
+#   off one TD or INT in a 50-target sample.
+# - PBU rate (k=80 targets): rare events.
+# - target_rate (k=150 snaps): scheme-driven avoidance.
+# - tackles_per_snap (k=200 snaps): stable once sample grows.
+# - missed_tackle_rate (k=100 tackle_attempts): moderate shrinkage.
+# - backfield_disruption (k=300 snaps): TFL + sacks rare per-snap.
 S_V1_SHRINKAGE_K: dict[str, float] = {
-    S_COMPONENT_COMP_PCT_ALLOWED:   50.0,
-    S_COMPONENT_YARDS_PER_TARGET:   50.0,
-    S_COMPONENT_PBU_RATE:           80.0,
-    S_COMPONENT_INT_RATE:           80.0,
-    S_COMPONENT_TARGET_RATE:       150.0,
-    S_COMPONENT_TACKLES_PER_SNAP:  200.0,
-    S_COMPONENT_MISSED_TACKLE_RATE:100.0,
-    S_COMPONENT_BACKFIELD_DISRUPTION: 300.0,
+    S_COMPONENT_PASSER_RATING_ALLOWED:  40.0,
+    S_COMPONENT_PBU_RATE:               80.0,
+    S_COMPONENT_TARGET_RATE:           150.0,
+    S_COMPONENT_TACKLES_PER_SNAP:      200.0,
+    S_COMPONENT_MISSED_TACKLE_RATE:    100.0,
+    S_COMPONENT_BACKFIELD_DISRUPTION:  300.0,
 }
 
-# Raw computed column in the feature DataFrame for each component.
 S_V1_RAW_VALUE_COLS: dict[str, str] = {
-    S_COMPONENT_COMP_PCT_ALLOWED:    "comp_pct_allowed",
-    S_COMPONENT_YARDS_PER_TARGET:    "yards_per_target_allowed",
-    S_COMPONENT_PBU_RATE:            "pbu_rate",
-    S_COMPONENT_INT_RATE:            "int_rate",
-    S_COMPONENT_TARGET_RATE:         "target_rate",
-    S_COMPONENT_TACKLES_PER_SNAP:    "tackles_per_snap",
-    S_COMPONENT_MISSED_TACKLE_RATE:  "missed_tackle_rate",
-    S_COMPONENT_BACKFIELD_DISRUPTION:"backfield_disruption_per_snap",
+    S_COMPONENT_PASSER_RATING_ALLOWED: "passer_rating_allowed",
+    S_COMPONENT_PBU_RATE:              "pbu_rate",
+    S_COMPONENT_TARGET_RATE:           "target_rate",
+    S_COMPONENT_TACKLES_PER_SNAP:      "tackles_per_snap",
+    S_COMPONENT_MISSED_TACKLE_RATE:    "missed_tackle_rate",
+    S_COMPONENT_BACKFIELD_DISRUPTION:  "backfield_disruption_per_snap",
 }
 
-# Sample-size denominator for each component's EB shrinkage.
-# missed_tackle_rate uses tackle_attempts (= comb + missed), the natural
-# denominator for that rate.
 S_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
-    S_COMPONENT_COMP_PCT_ALLOWED:    "targets",
-    S_COMPONENT_YARDS_PER_TARGET:    "targets",
-    S_COMPONENT_PBU_RATE:            "targets",
-    S_COMPONENT_INT_RATE:            "targets",
-    S_COMPONENT_TARGET_RATE:         "snaps_defense",
-    S_COMPONENT_TACKLES_PER_SNAP:    "snaps_defense",
-    S_COMPONENT_MISSED_TACKLE_RATE:  "tackle_attempts",
-    S_COMPONENT_BACKFIELD_DISRUPTION:"snaps_defense",
+    S_COMPONENT_PASSER_RATING_ALLOWED: "targets",
+    S_COMPONENT_PBU_RATE:              "targets",
+    S_COMPONENT_TARGET_RATE:           "snaps_defense",
+    S_COMPONENT_TACKLES_PER_SNAP:      "snaps_defense",
+    S_COMPONENT_MISSED_TACKLE_RATE:    "tackle_attempts",
+    S_COMPONENT_BACKFIELD_DISRUPTION:  "snaps_defense",
 }
 
 # Qualification thresholds (snap-based, unlike CB's target-based).
@@ -516,3 +474,218 @@ S_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
 S_V1_MIN_SNAPS_TO_GRADE: int = 200
 S_V1_QUALIFIED_MIN_SNAPS: int = 400
 S_V1_CONFIDENCE_FULL_SNAPS: int = 700
+
+
+# ---------------------------------------------------------------------------
+# EDGE v1 (ADR-0020).
+# ---------------------------------------------------------------------------
+# Data sources:
+#   - Pressures, sacks, QB hits, hurries, tackles, missed tackles:
+#     pfr_advstats_def → pfr_def_pass_rush table (2018+)
+#   - TFL (run stops, sacks excluded): nflvs_player_stats → pfr_def_pass_rush
+#   - Defensive snaps: player_seasons.snaps_defense
+#
+# Coverage begins 2018 (PFR per-player data limitation).
+#
+# Formula: 72% pass rush / 17% run stop / 11% technique penalty.
+# Sum |abs| = 0.90. Positive weights = higher is better.
+# Negative weight = lower is better (missed tackles).
+#
+# edge_pressure_rate (39%): pressures (sacks+hits+hurries) per snap.
+#   Primary signal — total pass rush impact per opportunity.
+# edge_sack_rate (33%): sacks per snap. Premium outcome; extra credit
+#   for converting pressure to sacks. Intentional overlap with pressure_rate
+#   to weight the highest-value plays more heavily.
+# edge_tfl_rate (17%): run-stop TFLs (sacks excluded) per snap.
+#   EDGE rushers set the edge on run plays; elite ones generate real TFLs.
+# edge_missed_tackle_rate (11%): missed / (comb + missed). Technique
+#   penalty. k=100 tackle_attempts — moderate shrinkage, some real skill.
+#
+# nflvs TFL is reported separately from sacks (confirmed by inspection:
+# Dexter Lawrence 2024 had 9.0 sacks but only 8 TFL, proving sacks are
+# NOT counted in def_tackles_for_loss). No double-count risk.
+# ---------------------------------------------------------------------------
+
+EDGE_COMPONENT_PRESSURE_RATE: str = "edge_pressure_rate"
+EDGE_COMPONENT_SACK_RATE: str = "edge_sack_rate"
+EDGE_COMPONENT_TFL_RATE: str = "edge_tfl_rate"
+EDGE_COMPONENT_MISSED_TACKLE_RATE: str = "edge_missed_tackle_rate"
+
+EDGE_V1_WEIGHTS: dict[str, float] = {
+    EDGE_COMPONENT_PRESSURE_RATE:      0.35,
+    EDGE_COMPONENT_SACK_RATE:          0.30,
+    EDGE_COMPONENT_TFL_RATE:           0.15,
+    EDGE_COMPONENT_MISSED_TACKLE_RATE: -0.10,
+}
+
+EDGE_V1_SHRINKAGE_K: dict[str, float] = {
+    EDGE_COMPONENT_PRESSURE_RATE:      200.0,
+    EDGE_COMPONENT_SACK_RATE:          350.0,
+    EDGE_COMPONENT_TFL_RATE:           300.0,
+    EDGE_COMPONENT_MISSED_TACKLE_RATE: 100.0,
+}
+
+EDGE_V1_RAW_VALUE_COLS: dict[str, str] = {
+    EDGE_COMPONENT_PRESSURE_RATE:      "pressure_rate",
+    EDGE_COMPONENT_SACK_RATE:          "sack_rate",
+    EDGE_COMPONENT_TFL_RATE:           "tfl_rate",
+    EDGE_COMPONENT_MISSED_TACKLE_RATE: "missed_tackle_rate",
+}
+
+EDGE_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    EDGE_COMPONENT_PRESSURE_RATE:      "snaps_defense",
+    EDGE_COMPONENT_SACK_RATE:          "snaps_defense",
+    EDGE_COMPONENT_TFL_RATE:           "snaps_defense",
+    EDGE_COMPONENT_MISSED_TACKLE_RATE: "tackle_attempts",
+}
+
+EDGE_V1_MIN_SNAPS_TO_GRADE: int = 200
+EDGE_V1_QUALIFIED_MIN_SNAPS: int = 400
+EDGE_V1_CONFIDENCE_FULL_SNAPS: int = 700
+
+
+# ---------------------------------------------------------------------------
+# iDL v1 (ADR-0021).
+# ---------------------------------------------------------------------------
+# Data sources: same pfr_def_pass_rush table as EDGE (both are DL).
+# TFL is the primary iDL differentiator; pass rush down-weighted vs EDGE.
+#
+# idl_tfl_rate (37%): run-stop TFLs per snap. Interior penetration is what
+#   separates elite DTs (Aaron Donald, Chris Jones) from average starters.
+# idl_pressure_rate (32%): total pressures per snap. Interior pressure
+#   counts but is rarer — an elite DT's pass-rush rate is lower than EDGE.
+# idl_sack_rate (16%): sacks per snap. Interior sacks are premium but
+#   structurally rarer than EDGE sacks; weighted lower than EDGE.
+# idl_missed_tackle_rate (16%): technique penalty, weighted the same as
+#   TFL to keep the formula symmetric in the negative direction.
+#
+# Sum |abs| = 0.95. Normalized dynamically by composite.combine.
+# ---------------------------------------------------------------------------
+
+IDL_COMPONENT_TFL_RATE: str = "idl_tfl_rate"
+IDL_COMPONENT_PRESSURE_RATE: str = "idl_pressure_rate"
+IDL_COMPONENT_SACK_RATE: str = "idl_sack_rate"
+IDL_COMPONENT_MISSED_TACKLE_RATE: str = "idl_missed_tackle_rate"
+
+IDL_V1_WEIGHTS: dict[str, float] = {
+    IDL_COMPONENT_TFL_RATE:           0.35,
+    IDL_COMPONENT_PRESSURE_RATE:      0.30,
+    IDL_COMPONENT_SACK_RATE:          0.15,
+    IDL_COMPONENT_MISSED_TACKLE_RATE: -0.15,
+}
+
+IDL_V1_SHRINKAGE_K: dict[str, float] = {
+    IDL_COMPONENT_TFL_RATE:           300.0,
+    IDL_COMPONENT_PRESSURE_RATE:      200.0,
+    IDL_COMPONENT_SACK_RATE:          350.0,
+    IDL_COMPONENT_MISSED_TACKLE_RATE: 100.0,
+}
+
+IDL_V1_RAW_VALUE_COLS: dict[str, str] = {
+    IDL_COMPONENT_TFL_RATE:           "tfl_rate",
+    IDL_COMPONENT_PRESSURE_RATE:      "pressure_rate",
+    IDL_COMPONENT_SACK_RATE:          "sack_rate",
+    IDL_COMPONENT_MISSED_TACKLE_RATE: "missed_tackle_rate",
+}
+
+IDL_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    IDL_COMPONENT_TFL_RATE:           "snaps_defense",
+    IDL_COMPONENT_PRESSURE_RATE:      "snaps_defense",
+    IDL_COMPONENT_SACK_RATE:          "snaps_defense",
+    IDL_COMPONENT_MISSED_TACKLE_RATE: "tackle_attempts",
+}
+
+IDL_V1_MIN_SNAPS_TO_GRADE: int = 200
+IDL_V1_QUALIFIED_MIN_SNAPS: int = 400
+IDL_V1_CONFIDENCE_FULL_SNAPS: int = 700
+
+
+# ---------------------------------------------------------------------------
+# LB v1 (ADR-0022).
+# ---------------------------------------------------------------------------
+# Off-ball linebackers. Multi-skill position covering run defense, coverage,
+# and situational pass rush. Filter: target_rate >= 3.5% to exclude
+# pass-rush OLBs misclassified as LB (T.J. Watt, Micah Parsons, etc.).
+#
+# Weight split: ~45% run defense, ~35% coverage, ~8% pass rush, 17% technique
+# penalty.
+#
+# lb_tfl_rate (20%): run-stop TFLs per snap. Cleanest run-defense signal —
+#   actual play-making behind the LOS.
+# lb_passer_rating_allowed (-27%): NFL passer rating allowed when targeted.
+#   Combines comp%, yards, TDs, and INTs into one industry-standard metric.
+#   Heavily weighted because it's the cleanest LB coverage skill signal:
+#   penalizes TDs allowed (yds/tgt didn't), rewards INTs, and rewards
+#   forced incompletions all in one number.
+# lb_missed_tackle_rate (-15%): technique penalty. LBs make the most
+#   tackles of any position; missed ones cost the most.
+# lb_pbu_rate (8%): PBU per target. Active play that broke up the catch.
+#   INTs already captured inside passer rating allowed, so INT removed
+#   from this component (vs original pbu_int_rate) to avoid double-count.
+# lb_tackle_rate (13%): tackles per snap. Volume signal — bad LBs simply
+#   don't accumulate tackles. Some team-context noise accepted for v1.
+# lb_pressure_rate (7%): situational pass rush. Real signal for
+#   blitz-heavy MLBs but near-zero for most LBs; small weight reflects.
+#
+# Sum |abs| = 0.90. Normalized dynamically by composite.combine.
+# ---------------------------------------------------------------------------
+
+LB_COMPONENT_TFL_RATE: str = "lb_tfl_rate"
+LB_COMPONENT_PASSER_RATING_ALLOWED: str = "lb_passer_rating_allowed"
+LB_COMPONENT_MISSED_TACKLE_RATE: str = "lb_missed_tackle_rate"
+LB_COMPONENT_PBU_RATE: str = "lb_pbu_rate"
+LB_COMPONENT_TACKLE_RATE: str = "lb_tackle_rate"
+LB_COMPONENT_PRESSURE_RATE: str = "lb_pressure_rate"
+
+LB_V1_WEIGHTS: dict[str, float] = {
+    LB_COMPONENT_TFL_RATE:              0.20,
+    LB_COMPONENT_PASSER_RATING_ALLOWED: -0.27,
+    LB_COMPONENT_MISSED_TACKLE_RATE:    -0.15,
+    LB_COMPONENT_PBU_RATE:              0.08,
+    LB_COMPONENT_TACKLE_RATE:           0.13,
+    LB_COMPONENT_PRESSURE_RATE:         0.07,
+}
+
+LB_V1_SHRINKAGE_K: dict[str, float] = {
+    LB_COMPONENT_TFL_RATE:              300.0,   # rare event, heavy shrink
+    LB_COMPONENT_PASSER_RATING_ALLOWED: 50.0,    # in target attempts; passer rating swings hard on TDs/INTs
+    LB_COMPONENT_MISSED_TACKLE_RATE:    100.0,   # in tackle attempts
+    LB_COMPONENT_PBU_RATE:              40.0,    # in target attempts
+    LB_COMPONENT_TACKLE_RATE:           200.0,
+    LB_COMPONENT_PRESSURE_RATE:         200.0,
+}
+
+LB_V1_RAW_VALUE_COLS: dict[str, str] = {
+    LB_COMPONENT_TFL_RATE:              "tfl_rate",
+    LB_COMPONENT_PASSER_RATING_ALLOWED: "passer_rating_allowed",
+    LB_COMPONENT_MISSED_TACKLE_RATE:    "missed_tackle_rate",
+    LB_COMPONENT_PBU_RATE:              "pbu_rate",
+    LB_COMPONENT_TACKLE_RATE:           "tackle_rate",
+    LB_COMPONENT_PRESSURE_RATE:         "pressure_rate",
+}
+
+LB_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    LB_COMPONENT_TFL_RATE:              "snaps_defense",
+    LB_COMPONENT_PASSER_RATING_ALLOWED: "targets",
+    LB_COMPONENT_MISSED_TACKLE_RATE:    "tackle_attempts",
+    LB_COMPONENT_PBU_RATE:              "targets",
+    LB_COMPONENT_TACKLE_RATE:           "snaps_defense",
+    LB_COMPONENT_PRESSURE_RATE:         "snaps_defense",
+}
+
+LB_V1_MIN_SNAPS_TO_GRADE: int = 200
+# Raised vs other defensive positions (400 → 600) because LB rate stats are
+# heavily inflated by limited-snap role specialists (sub-package run stuffers,
+# nickel coverage LBs) whose narrow usage produces per-snap rates that
+# every-down LBs can't match. 600 snaps = ~10 full games of every-down play.
+LB_V1_QUALIFIED_MIN_SNAPS: int = 600
+LB_V1_CONFIDENCE_FULL_SNAPS: int = 900
+
+# Off-ball role filter: targets / snaps_defense must exceed this.
+# Pure off-ball LBs see 5-9% target rate; pass-rush OLBs misclassified as
+# LB (e.g. Andrew Van Ginkel: 22 targets / 922 snaps = 2.4%) see 1-3%.
+# Threshold of 3.5% cleanly separates the two groups.
+LB_V1_MIN_TARGET_RATE_FOR_OFFBALL: float = 0.035
+# Also require an absolute minimum of targets so a 200-snap player with
+# 8 targets (4% rate) doesn't sneak in on a noise sample.
+LB_V1_MIN_TARGETS_FOR_OFFBALL: int = 15

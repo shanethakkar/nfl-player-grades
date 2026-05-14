@@ -54,16 +54,22 @@ export type DepthChartEntry = DepthChartsRow;
  *   QB → n_dropbacks, epa_per_dropback, cpoe, success_rate
  *   RB → n_touches, rb_ryoe_per_attempt, rb_rush_epa_per_attempt,
  *        rb_rush_success_rate, rec_epa_per_target,
- *        rb_yac_over_expected_per_rec, rb_catch_pct, rb_fumble_rate
+ *        rb_yac_over_expected_per_rec, rb_fumble_rate
+ *        (rb_catch_pct removed v1.1 — confirmed noise)
  *   WR → n_targets, rec_epa_per_target, yac_over_expected_per_rec,
- *        separation, success_rate_per_target, target_earn_rate, fumble_rate
- *   TE → same as WR, plus `role` populated from season_grades
- *   CB → n_targets, cb_comp_pct_allowed, cb_yac_per_rec_allowed,
- *        cb_target_rate, cb_pbu_rate, cb_int_rate,
+ *        separation, success_rate_per_target, target_earn_rate, drop_rate
+ *   TE → same as WR (still uses fumble_rate, see ADR-0016)
+ *   CB → n_targets, cb_passer_rating_allowed, cb_yac_per_rec_allowed,
+ *        cb_target_rate, cb_pbu_rate,
  *        plus `role` (outside_cb / hybrid_cb / slot_cb)
- *   S  → n_snaps, s_comp_pct_allowed, s_yards_per_target_allowed,
- *        s_target_rate, s_pbu_rate, s_int_rate, s_tackles_per_snap,
- *        s_missed_tackle_rate, s_backfield_disruption_per_snap
+ *   S  → n_snaps, s_passer_rating_allowed, s_target_rate, s_pbu_rate,
+ *        s_tackles_per_snap, s_missed_tackle_rate, s_backfield_disruption_per_snap
+ *   EDGE → edge_pressure_rate, edge_sack_rate, edge_tfl_rate,
+ *        edge_missed_tackle_rate (n_snaps reused for snap count)
+ *   iDL → idl_tfl_rate, idl_pressure_rate, idl_sack_rate,
+ *        idl_missed_tackle_rate (n_snaps reused for snap count)
+ *   LB  → lb_tfl_rate, lb_passer_rating_allowed, lb_missed_tackle_rate,
+ *        lb_pbu_rate, lb_tackle_rate, lb_pressure_rate (n_snaps reused)
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -95,10 +101,11 @@ export type LeaderboardEntry = {
   rb_rush_epa_per_attempt: number | null;
   rb_rush_success_rate: number | null;
   rb_yac_over_expected_per_rec: number | null;
-  rb_catch_pct: number | null;
   rb_fumble_rate: number | null;
   // --- WR / TE columns (position-agnostic names; underlying component is
   // wr_* or te_* depending on sg.position) ---
+  // fumble_rate is populated only for TE (WR v1.1 dropped it as noise);
+  // drop_rate is populated only for WR (no TE drop data).
   n_targets: number | null;
   rec_epa_per_target: number | null;
   yac_over_expected_per_rec: number | null;
@@ -106,22 +113,37 @@ export type LeaderboardEntry = {
   success_rate_per_target: number | null;
   target_earn_rate: number | null;
   fumble_rate: number | null;
+  drop_rate: number | null;
   // --- CB columns ---
-  cb_comp_pct_allowed: number | null;
+  cb_passer_rating_allowed: number | null;
   cb_yac_per_rec_allowed: number | null;
   cb_target_rate: number | null;
   cb_pbu_rate: number | null;
-  cb_int_rate: number | null;
   // --- S columns ---
   n_snaps: number | null;
-  s_comp_pct_allowed: number | null;
-  s_yards_per_target_allowed: number | null;
+  s_passer_rating_allowed: number | null;
   s_target_rate: number | null;
   s_pbu_rate: number | null;
-  s_int_rate: number | null;
   s_tackles_per_snap: number | null;
   s_missed_tackle_rate: number | null;
   s_backfield_disruption_per_snap: number | null;
+  // --- EDGE columns ---
+  edge_pressure_rate: number | null;
+  edge_sack_rate: number | null;
+  edge_tfl_rate: number | null;
+  edge_missed_tackle_rate: number | null;
+  // --- iDL columns ---
+  idl_tfl_rate: number | null;
+  idl_pressure_rate: number | null;
+  idl_sack_rate: number | null;
+  idl_missed_tackle_rate: number | null;
+  // --- LB columns ---
+  lb_tfl_rate: number | null;
+  lb_passer_rating_allowed: number | null;
+  lb_missed_tackle_rate: number | null;
+  lb_pbu_rate: number | null;
+  lb_tackle_rate: number | null;
+  lb_pressure_rate: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

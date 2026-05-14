@@ -133,13 +133,6 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Yards After Catch above what an average back would gain on the same throw.",
     sampleNoun: "reception",
   },
-  rb_catch_pct: {
-    label: "Catch rate",
-    suffix: "%",
-    formatValue: pctFraction(1),
-    description: "Receptions divided by targets.",
-    sampleNoun: "target",
-  },
   rb_fumble_rate: {
     label: "Fumble rate",
     suffix: "%",
@@ -189,21 +182,22 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Share of targets that stay on schedule (positive EPA). A consistency metric.",
     sampleNoun: "target",
   },
-  wr_fumble_rate: {
-    label: "Fumble rate",
-    suffix: "%",
-    formatValue: pctFraction(2),
-    description: "Fumbles per reception.",
-    sampleNoun: "reception",
-  },
-
-  // --- CB v1 (ADR-0018) ---
-  cb_comp_pct_allowed: {
-    label: "Comp% allowed",
+  wr_drop_rate: {
+    label: "Drop rate",
     suffix: "%",
     formatValue: pctFraction(1),
     description:
-      "Completion percentage allowed when targeted. The most direct measure of whether the CB won his rep.",
+      "Drops as a share of catchable balls (per FTN charting). Lower is better. Data available 2022+; pre-2022 WR grades use the v1 formula without this component.",
+    sampleNoun: "catchable ball",
+  },
+
+  // --- CB v1.1 (ADR-0018, revised) ---
+  cb_passer_rating_allowed: {
+    label: "Passer rtg allowed",
+    suffix: "",
+    formatValue: (v) => v.toFixed(1),
+    description:
+      "NFL passer rating allowed when targeted. Industry-standard coverage damage metric — combines completion %, yards, TDs, and INTs into one number. Lower is better.",
     sampleNoun: "target",
   },
   cb_yac_per_rec_allowed: {
@@ -222,38 +216,22 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Targets per defensive snap. Lower is better — elite CBs get avoided. QBs scheme away from them regardless of outcome.",
     sampleNoun: "defensive snap",
   },
-  cb_int_rate: {
-    label: "INT rate",
-    suffix: "%",
-    formatValue: pctFraction(2),
-    description:
-      "Interceptions per target. Highly variable but the ultimate positive play — a turnover that ends the drive.",
-    sampleNoun: "target",
-  },
   cb_pbu_rate: {
     label: "PBU rate",
     suffix: "%",
     formatValue: pctFraction(2),
     description:
-      "Pass breakups (passes defended) per target. About 3× more frequent than INTs and more stable — active defense that stops the play without a turnover.",
+      "Pass breakups (passes defended) per target. Active play that breaks up the catch. INTs are captured separately inside passer rating allowed.",
     sampleNoun: "target",
   },
 
-  // --- Safety v1 (ADR-0019) ---
-  s_comp_pct_allowed: {
-    label: "Comp% allowed",
-    suffix: "%",
-    formatValue: pctFraction(1),
-    description:
-      "Completion percentage allowed when targeted. Primary coverage signal — did the safety win the rep?",
-    sampleNoun: "target",
-  },
-  s_yards_per_target_allowed: {
-    label: "Yds/tgt allowed",
+  // --- Safety v1.1 (ADR-0019 revised) ---
+  s_passer_rating_allowed: {
+    label: "Passer rtg allowed",
     suffix: "",
     formatValue: (v) => v.toFixed(1),
     description:
-      "Yards allowed per target. Captures damage done when the ball is thrown his way.",
+      "NFL passer rating allowed when targeted. Industry-standard coverage damage metric — combines completion %, yards, TDs, and INTs into one number. Lower is better.",
     sampleNoun: "target",
   },
   s_pbu_rate: {
@@ -261,15 +239,7 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     suffix: "%",
     formatValue: pctFraction(2),
     description:
-      "Pass breakups (passes defended) per target. Active coverage that stops the play without a turnover.",
-    sampleNoun: "target",
-  },
-  s_int_rate: {
-    label: "INT rate",
-    suffix: "%",
-    formatValue: pctFraction(2),
-    description:
-      "Interceptions per target. The ultimate positive play — a turnover that ends the drive.",
+      "Pass breakups per target. Active play that breaks up the catch. INTs are captured separately inside passer rating allowed.",
     sampleNoun: "target",
   },
   s_target_rate: {
@@ -303,6 +273,124 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
     description:
       "Tackles for loss plus sacks per defensive snap. Measures pass-rush versatility and the ability to stop plays behind the line.",
     sampleNoun: "defensive snap",
+  },
+
+  // --- EDGE v1 (ADR-0020) ---
+  edge_pressure_rate: {
+    label: "Pressure rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Total pressures (sacks + QB hits + hurries) per defensive snap. The primary measure of pass-rush impact per opportunity.",
+    sampleNoun: "defensive snap",
+  },
+  edge_sack_rate: {
+    label: "Sack rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Sacks per defensive snap. Premium outcome: extra credit for converting pressure into the most impactful pass-rush play.",
+    sampleNoun: "defensive snap",
+  },
+  edge_tfl_rate: {
+    label: "TFL rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Run-stop tackles for loss per defensive snap (sacks excluded). Measures edge-setting ability against the run.",
+    sampleNoun: "defensive snap",
+  },
+  edge_missed_tackle_rate: {
+    label: "Missed tackle rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Missed tackles as a share of tackle attempts. Lower is better — missed tackles in the backfield or open field cost the most.",
+    sampleNoun: "tackle attempt",
+  },
+
+  // --- LB v1 (ADR-0022) ---
+  lb_tfl_rate: {
+    label: "TFL rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Run-stop tackles for loss per defensive snap (sacks excluded). The cleanest LB run-defense signal — actual play-making behind the line.",
+    sampleNoun: "defensive snap",
+  },
+  lb_passer_rating_allowed: {
+    label: "Passer rtg allowed",
+    suffix: "",
+    formatValue: (v) => v.toFixed(1),
+    description:
+      "NFL passer rating allowed when targeted. Industry-standard coverage damage metric — combines completion %, yards, TDs, and INTs into one number. Lower is better.",
+    sampleNoun: "target",
+  },
+  lb_missed_tackle_rate: {
+    label: "Missed tkl%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Missed tackles as a share of tackle attempts. LBs make the most tackles of any position; misses cost the most.",
+    sampleNoun: "tackle attempt",
+  },
+  lb_pbu_rate: {
+    label: "PBU rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Pass breakups per coverage target. Active play that broke up the catch. INTs are captured separately inside passer rating allowed.",
+    sampleNoun: "target",
+  },
+  lb_tackle_rate: {
+    label: "Tackles/snap",
+    suffix: "",
+    formatValue: (v) => v.toFixed(3),
+    description:
+      "Combined tackles per defensive snap. Volume signal — every-down LBs should be making plays. Some team-context dependency.",
+    sampleNoun: "defensive snap",
+  },
+  lb_pressure_rate: {
+    label: "Pressure rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Pressures per defensive snap. Small weight in LB grading: near-zero for traditional MLBs, meaningfully positive for blitz-heavy types.",
+    sampleNoun: "defensive snap",
+  },
+
+  // --- iDL v1 (ADR-0021) ---
+  idl_tfl_rate: {
+    label: "TFL rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Run-stop tackles for loss per defensive snap (sacks excluded). The primary iDL differentiator — interior penetration that stops plays behind the line.",
+    sampleNoun: "defensive snap",
+  },
+  idl_pressure_rate: {
+    label: "Pressure rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Total pressures (sacks + QB hits + hurries) per defensive snap. Interior pass rush impact per opportunity.",
+    sampleNoun: "defensive snap",
+  },
+  idl_sack_rate: {
+    label: "Sack rate",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Sacks per defensive snap. Premium pass-rush outcome — interior sacks are rarer than edge sacks but equally impactful.",
+    sampleNoun: "defensive snap",
+  },
+  idl_missed_tackle_rate: {
+    label: "Missed tackle rate",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Missed tackles as a share of tackle attempts. Lower is better — iDL players make many tackles at the line of scrimmage where misses are especially costly.",
+    sampleNoun: "tackle attempt",
   },
 
   // --- TE v1 (ADR-0016) ---
@@ -500,21 +588,20 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   qb_epa_per_dropback:      0.50,
   qb_cpoe:                  0.25,
   qb_success_rate:          0.25,
-  // RB v1 (ADR-0014)
+  // RB v1.1 (ADR-0014 revised) — removed catch_pct as noise
   rb_ryoe_per_attempt:      0.28,
   rb_rush_epa_per_attempt:  0.18,
   rb_rush_success_rate:     0.14,
   rb_rec_epa_per_target:    0.18,
-  rb_yac_over_expected_per_rec: 0.12,
-  rb_catch_pct:             0.05,
+  rb_yac_over_expected_per_rec: 0.15,
   rb_fumble_rate:          -0.05,
-  // WR v1 (ADR-0015)
+  // WR v1.1 (ADR-0015 revised)
   wr_rec_epa_per_target:    0.35,
   wr_yac_over_expected_per_rec: 0.27,
   wr_separation:            0.10,
   wr_target_earn_rate:      0.10,
   wr_success_rate_per_target: 0.08,
-  wr_fumble_rate:          -0.05,
+  wr_drop_rate:            -0.08,
   // TE v1 receiving/balanced path (ADR-0016)
   te_rec_epa_per_target:    0.35,
   te_yac_over_expected_per_rec: 0.27,
@@ -522,21 +609,35 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   te_target_earn_rate:      0.10,
   te_success_rate_per_target: 0.08,
   te_fumble_rate:          -0.05,
-  // CB v1 (ADR-0018) — negative weights = lower is better for that metric
-  cb_comp_pct_allowed:     -0.22,
-  cb_yac_per_rec_allowed:  -0.18,
-  cb_target_rate:          -0.08,
-  cb_int_rate:              0.10,
-  cb_pbu_rate:              0.12,
-  // Safety v1 (ADR-0019) — 70% coverage / 30% tackling
-  s_comp_pct_allowed:      -0.13,
-  s_yards_per_target_allowed: -0.08,
-  s_pbu_rate:               0.15,
-  s_int_rate:               0.13,
+  // CB v1.1 (ADR-0018 revised) — passer rating allowed replaces comp%+INT
+  cb_passer_rating_allowed: -0.35,
+  cb_yac_per_rec_allowed:   -0.15,
+  cb_target_rate:           -0.08,
+  cb_pbu_rate:               0.12,
+  // Safety v1.1 (ADR-0019 revised) — passer rating allowed replaces comp%+yds/tgt+INT
+  s_passer_rating_allowed: -0.30,
+  s_pbu_rate:               0.12,
   s_target_rate:           -0.08,
   s_tackles_per_snap:       0.07,
   s_missed_tackle_rate:    -0.09,
   s_backfield_disruption_per_snap: 0.09,
+  // EDGE v1 (ADR-0020) — sum |abs| = 0.90
+  edge_pressure_rate:       0.35,
+  edge_sack_rate:           0.30,
+  edge_tfl_rate:            0.15,
+  edge_missed_tackle_rate: -0.10,
+  // iDL v1 (ADR-0021) — sum |abs| = 0.95
+  idl_tfl_rate:             0.35,
+  idl_pressure_rate:        0.30,
+  idl_sack_rate:            0.15,
+  idl_missed_tackle_rate:  -0.15,
+  // LB v1 (ADR-0022) — sum |abs| = 0.90
+  lb_tfl_rate:               0.20,
+  lb_passer_rating_allowed: -0.27,
+  lb_missed_tackle_rate:    -0.15,
+  lb_pbu_rate:               0.08,
+  lb_tackle_rate:            0.13,
+  lb_pressure_rate:          0.07,
 };
 
 // Blocking-TE path: earn rate excluded from composite; its weight is

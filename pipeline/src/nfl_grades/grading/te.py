@@ -328,7 +328,7 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
 _DELETE_STAT_COMPONENTS = text("""
     DELETE FROM stat_components
     WHERE season = :season
-      AND component_name = ANY(:components)
+      AND component_name LIKE 'te_%'
 """)
 
 _DELETE_SEASON_GRADES = text("""

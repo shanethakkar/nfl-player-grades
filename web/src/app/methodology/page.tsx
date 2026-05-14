@@ -37,8 +37,7 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "rb_rush_epa_per_attempt",     weight:  0.18 },
     { name: "rb_rush_success_rate",        weight:  0.14 },
     { name: "rb_rec_epa_per_target",       weight:  0.18 },
-    { name: "rb_yac_over_expected_per_rec",weight:  0.12 },
-    { name: "rb_catch_pct",                weight:  0.05 },
+    { name: "rb_yac_over_expected_per_rec",weight:  0.15 },
     { name: "rb_fumble_rate",              weight: -0.05 },
   ],
   WR: [
@@ -47,7 +46,7 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "wr_separation",                 weight:  0.10 },
     { name: "wr_target_earn_rate",           weight:  0.10 },
     { name: "wr_success_rate_per_target",    weight:  0.08 },
-    { name: "wr_fumble_rate",                weight: -0.05 },
+    { name: "wr_drop_rate",                  weight: -0.08 },
   ],
   TE: [
     { name: "te_rec_epa_per_target",         weight:  0.35 },
@@ -58,21 +57,38 @@ const POSITION_COMPONENTS: Record<string, ComponentEntry[]> = {
     { name: "te_fumble_rate",                weight: -0.05 },
   ],
   CB: [
-    { name: "cb_comp_pct_allowed",    weight: -0.22 },
-    { name: "cb_yac_per_rec_allowed", weight: -0.18 },
-    { name: "cb_target_rate",         weight: -0.08 },
-    { name: "cb_int_rate",            weight:  0.10 },
-    { name: "cb_pbu_rate",            weight:  0.12 },
+    { name: "cb_passer_rating_allowed", weight: -0.35 },
+    { name: "cb_yac_per_rec_allowed",   weight: -0.15 },
+    { name: "cb_target_rate",           weight: -0.08 },
+    { name: "cb_pbu_rate",              weight:  0.12 },
   ],
   S: [
-    { name: "s_comp_pct_allowed",              weight: -0.13 },
-    { name: "s_yards_per_target_allowed",      weight: -0.08 },
-    { name: "s_pbu_rate",                      weight:  0.15 },
-    { name: "s_int_rate",                      weight:  0.13 },
+    { name: "s_passer_rating_allowed",         weight: -0.30 },
+    { name: "s_pbu_rate",                      weight:  0.12 },
     { name: "s_target_rate",                   weight: -0.08 },
     { name: "s_tackles_per_snap",              weight:  0.07 },
     { name: "s_missed_tackle_rate",            weight: -0.09 },
     { name: "s_backfield_disruption_per_snap", weight:  0.09 },
+  ],
+  EDGE: [
+    { name: "edge_pressure_rate",       weight:  0.35 },
+    { name: "edge_sack_rate",           weight:  0.30 },
+    { name: "edge_tfl_rate",            weight:  0.15 },
+    { name: "edge_missed_tackle_rate",  weight: -0.10 },
+  ],
+  iDL: [
+    { name: "idl_tfl_rate",            weight:  0.35 },
+    { name: "idl_pressure_rate",       weight:  0.30 },
+    { name: "idl_sack_rate",           weight:  0.15 },
+    { name: "idl_missed_tackle_rate",  weight: -0.15 },
+  ],
+  LB: [
+    { name: "lb_tfl_rate",                weight:  0.20 },
+    { name: "lb_passer_rating_allowed",   weight: -0.27 },
+    { name: "lb_missed_tackle_rate",      weight: -0.15 },
+    { name: "lb_pbu_rate",                weight:  0.08 },
+    { name: "lb_tackle_rate",             weight:  0.13 },
+    { name: "lb_pressure_rate",           weight:  0.07 },
   ],
 };
 
@@ -94,7 +110,7 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop, edgeTop, idlTop, lbTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
@@ -102,6 +118,9 @@ export default async function MethodologyPage() {
     getCurrentTopAtPosition("TE"),
     getCurrentTopAtPosition("CB"),
     getCurrentTopAtPosition("S"),
+    getCurrentTopAtPosition("EDGE"),
+    getCurrentTopAtPosition("iDL"),
+    getCurrentTopAtPosition("LB"),
   ]);
 
   const positions: PositionCardData[] = [
@@ -140,6 +159,27 @@ export default async function MethodologyPage() {
       headline: "Safety",
       components: POSITION_COMPONENTS.S,
       top: sTop,
+    },
+    {
+      position: "EDGE",
+      headline: "Edge rusher",
+      components: POSITION_COMPONENTS.EDGE,
+      availabilityNote: "Data available from 2018. 3-4 OLBs (e.g. T.J. Watt) are classified as LB in the source data and excluded — a known gap addressed in v2.",
+      top: edgeTop,
+    },
+    {
+      position: "iDL",
+      headline: "Interior defensive lineman",
+      components: POSITION_COMPONENTS.iDL,
+      availabilityNote: "Data available from 2018. Covers players classified as iDL (DT/NT) in the source roster data.",
+      top: idlTop,
+    },
+    {
+      position: "LB",
+      headline: "Off-ball linebacker",
+      components: POSITION_COMPONENTS.LB,
+      availabilityNote: "Data available from 2018. Filtered to off-ball LB (def target rate ≥ 3.5%) — pass-rush OLBs misclassified as LB (T.J. Watt, Micah Parsons, Andrew Van Ginkel) are excluded. Qualified threshold is 600 snaps (vs 400 for other defensive positions) to suppress rotational specialists. LB grades are noisier YoY than QB/WR grades.",
+      top: lbTop,
     },
   ];
 
@@ -247,7 +287,7 @@ const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
-  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S";
+  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S" | "EDGE" | "iDL" | "LB";
   headline: string;
   components: ComponentEntry[];
   /** When true, renders a note about the blocking-TE path. */

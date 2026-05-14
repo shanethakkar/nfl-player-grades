@@ -28,7 +28,7 @@ export async function generateMetadata({
 }: Props): Promise<Metadata> {
   const { season: seasonParam, position: positionParam } = await searchParams;
   const seasonRaw = firstOf(seasonParam);
-  const positionRaw = firstOf(positionParam)?.toUpperCase();
+  const positionRaw = firstOf(positionParam);
 
   let season: number | null = null;
   if (seasonRaw && Number.isFinite(Number(seasonRaw))) {
@@ -38,10 +38,10 @@ export async function generateMetadata({
     season = seasons[0] ?? null;
   }
 
-  const position =
-    positionRaw && POSITION_ORDER.includes(positionRaw)
-      ? positionRaw
-      : DEFAULT_POSITION;
+  const position = positionRaw
+    ? (POSITION_ORDER.find((p) => p.toUpperCase() === positionRaw.toUpperCase()) ??
+       DEFAULT_POSITION)
+    : DEFAULT_POSITION;
 
   if (season !== null) {
     return { title: `${position} Leaderboard \u2014 ${season}` };
@@ -50,17 +50,20 @@ export async function generateMetadata({
 }
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first.
-const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S"];
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB"];
 const DEFAULT_POSITION = "QB";
 
 /** Short phrase following "{N} qualified starters · composite of ..." */
 const COMPOSITE_BLURB: Record<string, string> = {
   QB: "composite of EPA/dropback, CPOE, and success rate",
   RB: "composite of rushing efficiency (RYOE / EPA / success), receiving value, and ball security",
-  WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, and ball security",
+  WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, success rate, and drop rate (2022+; pre-2022 uses v1 formula)",
   TE: "composite of EPA/target, YAC-over-expected, separation, earn rate, and ball security (earn rate dropped for pure blockers — ADR-0016)",
-  CB: "composite of comp% allowed, YAC/rec allowed, target rate, INT rate, and PBU rate (data 2018+)",
-  S:  "composite of coverage quality (70%) and tackling (30%) — comp% allowed, PBU rate, INT rate, tackles/snap, missed tackle rate, and backfield disruption (data 2018+)",
+  CB:   "composite of passer rating allowed, YAC/rec allowed, target rate, and PBU rate (data 2018+)",
+  S:    "composite of coverage quality (passer rating allowed, target rate, PBU rate) and tackling (tackles/snap, missed tackle rate, backfield disruption) (data 2018+)",
+  EDGE: "composite of pressure rate, sack rate, run-stop TFL rate, and missed tackle rate (data 2018+)",
+  iDL:  "composite of run-stop TFL rate, pressure rate, sack rate, and missed tackle rate (data 2018+)",
+  LB:   "composite of TFL rate, coverage damage (yds/tgt), tackle volume + technique, and coverage playmaking (PBU/INT) (data 2018+)",
 };
 
 /** Heading + threshold text used for the below-qualification section. */
@@ -95,6 +98,21 @@ const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = 
     threshold:
       "Fewer than 400 defensive snaps. Grades still computed on the same 0-100 scale but treat them as noisy.",
   },
+  EDGE: {
+    heading: "Low-volume edge rushers",
+    threshold:
+      "Fewer than 400 defensive snaps. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
+  iDL: {
+    heading: "Low-volume interior linemen",
+    threshold:
+      "Fewer than 400 defensive snaps. Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
+  LB: {
+    heading: "Low-volume / rotational linebackers",
+    threshold:
+      "Fewer than 600 defensive snaps (LB threshold raised to suppress rotational specialists whose per-snap rates outpace every-down LBs). Grades still computed on the same 0-100 scale but treat them as noisy.",
+  },
 };
 
 /** Noun used in the "{N} qualified X" header under the title. */
@@ -103,8 +121,11 @@ const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
   RB: { singular: "qualified back", plural: "qualified backs" },
   WR: { singular: "qualified receiver", plural: "qualified receivers" },
   TE: { singular: "qualified tight end", plural: "qualified tight ends" },
-  CB: { singular: "qualified corner", plural: "qualified corners" },
-  S:  { singular: "qualified safety", plural: "qualified safeties" },
+  CB:   { singular: "qualified corner",       plural: "qualified corners" },
+  S:    { singular: "qualified safety",       plural: "qualified safeties" },
+  EDGE: { singular: "qualified edge rusher",  plural: "qualified edge rushers" },
+  iDL:  { singular: "qualified interior lineman", plural: "qualified interior linemen" },
+  LB:   { singular: "qualified linebacker",       plural: "qualified linebackers" },
 };
 
 export default async function HomePage({ searchParams }: Props) {
@@ -134,13 +155,20 @@ export default async function HomePage({ searchParams }: Props) {
   const pickerPositions =
     availablePositions.length > 0 ? availablePositions : [DEFAULT_POSITION];
 
-  const requestedPosition = firstOf(positionParam)?.toUpperCase();
+  const requestedPositionRaw = firstOf(positionParam);
+  // Match case-insensitively so the URL can be ?position=idl or ?position=iDL,
+  // but always resolve to the canonical mixed-case form from POSITION_ORDER
+  // (e.g. "iDL"). Otherwise position codes like iDL never match.
+  const requestedPosition = requestedPositionRaw
+    ? pickerPositions.find(
+        (p) => p.toUpperCase() === requestedPositionRaw.toUpperCase(),
+      )
+    : undefined;
   const activePosition =
-    requestedPosition && pickerPositions.includes(requestedPosition)
-      ? requestedPosition
-      : pickerPositions.includes(DEFAULT_POSITION)
-        ? DEFAULT_POSITION
-        : pickerPositions[0];
+    requestedPosition ??
+    (pickerPositions.includes(DEFAULT_POSITION)
+      ? DEFAULT_POSITION
+      : pickerPositions[0]);
 
   const entries = await getLeaderboard(activeSeason, activePosition);
   const qualified = entries.filter((e) => e.qualified);
@@ -197,7 +225,7 @@ export default async function HomePage({ searchParams }: Props) {
               lets the URL hash (#low-volume) deep-link straight to it. */}
           <details
             id="low-volume"
-            className="group rounded-lg border border-neutral-800"
+            className="group/lv rounded-lg border border-neutral-800"
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-neutral-400 hover:text-neutral-200">
               <span>
@@ -208,7 +236,7 @@ export default async function HomePage({ searchParams }: Props) {
               </span>
               <span
                 aria-hidden
-                className="text-xs text-neutral-500 transition-transform group-open:rotate-180"
+                className="text-xs text-neutral-500 transition-transform group-open/lv:rotate-180"
               >
                 {"\u25BC"}
               </span>

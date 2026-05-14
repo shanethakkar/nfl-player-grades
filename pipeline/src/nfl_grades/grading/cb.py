@@ -177,7 +177,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         player_id, full_name,
         games, targets, completions, yards, yac, tds, ints, pass_breakups,
         slot_pct, snaps_defense,
-        comp_pct_allowed, yac_per_rec_allowed, target_rate, int_rate, pbu_rate
+        passer_rating_allowed, yac_per_rec_allowed, target_rate, pbu_rate
     """
     rows = (
         conn.execute(
@@ -203,11 +203,21 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype("Float64").astype(float)
 
-    # Derived rate columns from raw counts.
-    # Each rate is NaN when the denominator is zero.
-    df["comp_pct_allowed"] = np.where(
+    # NFL passer rating allowed when targeted. Combines comp%, yds/att, TDs,
+    # and INTs into one industry-standard coverage damage metric. v1.1
+    # replacement for separate comp_pct_allowed + int_rate components.
+    targets = df["targets"].astype(float).clip(lower=1)
+    comp_pct = df["completions"].astype(float) / targets
+    ypa = df["yards"].astype(float) / targets
+    td_pct = df["tds"].astype(float) / targets
+    int_pct = df["ints"].astype(float) / targets
+    a = ((comp_pct - 0.30) * 5).clip(lower=0.0, upper=2.375)
+    b = ((ypa - 3.0) * 0.25).clip(lower=0.0, upper=2.375)
+    c = (td_pct * 20).clip(lower=0.0, upper=2.375)
+    d = (2.375 - int_pct * 25).clip(lower=0.0, upper=2.375)
+    df["passer_rating_allowed"] = np.where(
         df["targets"] > 0,
-        df["completions"] / df["targets"],
+        ((a + b + c + d) / 6.0 * 100.0).astype(float),
         np.nan,
     )
 
@@ -219,22 +229,15 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         np.nan,
     )
 
-    # Target rate: targets per defensive snap. Captures QB avoidance —
-    # elite CBs are schemed around, so lower is better. Uses snaps_defense
-    # as denominator (coverage snaps unavailable in public data).
+    # Target rate: targets per defensive snap. Captures QB avoidance.
     df["target_rate"] = np.where(
         df["snaps_defense"] > 0,
         df["targets"] / df["snaps_defense"],
         np.nan,
     )
 
-    df["int_rate"] = np.where(
-        df["targets"] > 0,
-        df["ints"] / df["targets"],
-        np.nan,
-    )
-
     # PBU rate: NULL pass_breakups → NaN (CBs absent from nflverse stats).
+    # INTs are captured inside passer_rating_allowed, so this is PBU-only.
     df["pbu_rate"] = np.where(
         (df["targets"] > 0) & df["pass_breakups"].notna(),
         df["pass_breakups"] / df["targets"],

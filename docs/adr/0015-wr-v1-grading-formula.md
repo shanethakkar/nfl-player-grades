@@ -1,6 +1,6 @@
 # 0015 - WR v1 grading formula
 
-- **Status**: Accepted (supersedable — v1 of the formula)
+- **Status**: Accepted (v1.1 revision — 2026-05-14)
 - **Date**: 2026-04-22
 - **Supersedes**: None
 - **Companion to**: ADR-0013 (QB v1), ADR-0014 (RB v1). Same pipeline
@@ -334,3 +334,21 @@ and a new row in the weights dicts; no schema change.
 - ADR-0011 — thin `plays` table (with `fumble` and
   `xyac_mean_yardage` added by migration 0005)
 - ADR-0003 — data tiering
+
+## Revision History
+
+### v1.1 (2026-05-14) — drop_rate in, fumble_rate out
+
+**Replaced `wr_fumble_rate` (−0.05) with `wr_drop_rate` (−0.08).** Sum |weights| now 0.98.
+
+**Why fumble out:** YoY r for WR fumble rate across 2020-2024 oscillated around zero (−0.26, +0.09, −0.40, +0.27, mean ≈ −0.07). 56% of qualified WRs had 0 fumbles in 2024, 90% had ≤1 — sample too small for meaningful grading. Confirmed noise. Fumbles still penalized implicitly via `rec_epa_per_target` (a fumble play has negative EPA).
+
+**Why drops in:** Drop rate is the only WR-skill gap our v1 didn't measure (deferred at v1 release because "plays can't cleanly isolate drops from defended passes"). FTN charting (now ingested as `ftn_receiving_charting`, available 2022+) flags `is_drop` and `is_catchable_ball` per play, joined to PBP `receiver_player_id`. Correlation audit (2024 qualified WRs, n=89) showed `drop_rate` has max \|r\|=0.21 against every other component — fully independent signal. 2024 face-check matched consensus (best hands: McLaurin, Shakir, Kupp, Addison, Hopkins, ARSB; worst hands: George Pickens 6 drops, Allen Lazard 7, Xavier Legette 5).
+
+**Weight sizing:** −0.08 chosen because drops have known data-quality caveats (FTN more conservative than PFF; some "0 drops on 40 catchable" entries are borderline). Bigger than the prior fumble weight because drops are ~10× more frequent and meaningfully discriminating; not so large that FTN's noise overwhelms the rest of the formula.
+
+**Pre-2022 seasons:** No FTN data, so the `wr_drop_rate` component is NaN-neutralized to 0 contribution. 2016-2021 WR grades are effectively the v1 formula with fumble removed. This still works because z-scoring happens within-season and the player's grade is determined by the 5 remaining components.
+
+**New schema:** Migration `0014_ftn_receiving_charting.sql` creates `ftn_receiving_charting` (player_id, season, catchable_balls, drops, contested_balls, created_receptions). Ingest module: `pipeline/src/nfl_grades/ingest/ftn_receiving.py`.
+
+**Research notes:** Audit also considered WOPR (correlated 0.95 with target_share — redundant), RACR (target-depth artifact, not skill), NGS `avg_cushion` and `avg_intended_air_yards` (usage markers, not skills), and contested catch rate (correlated −0.71 with separation). None of these added meaningful independent signal. YPRR and CROE were considered but neither has source data in nflverse.

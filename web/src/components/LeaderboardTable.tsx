@@ -304,14 +304,6 @@ const RB_COLUMNS: SortableColumn[] = [
     render: (e) => fmtSigned(e.rb_yac_over_expected_per_rec, 2),
   },
   {
-    key: "catch_pct",
-    header: "Catch%",
-    hoverLabel: "Catch Rate — receptions as a share of targets",
-    defaultDir: "desc",
-    sortValue: (e) => e.rb_catch_pct,
-    render: (e) => fmtPct(e.rb_catch_pct, 1),
-  },
-  {
     key: "rb_fumble",
     header: "Fum%",
     hoverLabel: "Fumble Rate — fumbles per touch. Lower is better.",
@@ -371,6 +363,20 @@ const WR_COLUMNS: SortableColumn[] = [
     render: (e) => fmtPct(e.target_earn_rate, 1),
   },
   {
+    key: "drop_rate",
+    header: "Drop%",
+    hoverLabel: "Drop Rate — drops as a share of catchable balls (FTN charting). Lower is better. Data 2022+.",
+    defaultDir: "asc",
+    sortValue: (e) => e.drop_rate,
+    render: (e) => fmtPct(e.drop_rate, 1),
+  },
+];
+
+// TEs share WR's columns except the final ball-security slot: TE v1 still
+// uses fumble_rate (no FTN-equivalent for TE drops in our v1 scope).
+const TE_COLUMNS: SortableColumn[] = [
+  ...WR_COLUMNS.slice(0, -1),
+  {
     key: "fumble_rate",
     header: "Fum%",
     hoverLabel: "Fumble Rate — fumbles per reception. Lower is better.",
@@ -379,10 +385,6 @@ const WR_COLUMNS: SortableColumn[] = [
     render: (e) => fmtPct(e.fumble_rate, 2),
   },
 ];
-
-// TEs share WR's columns. Role is shown inline next to the name, not as
-// its own column, to keep table density under control.
-const TE_COLUMNS: SortableColumn[] = WR_COLUMNS;
 
 const CB_COLUMNS: SortableColumn[] = [
   {
@@ -394,12 +396,12 @@ const CB_COLUMNS: SortableColumn[] = [
     render: (e) => fmtInt(e.n_targets),
   },
   {
-    key: "cb_comp_pct_allowed",
-    header: "Comp% Alwd",
-    hoverLabel: "Completion % Allowed — share of targets caught against this corner. Lower is better.",
+    key: "cb_passer_rating_allowed",
+    header: "PR Allowed",
+    hoverLabel: "NFL Passer Rating Allowed — comp%, yards, TDs, and INTs combined into one coverage damage metric. Lower is better.",
     defaultDir: "asc",
-    sortValue: (e) => e.cb_comp_pct_allowed,
-    render: (e) => fmtPct(e.cb_comp_pct_allowed, 1),
+    sortValue: (e) => e.cb_passer_rating_allowed,
+    render: (e) => e.cb_passer_rating_allowed === null || !Number.isFinite(e.cb_passer_rating_allowed) ? "—" : e.cb_passer_rating_allowed.toFixed(1),
   },
   {
     key: "cb_yac_per_rec",
@@ -420,18 +422,10 @@ const CB_COLUMNS: SortableColumn[] = [
   {
     key: "cb_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced",
+    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced (INTs are captured inside passer rating allowed)",
     defaultDir: "desc",
     sortValue: (e) => e.cb_pbu_rate,
     render: (e) => fmtPct(e.cb_pbu_rate, 2),
-  },
-  {
-    key: "cb_int_rate",
-    header: "INT%",
-    hoverLabel: "Interception Rate — interceptions as a share of targets faced",
-    defaultDir: "desc",
-    sortValue: (e) => e.cb_int_rate,
-    render: (e) => fmtPct(e.cb_int_rate, 2),
   },
 ];
 
@@ -445,20 +439,12 @@ const S_COLUMNS: SortableColumn[] = [
     render: (e) => fmtInt(e.n_snaps),
   },
   {
-    key: "s_comp_pct_allowed",
-    header: "Comp% Alwd",
-    hoverLabel: "Completion % Allowed — share of targets caught against this safety. Lower is better.",
+    key: "s_passer_rating_allowed",
+    header: "PR Allowed",
+    hoverLabel: "NFL Passer Rating Allowed — comp%, yards, TDs, and INTs combined into one coverage damage metric. Lower is better.",
     defaultDir: "asc",
-    sortValue: (e) => e.s_comp_pct_allowed,
-    render: (e) => fmtPct(e.s_comp_pct_allowed, 1),
-  },
-  {
-    key: "s_yds_per_tgt",
-    header: "Yds/Tgt",
-    hoverLabel: "Yards / Target Allowed — passing yards allowed per target. Lower is better.",
-    defaultDir: "asc",
-    sortValue: (e) => e.s_yards_per_target_allowed,
-    render: (e) => e.s_yards_per_target_allowed === null || !Number.isFinite(e.s_yards_per_target_allowed) ? "—" : e.s_yards_per_target_allowed.toFixed(1),
+    sortValue: (e) => e.s_passer_rating_allowed,
+    render: (e) => e.s_passer_rating_allowed === null || !Number.isFinite(e.s_passer_rating_allowed) ? "—" : e.s_passer_rating_allowed.toFixed(1),
   },
   {
     key: "s_target_rate",
@@ -471,18 +457,10 @@ const S_COLUMNS: SortableColumn[] = [
   {
     key: "s_pbu_rate",
     header: "PBU%",
-    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced",
+    hoverLabel: "Pass Breakup Rate — passes broken up as a share of targets faced (INTs are captured inside passer rating allowed)",
     defaultDir: "desc",
     sortValue: (e) => e.s_pbu_rate,
     render: (e) => fmtPct(e.s_pbu_rate, 2),
-  },
-  {
-    key: "s_int_rate",
-    header: "INT%",
-    hoverLabel: "Interception Rate — interceptions as a share of targets faced",
-    defaultDir: "desc",
-    sortValue: (e) => e.s_int_rate,
-    render: (e) => fmtPct(e.s_int_rate, 2),
   },
   {
     key: "s_tackles_per_snap",
@@ -510,13 +488,161 @@ const S_COLUMNS: SortableColumn[] = [
   },
 ];
 
+const EDGE_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_snaps",
+    header: "Snaps",
+    hoverLabel: "Qualifying Defensive Snaps — snaps counted in the grade",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_snaps,
+    render: (e) => fmtInt(e.n_snaps),
+  },
+  {
+    key: "edge_pressure_rate",
+    header: "Press%",
+    hoverLabel: "Pressure Rate — sacks + QB hits + hurries per defensive snap",
+    defaultDir: "desc",
+    sortValue: (e) => e.edge_pressure_rate,
+    render: (e) => fmtPct(e.edge_pressure_rate, 1),
+  },
+  {
+    key: "edge_sack_rate",
+    header: "Sack%",
+    hoverLabel: "Sack Rate — sacks per defensive snap. Premium pass-rush outcome.",
+    defaultDir: "desc",
+    sortValue: (e) => e.edge_sack_rate,
+    render: (e) => fmtPct(e.edge_sack_rate, 2),
+  },
+  {
+    key: "edge_tfl_rate",
+    header: "TFL%",
+    hoverLabel: "Run-Stop TFL Rate — tackles for loss (sacks excluded) per defensive snap",
+    defaultDir: "desc",
+    sortValue: (e) => e.edge_tfl_rate,
+    render: (e) => fmtPct(e.edge_tfl_rate, 2),
+  },
+  {
+    key: "edge_missed_tkl",
+    header: "MTkl%",
+    hoverLabel: "Missed Tackle Rate — missed tackles as a share of tackle attempts. Lower is better.",
+    defaultDir: "asc",
+    sortValue: (e) => e.edge_missed_tackle_rate,
+    render: (e) => fmtPct(e.edge_missed_tackle_rate, 1),
+  },
+];
+
+const IDL_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_snaps",
+    header: "Snaps",
+    hoverLabel: "Qualifying Defensive Snaps — snaps counted in the grade",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_snaps,
+    render: (e) => fmtInt(e.n_snaps),
+  },
+  {
+    key: "idl_tfl_rate",
+    header: "TFL%",
+    hoverLabel: "Run-Stop TFL Rate — tackles for loss (sacks excluded) per defensive snap. Primary iDL differentiator.",
+    defaultDir: "desc",
+    sortValue: (e) => e.idl_tfl_rate,
+    render: (e) => fmtPct(e.idl_tfl_rate, 2),
+  },
+  {
+    key: "idl_pressure_rate",
+    header: "Press%",
+    hoverLabel: "Pressure Rate — sacks + QB hits + hurries per defensive snap",
+    defaultDir: "desc",
+    sortValue: (e) => e.idl_pressure_rate,
+    render: (e) => fmtPct(e.idl_pressure_rate, 1),
+  },
+  {
+    key: "idl_sack_rate",
+    header: "Sack%",
+    hoverLabel: "Sack Rate — sacks per defensive snap. Interior sacks are rarer but equally impactful.",
+    defaultDir: "desc",
+    sortValue: (e) => e.idl_sack_rate,
+    render: (e) => fmtPct(e.idl_sack_rate, 2),
+  },
+  {
+    key: "idl_missed_tkl",
+    header: "MTkl%",
+    hoverLabel: "Missed Tackle Rate — missed tackles as a share of tackle attempts. Lower is better.",
+    defaultDir: "asc",
+    sortValue: (e) => e.idl_missed_tackle_rate,
+    render: (e) => fmtPct(e.idl_missed_tackle_rate, 1),
+  },
+];
+
+const LB_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_snaps",
+    header: "Snaps",
+    hoverLabel: "Qualifying Defensive Snaps — snaps counted in the grade",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_snaps,
+    render: (e) => fmtInt(e.n_snaps),
+  },
+  {
+    key: "lb_tfl_rate",
+    header: "TFL%",
+    hoverLabel: "Run-Stop TFL Rate — tackles for loss (sacks excluded) per defensive snap",
+    defaultDir: "desc",
+    sortValue: (e) => e.lb_tfl_rate,
+    render: (e) => fmtPct(e.lb_tfl_rate, 2),
+  },
+  {
+    key: "lb_passer_rating_allowed",
+    header: "PR Allowed",
+    hoverLabel: "NFL Passer Rating Allowed — comp%, yards, TDs, and INTs combined into one coverage damage metric. Lower is better.",
+    defaultDir: "asc",
+    sortValue: (e) => e.lb_passer_rating_allowed,
+    render: (e) => (e.lb_passer_rating_allowed == null ? "—" : e.lb_passer_rating_allowed.toFixed(1)),
+  },
+  {
+    key: "lb_missed_tkl",
+    header: "MTkl%",
+    hoverLabel: "Missed Tackle Rate — missed tackles as a share of tackle attempts. Lower is better.",
+    defaultDir: "asc",
+    sortValue: (e) => e.lb_missed_tackle_rate,
+    render: (e) => fmtPct(e.lb_missed_tackle_rate, 1),
+  },
+  {
+    key: "lb_pbu_rate",
+    header: "PBU%",
+    hoverLabel: "PBU Rate — pass breakups per coverage target (INTs counted in passer rating allowed)",
+    defaultDir: "desc",
+    sortValue: (e) => e.lb_pbu_rate,
+    render: (e) => fmtPct(e.lb_pbu_rate, 1),
+  },
+  {
+    key: "lb_tackle_rate",
+    header: "Tkl/Snap",
+    hoverLabel: "Tackles per defensive snap — volume signal for run-defense work",
+    defaultDir: "desc",
+    sortValue: (e) => e.lb_tackle_rate,
+    render: (e) => (e.lb_tackle_rate == null ? "—" : e.lb_tackle_rate.toFixed(3)),
+  },
+  {
+    key: "lb_pressure_rate",
+    header: "Press%",
+    hoverLabel: "Pressure Rate — pressures per defensive snap (small weight in LB grading)",
+    defaultDir: "desc",
+    sortValue: (e) => e.lb_pressure_rate,
+    render: (e) => fmtPct(e.lb_pressure_rate, 1),
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
-  QB: QB_COLUMNS,
-  RB: RB_COLUMNS,
-  WR: WR_COLUMNS,
-  TE: TE_COLUMNS,
-  CB: CB_COLUMNS,
-  S:  S_COLUMNS,
+  QB:   QB_COLUMNS,
+  RB:   RB_COLUMNS,
+  WR:   WR_COLUMNS,
+  TE:   TE_COLUMNS,
+  CB:   CB_COLUMNS,
+  S:    S_COLUMNS,
+  EDGE: EDGE_COLUMNS,
+  iDL:  IDL_COLUMNS,
+  LB:   LB_COLUMNS,
 };
 
 function Row({

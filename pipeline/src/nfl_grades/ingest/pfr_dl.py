@@ -1,24 +1,17 @@
-"""Ingest PFR advanced defensive stats for safeties into pfr_def_coverage_s.
+"""Ingest PFR advanced defensive stats for EDGE and iDL into pfr_def_pass_rush.
 
 Sources:
-  1. ``pfr_advstats_def`` (same as CB): coverage stats (targets, completions,
-     yards, ints) and, if present, missed tackle counts.
-  2. ``nflvs_player_stats``: pass breakups (def_pass_defended), combined
-     tackles (def_tackles_solo + def_tackle_assists), TFL (def_tackles_loss),
-     sacks (def_sacks).
-  3. ``player_seasons.snaps_defense``: used downstream by the grading module.
+  1. ``pfr_advstats_def``: pressures, sacks, QB hits, hurries, combined
+     tackles, missed tackles. Per-game rows; aggregated to season totals.
+  2. ``nflvs_player_stats``: def_tackles_for_loss (run TFLs, reported
+     separately from sacks in nflverse — confirmed no overlap).
 
-Column-name notes
------------------
-pfr_advstats_def coverage columns confirmed 2018-2025 (see CB ingest):
-    pfr_player_id, game_id, season, game_type,
-    def_targets, def_completions_allowed, def_yards_allowed, def_ints.
-Tackle columns (def_missed_tackles etc.) are attempted with multiple name
-variants; if none found, stored as NULL and NaN-neutralized in grading.
+One shared table serves both EDGE and iDL graders. Each grader filters
+by position_played when reading from pfr_def_pass_rush.
 
-Safeties in our DB have position = 'S' (mapped from FS/SS/S/SAF by rosters).
+Coverage begins 2018 (PFR per-player data limitation).
 
-See ADR-0019 for Safety v1 methodology.
+See ADR-0020 (EDGE v1) and ADR-0021 (iDL v1).
 """
 
 from __future__ import annotations
@@ -36,19 +29,18 @@ from nfl_grades.ingest._cache import cache_or_fetch
 
 logger = logging.getLogger(__name__)
 
-PFR_DEF_COVERAGE_S_MIN_SEASON: int = 2018
+PFR_DEF_PASS_RUSH_MIN_SEASON: int = 2018
 
-# Coverage columns confirmed present in pfr_advstats_def 2018-2025.
-_COVERAGE_SUM_COLS = {
-    "def_targets":              "targets",
-    "def_completions_allowed":  "completions",
-    "def_yards_allowed":        "yards",
-    "def_receiving_td_allowed": "tds_allowed",
-    "def_ints":                 "ints",
+# Pass-rush columns confirmed present in pfr_advstats_def 2018-2025.
+_PASS_RUSH_SUM_COLS: dict[str, str] = {
+    "def_pressures":        "pressures",
+    "def_sacks":            "sacks",
+    "def_times_hitqb":      "qb_hits",
+    "def_times_hurried":    "hurries",
+    "def_tackles_combined": "comb_tackles",
 }
 
-# Tackle columns attempted from pfr_advstats_def. Each tuple lists column
-# name variants in preference order; first match wins. None found → NULL.
+# Tackle columns tried with fallbacks; first match wins; None → NULL.
 _TACKLE_ATTEMPT_COLS: dict[str, tuple[str, ...]] = {
     "missed_tackles": (
         "def_missed_tackles",
@@ -58,6 +50,9 @@ _TACKLE_ATTEMPT_COLS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Canonical position_played values for DL players.
+_DL_POSITIONS = frozenset({"EDGE", "iDL"})
+
 
 @dataclass(frozen=True)
 class RunResult:
@@ -65,18 +60,18 @@ class RunResult:
     rows_ingested: int
     rows_written: int
     rows_skipped_no_pfr_match: int
-    rows_skipped_not_safety: int
+    rows_skipped_not_dl: int
 
 
 def run(season: int, *, refresh: bool = False) -> RunResult:
-    """Fetch and store PFR defensive stats for all safeties in ``season``.
+    """Fetch and store PFR pass-rush stats for all EDGE and iDL players.
 
     Idempotent: DELETE + INSERT replaces the previous season's rows.
-    Raises ValueError for seasons before PFR_DEF_COVERAGE_S_MIN_SEASON.
+    Raises ValueError for seasons before PFR_DEF_PASS_RUSH_MIN_SEASON.
     """
-    if season < PFR_DEF_COVERAGE_S_MIN_SEASON:
+    if season < PFR_DEF_PASS_RUSH_MIN_SEASON:
         raise ValueError(
-            f"PFR defensive coverage data begins in {PFR_DEF_COVERAGE_S_MIN_SEASON}; "
+            f"PFR defensive stats begin in {PFR_DEF_PASS_RUSH_MIN_SEASON}; "
             f"got season={season}"
         )
 
@@ -87,11 +82,11 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     nflvs_agg = _aggregate_nflverse(ps_df)
 
     engine = get_engine()
-    with pipeline_run("ingest:pfr_def_coverage_s", season=season) as handle:
+    with pipeline_run("ingest:pfr_def_pass_rush", season=season) as handle:
         with engine.begin() as conn:
             pfr_to_player = _pfr_to_player_lookup(conn, season)
-            gsis_to_nflvs = _gsis_to_nflvs_lookup(conn, nflvs_agg)
-            rows, skipped_no_match, skipped_not_safety = _build_rows(
+            gsis_to_nflvs = _gsis_to_nflvs_lookup(nflvs_agg)
+            rows, skipped_no_match, skipped_not_dl = _build_rows(
                 pfr_agg, season, pfr_to_player, gsis_to_nflvs
             )
             written = _upsert(conn, rows, season)
@@ -101,14 +96,14 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
             rows_ingested=len(pfr_agg),
             rows_written=written,
             rows_skipped_no_pfr_match=skipped_no_match,
-            rows_skipped_not_safety=skipped_not_safety,
+            rows_skipped_not_dl=skipped_not_dl,
         )
         handle.rows_written = written
         handle.note(
             f"pfr_rows={result.rows_ingested} "
             f"written={result.rows_written} "
             f"skipped_no_pfr={result.rows_skipped_no_pfr_match} "
-            f"skipped_not_safety={result.rows_skipped_not_safety}"
+            f"skipped_not_dl={result.rows_skipped_not_dl}"
         )
     return result
 
@@ -128,11 +123,11 @@ def _aggregate_pfr(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
     if df.empty:
         return df
 
-    missing = set(_COVERAGE_SUM_COLS) - set(df.columns)
+    missing = set(_PASS_RUSH_SUM_COLS) - set(df.columns)
     if missing:
         raise ValueError(
-            f"pfr_advstats_def season={season} missing coverage columns: {missing}. "
-            "Update _COVERAGE_SUM_COLS in ingest/pfr_safety.py."
+            f"pfr_advstats_def season={season} missing columns: {missing}. "
+            "Update _PASS_RUSH_SUM_COLS in ingest/pfr_dl.py."
         )
 
     if "game_id" in df.columns:
@@ -140,7 +135,9 @@ def _aggregate_pfr(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
     else:
         games_per_player = pd.Series(dtype=int, name="games")
 
-    agg_dict = {out: (src, "sum") for src, out in _COVERAGE_SUM_COLS.items()}
+    agg_dict: dict[str, tuple[str, str]] = {
+        out: (src, "sum") for src, out in _PASS_RUSH_SUM_COLS.items()
+    }
 
     for dest, variants in _TACKLE_ATTEMPT_COLS.items():
         found = next((v for v in variants if v in df.columns), None)
@@ -168,39 +165,24 @@ def _aggregate_pfr(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
 
 
 def _aggregate_nflverse(ps_df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate nflverse player_stats to per-gsis_id season totals.
-
-    Returns a DataFrame with columns:
-        gsis_id, pass_breakups, comb_tackles, tfl, sacks.
-    """
+    """Aggregate nflverse player_stats to per-gsis_id season TFL totals."""
     mask = (ps_df["season_type"] == "REG") & ps_df["player_id"].notna()
     reg = ps_df[mask].copy()
     if reg.empty:
-        return pd.DataFrame(columns=["gsis_id", "pass_breakups", "comb_tackles", "tfl", "sacks"])
+        return pd.DataFrame(columns=["gsis_id", "tfl"])
 
-    def _col_or_zero(name: str) -> pd.Series:
-        return reg[name].fillna(0) if name in reg.columns else pd.Series(0.0, index=reg.index)
-
-    reg["_pbu"] = _col_or_zero("def_pass_defended")
-    reg["_solo"] = _col_or_zero("def_tackles_solo")
-    reg["_ast"] = _col_or_zero("def_tackle_assists")
-    reg["_tfl"] = _col_or_zero("def_tackles_for_loss")
-    reg["_sacks"] = _col_or_zero("def_sacks")
+    tfl_col = "def_tackles_for_loss" if "def_tackles_for_loss" in reg.columns else None
+    if tfl_col is None:
+        logger.warning("nflvs_player_stats: no TFL column found; TFL will be NULL")
+        return pd.DataFrame(columns=["gsis_id", "tfl"])
 
     agg = (
         reg.groupby("player_id")
-        .agg(
-            pass_breakups=("_pbu", "sum"),
-            solo_tackles=("_solo", "sum"),
-            ast_tackles=("_ast", "sum"),
-            tfl=("_tfl", "sum"),
-            sacks=("_sacks", "sum"),
-        )
+        .agg(tfl=(tfl_col, "sum"))
         .reset_index()
         .rename(columns={"player_id": "gsis_id"})
     )
-    agg["comb_tackles"] = agg["solo_tackles"] + agg["ast_tackles"]
-    return agg[["gsis_id", "pass_breakups", "comb_tackles", "tfl", "sacks"]]
+    return agg
 
 
 # ---------------------------------------------------------------------------
@@ -210,13 +192,7 @@ def _aggregate_nflverse(ps_df: pd.DataFrame) -> pd.DataFrame:
 def _pfr_to_player_lookup(
     conn: Connection, season: int
 ) -> dict[str, tuple[int, str, str | None]]:
-    """pfr_id -> (player_id, position_played, gsis_id) for the given season.
-
-    Uses player_seasons.position_played rather than players.position so that
-    players who switched positions mid-career are classified correctly for
-    each historical season. When a player appeared on multiple teams in a
-    season, the team with the most defensive snaps determines position_played.
-    """
+    """pfr_id -> (player_id, position_played, gsis_id) for the given season."""
     rows = conn.execute(
         text("""
             SELECT p.pfr_id, p.player_id, ps.position_played, p.gsis_id
@@ -237,17 +213,14 @@ def _pfr_to_player_lookup(
     }
 
 
-def _gsis_to_nflvs_lookup(
-    conn: Connection,
-    nflvs_agg: pd.DataFrame,
-) -> dict[str, dict[str, object]]:
-    """Map gsis_id -> nflverse aggregated stats dict."""
+def _gsis_to_nflvs_lookup(nflvs_agg: pd.DataFrame) -> dict[str, float]:
+    """gsis_id -> season TFL count."""
     if nflvs_agg.empty:
         return {}
     return {
-        str(row["gsis_id"]): row.to_dict()
+        str(row["gsis_id"]): float(row["tfl"])
         for _, row in nflvs_agg.iterrows()
-        if pd.notna(row["gsis_id"])
+        if pd.notna(row["gsis_id"]) and pd.notna(row["tfl"])
     }
 
 
@@ -259,12 +232,11 @@ def _build_rows(
     pfr_agg: pd.DataFrame,
     season: int,
     pfr_to_player: dict[str, tuple[int, str, str | None]],
-    gsis_to_nflvs: dict[str, dict[str, object]],
+    gsis_to_nflvs: dict[str, float],
 ) -> tuple[list[dict[str, object]], int, int]:
-    """Merge PFR and nflverse aggregates into DB-ready rows for safeties."""
     rows: list[dict[str, object]] = []
     skipped_no_match = 0
-    skipped_not_safety = 0
+    skipped_not_dl = 0
 
     def _int_or_none(val: object) -> int | None:
         if val is None or (isinstance(val, float) and pd.isna(val)):
@@ -283,39 +255,32 @@ def _build_rows(
             skipped_no_match += 1
             continue
         player_id, position, gsis_id = lookup
-        if position != "S":
-            skipped_not_safety += 1
+        if position not in _DL_POSITIONS:
+            skipped_not_dl += 1
             continue
 
-        # Enrich with nflverse data.
-        nv = gsis_to_nflvs.get(gsis_id or "", {})
+        tfl = gsis_to_nflvs.get(gsis_id or "")
 
-        rows.append(
-            {
-                "player_id": player_id,
-                "season": season,
-                "games": _int_or_none(row.get("games")) or 0,
-                "targets": _int_or_none(row.get("targets")),
-                "completions": _int_or_none(row.get("completions")),
-                "yards": _int_or_none(row.get("yards")),
-                "tds_allowed": _int_or_none(row.get("tds_allowed")),
-                "ints": _int_or_none(row.get("ints")),
-                "missed_tackles": _int_or_none(row.get("missed_tackles")),
-                # From nflverse player_stats.
-                "pass_breakups": _int_or_none(nv.get("pass_breakups")),
-                "comb_tackles": _int_or_none(nv.get("comb_tackles")),
-                "tfl": _int_or_none(nv.get("tfl")),
-                "sacks": _float_or_none(nv.get("sacks")),
-            }
-        )
+        rows.append({
+            "player_id":      player_id,
+            "season":         season,
+            "games":          _int_or_none(row.get("games")) or 0,
+            "pressures":      _float_or_none(row.get("pressures")),
+            "sacks":          _float_or_none(row.get("sacks")),
+            "qb_hits":        _int_or_none(row.get("qb_hits")),
+            "hurries":        _int_or_none(row.get("hurries")),
+            "comb_tackles":   _int_or_none(row.get("comb_tackles")),
+            "missed_tackles": _int_or_none(row.get("missed_tackles")),
+            "tfl":            tfl,
+        })
 
     if skipped_no_match:
         logger.warning(
-            "pfr_def_coverage_s season=%d: %d pfr_ids with no player record "
-            "(run rosters ingest + pfr_id backfill first)",
+            "pfr_def_pass_rush season=%d: %d pfr_ids with no player record "
+            "(run rosters ingest first)",
             season, skipped_no_match,
         )
-    return rows, skipped_no_match, skipped_not_safety
+    return rows, skipped_no_match, skipped_not_dl
 
 
 # ---------------------------------------------------------------------------
@@ -323,24 +288,27 @@ def _build_rows(
 # ---------------------------------------------------------------------------
 
 _INSERT_SQL = text("""
-    INSERT INTO pfr_def_coverage_s
-        (player_id, season, games, targets, completions, yards, tds_allowed, ints,
-         pass_breakups, comb_tackles, tfl, sacks, missed_tackles)
+    INSERT INTO pfr_def_pass_rush
+        (player_id, season, games, pressures, sacks, qb_hits, hurries,
+         comb_tackles, missed_tackles, tfl)
     VALUES
-        (:player_id, :season, :games, :targets, :completions, :yards, :tds_allowed, :ints,
-         :pass_breakups, :comb_tackles, :tfl, :sacks, :missed_tackles)
+        (:player_id, :season, :games, :pressures, :sacks, :qb_hits, :hurries,
+         :comb_tackles, :missed_tackles, :tfl)
 """)
 
 
 def _upsert(conn: Connection, rows: list[dict[str, object]], season: int) -> int:
-    conn.execute(text("DELETE FROM pfr_def_coverage_s WHERE season = :season"), {"season": season})
+    conn.execute(
+        text("DELETE FROM pfr_def_pass_rush WHERE season = :season"),
+        {"season": season},
+    )
     if rows:
         conn.execute(_INSERT_SQL, rows)
     return len(rows)
 
 
 __all__ = [
-    "PFR_DEF_COVERAGE_S_MIN_SEASON",
+    "PFR_DEF_PASS_RUSH_MIN_SEASON",
     "RunResult",
     "run",
 ]

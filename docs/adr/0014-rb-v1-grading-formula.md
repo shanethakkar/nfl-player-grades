@@ -1,8 +1,8 @@
 # 0014 - RB v1 grading formula
 
-- **Status**: Accepted (supersedable — v1.1 of the formula)
+- **Status**: Accepted (v1.1 pruning revision — 2026-05-14)
 - **Date**: 2026-04-24
-- **Updated**: 2026-04-22 (v1.1 — see "v1.1 refinement" section)
+- **Updated**: 2026-05-14 (catch_pct removed — see "Revision History")
 - **Supersedes**: None
 - **Companion to**: ADR-0013 (QB v1). Same pipeline shape, different
   components and per-skill sample sizes.
@@ -322,3 +322,28 @@ public contract with the web app.
   `fumble` and `xyac_mean_yardage`)
 - ADR-0012 — NGS three-table layout (rushing used; receiving
   intentionally not joined for RB grading)
+
+## Revision History
+
+### v1.1 (2026-05-14) — `rb_catch_pct` removed as noise
+
+**Removed `rb_catch_pct` (+0.05). Bumped `rb_yac_over_expected_per_rec` from +0.12 to +0.15** to absorb the receiving-side weight slot. Sum |weights| now 0.98 (vs 1.00).
+
+**Why catch_pct out:**
+- YoY r across 2020-2024 oscillated around zero: −0.015, +0.035, +0.120, −0.322 (mean ≈ −0.05). Same shape as WR fumble rate that was removed in the parallel WR v1.1 audit.
+- Catch_pct correlates 0.61 with `rb_rush_success_rate` — partial redundancy when it has signal at all. Backs who run consistently also catch checkdowns consistently; the metric was mostly stylistic, not a stable skill.
+- Range 0.45-1.00 with std 0.099 in 2024 — variation exists but doesn't persist year-over-year, so it's measuring noise not skill.
+
+**Why YAC-OE bumped (not redistributed elsewhere):**
+- Receiving share would have dropped from 35% to 30% with a pure removal. Bumping YAC-OE by 0.03 keeps the receiving / rushing balance approximately intact (~33% receiving).
+- YAC-OE has stronger YoY stability and lower overlap with other components than catch_pct did, so the weight is going to a higher-quality signal.
+
+**What we audited and rejected:**
+- **NGS rushing additions** (`efficiency`, `rush_pct_over_expected`, `avg_time_to_los`, `percent_attempts_gte_eight_defenders`): all either redundant with RYOE (\|r\|>0.74 in two cases) or non-skill usage markers. None added independent signal.
+- **MTF / Missed Tackles Forced** (proposed by external grading discussion): not available in nflverse — FTN charting only has passing-play flags (`is_drop`, `is_catchable_ball`, etc.), not rushing-play forced-tackles. PFF-only stat.
+- **Stacked-box adjustment as a coefficient**: rejected because NGS's RYOE expected-yards model already accounts for defender count in the box; layering an explicit box-count adjustment would double-correct.
+- **Removing `rb_fumble_rate`**: considered (YoY r ≈ +0.07, weak) but kept — RB fumble distribution is genuinely discriminating (median 2, max 7, 54% have 2+) and within-season correlation with composite is meaningful (−0.27). Different from WR fumbles which were pure noise.
+
+**Face-check after revision:** 2024 top 10 essentially unchanged at the top (Henry, Saquon, Gibbs). Josh Jacobs moved into the top 10 (previously sat just outside). 2023 top 10 with Christian McCaffrey #1 — unchanged.
+
+**Audit methodology:** Skill-tree mapping → correlation analysis on 2024 qualified RBs (n=41) → YoY noise check across 2020-2024 → face-check. Same playbook as WR v1.1. See memory: `project_rb_v1_1_research.md` and `reference_grading_methodology.md` for the full process.

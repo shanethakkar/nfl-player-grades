@@ -207,12 +207,6 @@ _FEATURES_SQL = text(f"""
             ngs_rush_agg.ngs_ryoe_total::float / ngs_rush_agg.ngs_rush_attempts
         END AS ryoe_per_attempt,
         rec_yac_agg.yac_over_expected_per_rec,
-        -- Catch % from plays, not NGS: NGS doesn't publish RB receiving
-        -- rows. Denominator excludes garbage time / 2-pt / kneels via
-        -- RB_REC_FILTER_SQL, matching the rest of our receiving metrics.
-        CASE WHEN rec_agg.n_targets > 0 THEN
-            rec_agg.n_receptions::float / rec_agg.n_targets
-        END AS catch_pct,
         CASE WHEN (rush_agg.n_carries + rec_agg.n_receptions) > 0 THEN
             (rush_agg.n_rush_fumbles + rec_agg.n_rec_fumbles)::float
                 / (rush_agg.n_carries + rec_agg.n_receptions)
@@ -235,7 +229,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         n_carries, n_targets, n_receptions, n_rec_with_xyac,
         n_touches, n_fumbles,
         rush_epa_per_attempt, rush_success_rate, rec_epa_per_target,
-        ryoe_per_attempt, yac_over_expected_per_rec, catch_pct,
+        ryoe_per_attempt, yac_over_expected_per_rec,
         fumble_rate
     """
     rows = (
@@ -259,7 +253,6 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
         "rec_epa_per_target",
         "ryoe_per_attempt",
         "yac_over_expected_per_rec",
-        "catch_pct",
         "fumble_rate",
     )
     for col in float_cols:
@@ -355,7 +348,7 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
 _DELETE_STAT_COMPONENTS = text("""
     DELETE FROM stat_components
     WHERE season = :season
-      AND component_name = ANY(:components)
+      AND component_name LIKE 'rb_%'
 """)
 
 _DELETE_SEASON_GRADES = text("""
