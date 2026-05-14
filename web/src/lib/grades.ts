@@ -625,11 +625,11 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   idl_tfl_rate:                      0.35,
   idl_pressure_rate:                 0.30,
   idl_sack_rate:                     0.15,
-  idl_missed_tackle_rate:           -0.15,
+  idl_missed_tackle_rate:           -0.05,
   lb_tfl_rate:                       0.20,
   lb_passer_rating_allowed:         -0.27,
   lb_missed_tackle_rate:            -0.15,
-  lb_pbu_rate:                       0.08,
+  lb_pbu_rate:                       0.05,
   lb_tackle_rate:                    0.13,
   lb_pressure_rate:                  0.07,
 };

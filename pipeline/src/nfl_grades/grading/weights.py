@@ -583,21 +583,30 @@ EDGE_V1_CONFIDENCE_FULL_SNAPS: int = 700
 
 
 # ---------------------------------------------------------------------------
-# iDL v1 (ADR-0021).
+# iDL v1.1 (ADR-0021, revised 2026-05-14).
 # ---------------------------------------------------------------------------
 # Data sources: same pfr_def_pass_rush table as EDGE (both are DL).
 # TFL is the primary iDL differentiator; pass rush down-weighted vs EDGE.
 #
-# idl_tfl_rate (37%): run-stop TFLs per snap. Interior penetration is what
-#   separates elite DTs (Aaron Donald, Chris Jones) from average starters.
-# idl_pressure_rate (32%): total pressures per snap. Interior pressure
-#   counts but is rarer — an elite DT's pass-rush rate is lower than EDGE.
-# idl_sack_rate (16%): sacks per snap. Interior sacks are premium but
-#   structurally rarer than EDGE sacks; weighted lower than EDGE.
-# idl_missed_tackle_rate (16%): technique penalty, weighted the same as
-#   TFL to keep the formula symmetric in the negative direction.
+# v1.1 (cross-position audit 2026-05-14): idl_missed_tackle_rate lowered
+# from -0.15 → -0.05. Mean YoY r = 0.080 across 2018-2025 (one of the
+# weakest signals in the entire system, below even WR/TE drop_rate at
+# ~0.13). At -0.15 weight this was disproportionate noise contribution to
+# the composite. Light weight bounds noise; not removed entirely because
+# missed-tackle technique still has *some* in-season signal (mean r 0.080
+# isn't zero, just low). Sum |w| drops 0.95 → 0.85; the combiner normalizes
+# so the three signal-strong positive components (tfl, pressure, sack) get
+# more effective weight. See project_cross_position_yoy_audit.md.
 #
-# Sum |abs| = 0.95. Normalized dynamically by composite.combine.
+# idl_tfl_rate (35%): run-stop TFLs per snap. Interior penetration is what
+#   separates elite DTs (Aaron Donald, Chris Jones) from average starters.
+# idl_pressure_rate (30%): total pressures per snap. Interior pressure
+#   counts but is rarer — an elite DT's pass-rush rate is lower than EDGE.
+# idl_sack_rate (15%): sacks per snap. Interior sacks are premium but
+#   structurally rarer than EDGE sacks; weighted lower than EDGE.
+# idl_missed_tackle_rate (-5%): technique penalty, light weight per YoY noise.
+#
+# Sum |abs| = 0.85. Normalized dynamically by composite.combine.
 # ---------------------------------------------------------------------------
 
 IDL_COMPONENT_TFL_RATE: str = "idl_tfl_rate"
@@ -609,7 +618,7 @@ IDL_V1_WEIGHTS: dict[str, float] = {
     IDL_COMPONENT_TFL_RATE:           0.35,
     IDL_COMPONENT_PRESSURE_RATE:      0.30,
     IDL_COMPONENT_SACK_RATE:          0.15,
-    IDL_COMPONENT_MISSED_TACKLE_RATE: -0.15,
+    IDL_COMPONENT_MISSED_TACKLE_RATE: -0.05,
 }
 
 IDL_V1_SHRINKAGE_K: dict[str, float] = {
@@ -639,7 +648,16 @@ IDL_V1_CONFIDENCE_FULL_SNAPS: int = 700
 
 
 # ---------------------------------------------------------------------------
-# LB v1 (ADR-0022).
+# LB v1.1 (ADR-0022, revised 2026-05-14).
+# ---------------------------------------------------------------------------
+# v1.1 (cross-position audit 2026-05-14): lb_pbu_rate lowered from +0.08
+# → +0.05. Mean YoY r = 0.085 across 2018-2025 — same noise pattern as
+# idl_missed_tackle_rate. INTs are already captured inside passer_rating_
+# allowed (which has more material weight), so pbu_rate was already a
+# narrow "broke up the catch" play signal; with weak YoY it's barely
+# carrying its weight. Not removed entirely because the cross-sectional
+# spread is real (active plays show up) — light weight bounds noise.
+# Sum |w| drops 0.90 → 0.87. See project_cross_position_yoy_audit.md.
 # ---------------------------------------------------------------------------
 # Off-ball linebackers. Multi-skill position covering run defense, coverage,
 # and situational pass rush. Filter: target_rate >= 3.5% to exclude
@@ -679,7 +697,7 @@ LB_V1_WEIGHTS: dict[str, float] = {
     LB_COMPONENT_TFL_RATE:              0.20,
     LB_COMPONENT_PASSER_RATING_ALLOWED: -0.27,
     LB_COMPONENT_MISSED_TACKLE_RATE:    -0.15,
-    LB_COMPONENT_PBU_RATE:              0.08,
+    LB_COMPONENT_PBU_RATE:              0.05,
     LB_COMPONENT_TACKLE_RATE:           0.13,
     LB_COMPONENT_PRESSURE_RATE:         0.07,
 }

@@ -1,6 +1,6 @@
 # ADR-0021 — iDL v1 Grading Formula
 
-**Status:** Accepted  
+**Status:** Accepted (v1.1 revision 2026-05-14 — see *Revision History*)  
 **Date:** 2026-05-14
 
 ---
@@ -90,3 +90,19 @@ Sum |weights| = 0.95. Normalized dynamically by `composite.combine`.
 **Equal weights (pressure ≈ TFL ≈ 0.30):** Reviewed. Rejected because TFL is the primary iDL differentiator and should be weighted more heavily — it's a harder play to make for an interior lineman and more directly measures the iDL skill set.
 
 **Using EDGE weights for iDL:** Rejected. Applying the EDGE formula (pressure-dominant) to iDL undersells interior run-stopping and would rank players more similarly to EDGE rushers than their actual role warrants.
+
+---
+
+## Revision History
+
+### v1.1 (2026-05-14) — `idl_missed_tackle_rate` weight lowered (noise)
+
+**Lowered `idl_missed_tackle_rate` from −0.15 → −0.05.** Sum |w| drops 0.95 → 0.85; combiner normalizes so the three signal-strong positive components (tfl_rate, pressure_rate, sack_rate) get more effective weight.
+
+**Why:** Cross-position YoY audit (2026-05-14) found mean YoY r = 0.080 across 2018-2025 for iDL missed_tackle_rate — one of the lowest signals in the entire grader system, below even the WR/TE drop_rate components at ~0.13. At −0.15 weight this was disproportionate noise contribution. Light weight (−0.05) preserves the technique-penalty direction without overweighting noise.
+
+**Why not removed entirely:** Schema-stable change is preferred (pure weight tweak via the new preview/regrade workflow, per `memory/reference_formula_iteration_workflow.md`). Mean r 0.080 isn't zero — there's *some* in-season signal, just weak YoY. Light weight bounds the noise contribution while keeping the component available if we want to revisit later.
+
+**Face-check 2024:** Top 3 unchanged (Leonard Williams, Chris Jones, Dexter Lawrence). Biggest movers up are interior linemen who'd been penalized for high missed-tackle rates: Quinnen Williams #16 → #9 (+7.84), Solomon Thomas #37 → #28 (+9.23), Jalen Carter #23 → #13 (+7.76). Coherent — these are players whose technique reputation isn't "missed tackler" but our noisy metric was treating them as such.
+
+**Audit data:** `memory/project_cross_position_yoy_audit.md`. Shipped via `nflgrades preview` → edit `weights.py` → `sync_weights_to_web.py` → `nflgrades regrade` per season (the new workflow). End-to-end ~30 seconds.

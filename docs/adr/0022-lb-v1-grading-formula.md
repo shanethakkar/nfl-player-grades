@@ -142,3 +142,15 @@ Expected YoY r band: 0.35-0.50. Wider/lower than offensive skill positions. Belo
 **2026-05-14 (passer rating revision):** Replaced `lb_yards_per_target_allowed` with `lb_passer_rating_allowed` (weight −0.27, increased from −0.20). Split `lb_pbu_int_rate` → `lb_pbu_rate` (PBU-only, weight 0.08, decreased from 0.13) since INTs are now captured inside passer rating allowed. Reduced `lb_tfl_rate` from 0.22 → 0.20 to absorb the redistributed weight. Sanity-checked vs. 2025 CB and Safety cohorts — passer rating allowed produced clean signal at all three positions; flagged as candidate for CB v1.1 and Safety v1.1.
 
 Face-check after revision: 2024 top 10 has Zack Baun #1, T.J. Edwards #2, Bobby Wagner #6 — all consensus picks. 2023 has Fred Warner #5 (All-Pro year), up from outside top 15 in the initial release. 2025 has Devin Lloyd #1 (5 INTs, elite coverage year).
+
+### v1.1 (2026-05-14, second revision) — `lb_pbu_rate` weight lowered (noise)
+
+**Lowered `lb_pbu_rate` from +0.08 → +0.05.** Sum |w| drops 0.90 → 0.87; combiner normalizes so the signal-strong components get marginally more effective weight.
+
+**Why:** Cross-position YoY audit (2026-05-14) found mean YoY r = 0.085 across 2018-2025 for lb_pbu_rate — same noise pattern as iDL missed_tackle_rate (0.080). Since INTs are already captured inside lb_passer_rating_allowed (the −0.27 component), lb_pbu_rate was already a narrow "broke up the catch" signal; with weak YoY it was barely carrying its weight.
+
+**Why not removed entirely:** Schema-stable change preferred. Cross-sectional spread is real (active PBU plays show up in the data), so the metric captures *something*. Light weight (+0.05) bounds the noise contribution without removing a real signal-carrier completely. If a later audit shows persistent weak signal we can remove.
+
+**Face-check 2024:** Top 4 unchanged (Baun, Edwards, Dean, Hicks). Movers small (±2.4 max) — expected from a small weight delta. No reshuffles in the top half of the cohort.
+
+**Audit data:** `memory/project_cross_position_yoy_audit.md`. Shipped via the new preview/regrade workflow.
