@@ -619,7 +619,7 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   te_drop_rate:                      -0.05,
   cb_passer_rating_allowed:          -0.35,
   cb_yac_per_rec_allowed:            -0.15,
-  cb_target_rate:                    -0.08,
+  cb_target_rate:                    -0.05,
   cb_pbu_rate:                        0.12,
   s_passer_rating_allowed:           -0.30,
   s_pbu_rate:                         0.12,

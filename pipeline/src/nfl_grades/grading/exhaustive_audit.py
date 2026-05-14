@@ -1125,6 +1125,160 @@ def run_te_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# CB candidates
+# ---------------------------------------------------------------------------
+
+# Defensive positions only have data 2018+ from PFR.
+_DEFENSIVE_SEASONS = [
+    (2018, 2019), (2019, 2020), (2020, 2021), (2021, 2022),
+    (2022, 2023), (2023, 2024), (2024, 2025),
+]
+
+
+def _pfr_def_aggregated(seasons: list[int], position_filter: frozenset[str]):
+    """Helper: pull pfr_advstats_def, aggregate per (pfr_id, season),
+    return DataFrame keyed by pfr_player_name + season (for our name-join).
+    """
+    import nflreadpy as nfl
+
+    out = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        df = nfl.load_pfr_advstats(seasons=[int(s)], stat_type="def")
+        if hasattr(df, "to_pandas"):
+            df = df.to_pandas()
+        if "game_type" in df.columns:
+            df = df[df["game_type"] == "REG"].copy()
+        # Aggregate to season totals.
+        agg = df.groupby("pfr_player_name", as_index=False).agg(
+            targets=("def_targets", "sum"),
+            completions=("def_completions_allowed", "sum"),
+            yards=("def_yards_allowed", "sum"),
+            tds=("def_receiving_td_allowed", "sum"),
+            ints=("def_ints", "sum"),
+            yac=("def_yards_after_catch", "sum"),
+            adot=("def_adot", "mean"),
+            missed_tackles=("def_missed_tackles", "sum"),
+            comb_tackles=("def_tackles_combined", "sum"),
+        )
+        agg["season"] = s
+        out.append(agg)
+    if not out:
+        return pd.DataFrame()
+    return pd.concat(out, ignore_index=True)
+
+
+def cb_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full CB candidate set for the exhaustive audit.
+
+    CB data starts 2018 (PFR coverage data limitation).
+
+    Candidates pulled from:
+      - stat_components (current CB formula components, re-scored)
+      - pfr_advstats_def (per-game; aggregated → individual rates that
+        v1.1 consolidated into passer_rating_allowed):
+          comp_pct, yards_per_target, int_rate, td_rate_allowed, adot
+      - missed_tackle_rate (already in Safety formula; check if CB-relevant)
+      - tackles_per_snap (could be a CB skill signal)
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified CB ID set + snap counts (for tackle rate denominator)
+    cb_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name,
+               ps.snaps_defense
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        LEFT JOIN (
+            SELECT DISTINCT ON (player_id, season) player_id, season, snaps_defense
+            FROM player_seasons
+            ORDER BY player_id, season, snaps_defense DESC NULLS LAST
+        ) ps ON ps.player_id = sg.player_id AND ps.season = sg.season
+        WHERE sg.position = 'CB' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        cb_ids = pd.read_sql(cb_sql, conn)
+    seasons = sorted(cb_ids["season"].unique())
+
+    # 2. Currently-shipped components
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'CB'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'cb_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. PFR def_advstats — individual rate candidates
+    pfr_agg = _pfr_def_aggregated(seasons, position_filter=frozenset({"CB"}))
+    if not pfr_agg.empty:
+        # Join by name + season to CB players
+        cb_names = cb_ids[["player_id", "season", "full_name", "snaps_defense"]].copy()
+        cb_names["name_norm"] = cb_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_agg["name_norm"] = pfr_agg["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged = pfr_agg.merge(cb_names, on=["name_norm", "season"], how="inner")
+        merged["comp_pct_allowed"] = merged["completions"] / merged["targets"].replace(0, np.nan)
+        merged["yards_per_target"] = merged["yards"] / merged["targets"].replace(0, np.nan)
+        merged["int_rate"] = merged["ints"] / merged["targets"].replace(0, np.nan)
+        merged["td_rate_allowed"] = merged["tds"] / merged["targets"].replace(0, np.nan)
+        merged["missed_tackle_rate"] = merged["missed_tackles"] / (
+            merged["comb_tackles"] + merged["missed_tackles"]
+        ).replace(0, np.nan)
+        merged["tackles_per_snap"] = merged["comb_tackles"] / merged["snaps_defense"].replace(0, np.nan)
+        merged["adot_allowed"] = merged["adot"]
+        for col, display, denom_col, min_n in [
+            ("comp_pct_allowed", "cb_comp_pct_allowed", "targets", 25),
+            ("yards_per_target", "cb_yards_per_target_allowed", "targets", 25),
+            ("int_rate", "cb_int_rate", "targets", 25),
+            ("td_rate_allowed", "cb_td_rate_allowed", "targets", 25),
+            ("missed_tackle_rate", "cb_missed_tackle_rate", "comb_tackles", 20),
+            ("tackles_per_snap", "cb_tackles_per_snap", "snaps_defense", 200),
+            ("adot_allowed", "cb_adot_allowed", "targets", 25),
+        ]:
+            mask = merged[denom_col].fillna(0) >= min_n
+            panel = merged.loc[mask, ["player_id", "season", col]].rename(
+                columns={col: "value"}
+            )
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    return candidates
+
+
+def run_cb_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full CB exhaustive audit."""
+    eng = engine or get_engine()
+    cands = cb_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "CB",
+            season_pairs=_DEFENSIVE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1137,4 +1291,6 @@ __all__ = [
     "run_rb_audit",
     "te_candidates",
     "run_te_audit",
+    "cb_candidates",
+    "run_cb_audit",
 ]

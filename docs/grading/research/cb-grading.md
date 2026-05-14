@@ -1,5 +1,11 @@
 # CB v1 + Safety v1 Implementation Notes
 
+> **CB v1.2 ship (2026-05-14, exhaustive audit):** Lowered `cb_target_rate` 0.08 → 0.05. Validity essentially zero (+0.013) and sign disagreed with design weight direction — voters don't differentiate elite CBs by target rate at the qualified cohort level. Validity +0.219 → +0.220 (essentially unchanged — methodology cleanup, not validity gain). 11 candidates scored; v1.1 PR consolidation validated (all sub-components subsumed). No new components added. **CB has structurally weak Pro Bowl validity (baseline +0.219, second-weakest after LB) — this is a voter-behavior ceiling, not a formula bug.** Full audit at [`../audits/2026-05-14-exhaustive-cb.md`](../audits/2026-05-14-exhaustive-cb.md).
+
+---
+
+
+
 CB v1 grading implemented 2026-05-12 (ADR-0018); Safety v1 grading implemented 2026-05-13 (ADR-0019).
 
 **Why:** Both positions use PFR advstats def as primary coverage data source — PBP doesn't record the covering defender on completions.

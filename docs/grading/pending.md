@@ -15,7 +15,7 @@ Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, th
 | 6 | Exhaustive audit | RB | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-rb.md)) — v1.3 shipped success_rate reduction; v1.4 queued below |
 | **6b** | New component (Path B) | RB v1.4: add `rb_yards_after_contact` from pfr_advstats rush — highest-validity candidate of any audit so far (+0.192) | 0.5-1 day | **SHIPPED 2026-05-14** — first Path B ship from the framework. Validity +0.247→+0.259. |
 | 7 | Exhaustive audit | TE | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-te.md)) — v1.2: target_earn 0.10→0.15, success_rate 0.08→0.05. Validity +0.384→+0.407 (strongest Path A gain in any audit). Brock Bowers rises 18→13. |
-| 8 | Exhaustive audit | CB | 0.5 day | pending |
+| 8 | Exhaustive audit | CB | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-cb.md)) — v1.2: target_rate -0.08→-0.05. Validity +0.219→+0.220. Methodology cleanup; CB has structural weak validity (voter noise ceiling). |
 | 9 | Exhaustive audit | S | 0.5 day | pending |
 | 10 | Exhaustive audit | EDGE | 0.5 day | pending |
 | 11 | Exhaustive audit | iDL | 0.5 day | pending |

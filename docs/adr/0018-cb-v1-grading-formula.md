@@ -1,6 +1,6 @@
 # ADR-0018: CB v1 Grading Formula
 
-**Status:** Accepted (v1.1 — 2026-05-13; passer-rating revision — 2026-05-14)
+**Status:** Accepted (v1.2 revision — 2026-05-14, see *Revision History*)
 **Date:** 2026-05-12
 
 ## Context
@@ -175,3 +175,30 @@ label provides context without distorting the z-score distribution.
 **Why:** Passer rating allowed is the industry-standard NFL coverage metric. It captures all four sub-stats (comp%, yards/attempt, TDs, INTs) in one number with proper weighting — and critically, it penalizes TDs allowed (v1 didn't) while rewarding INTs (v1 did separately). 2024 face-check confirmed Marlon Humphrey moved #13 → #4, Christian Gonzalez #14 → #10; consensus elite CBs (Stingley, Surtain, Wiggins, McDuffie, Q. Mitchell) all in the top 10.
 
 **No data backfill needed** — `pfr_def_coverage` already stored TDs allowed; v1 just didn't use them. Re-graded all 2018-2025 seasons.
+
+### v1.2 (2026-05-14) — `cb_target_rate` weight lowered (exhaustive audit)
+
+**Lowered `cb_target_rate` from −0.08 → −0.05.** Sum |w| 0.70 → 0.67. Other components unchanged.
+
+**Why:** CB exhaustive candidate audit ([`docs/grading/audits/2026-05-14-exhaustive-cb.md`](../grading/audits/2026-05-14-exhaustive-cb.md)) scored 11 candidates (4 current + 7 new from `pfr_advstats_def`). Key finding:
+
+- **`cb_target_rate` validity vs next-year Pro Bowl = +0.013** (essentially zero), and the sign disagrees with the design weight direction. We model "elite CBs get avoided" with a negative weight, but at the qualified-CB level the validity SIGN is positive — meaning top corners actually face *similar* target volumes (all matched on WR1s). The avoidance effect exists at the league-wide level but doesn't differentiate within the qualified cohort.
+- Per methodology — when validity is near zero, weight should be ≤0.05. Bounded.
+
+**Validity gate:** CB composite vs next-year Pro Bowl correlation **+0.219 → +0.220** (essentially unchanged). Expected — target_rate was barely contributing to the composite because its validity was near zero. This is methodology cleanup (don't over-weight near-zero-validity signal), not a validity gain.
+
+**Face-check 2024:** Top 4 unchanged (Derek Stingley Jr., Pat Surtain II, Nate Wiggins, Marlon Humphrey). Top 10 mostly the same; minor reshuffles at #5-10 (Paulson Adebo rose 54→41, +3.89, biggest mover).
+
+**What the audit confirmed about v1.1:** the passer-rating-allowed consolidation was correct. All four PR sub-components (comp%, yards/att, TDs, INTs) either correlate ≥+0.62 with PR_allowed (subsumed) or are noise standalone. No reason to break PR_allowed back into pieces.
+
+**Honest take on CB validity ceiling:** CB has structurally weak Pro Bowl validity (baseline +0.219, second-weakest after LB). Pro Bowl CB voting rewards narrative + interceptions + "shutdown" reputation more than per-target efficiency. This is position limitation, not formula bug. No realistic weight change will move CB validity from 0.22 → 0.40 — the ceiling is set by voter behavior.
+
+**What was REJECTED with documented reasoning:**
+
+- `cb_int_rate`: highest standalone validity (+0.165) but **mathematically inside passer_rating_allowed** (INT events drop PR allowed by ~25 pts). Adding would double-count. The auto-verdict's "STRONG ADD" flag is a false positive — it doesn't know about mathematical containment. Documented.
+- `cb_comp_pct_allowed`, `cb_td_rate_allowed`: also inside PR_allowed.
+- `cb_missed_tackle_rate`: YoY +0.272, validity zero — Pro Bowl voters don't differentiate CBs on tackling.
+- `cb_tackles_per_snap`: strongest YoY in audit (+0.490) but validity −0.107 — measures zone vs press style, not skill.
+- `cb_adot_allowed`: scheme indicator (depth of targets), zero validity.
+
+No new components added. The v1.1 4-component shape is structurally right; only weight tweak is the target_rate shrink.

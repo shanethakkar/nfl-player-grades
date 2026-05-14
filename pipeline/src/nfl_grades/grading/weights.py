@@ -431,10 +431,16 @@ CB_COMPONENT_YAC_PER_REC_ALLOWED: str = "cb_yac_per_rec_allowed"
 CB_COMPONENT_TARGET_RATE: str = "cb_target_rate"
 CB_COMPONENT_PBU_RATE: str = "cb_pbu_rate"
 
+# v1.2 (2026-05-14, exhaustive CB audit): lowered target_rate from -0.08
+# to -0.05. Audit found target_rate validity vs next-year Pro Bowl is
+# +0.013 — essentially zero, and the sign disagrees with our design
+# weight direction (we treat lower target rate as better; voters apparently
+# don't see it that way at the qualified-CB level where all top CBs face
+# similar target volume). Bounded at light weight.
 CB_V1_WEIGHTS: dict[str, float] = {
     CB_COMPONENT_PASSER_RATING_ALLOWED: -0.35,
     CB_COMPONENT_YAC_PER_REC_ALLOWED:   -0.15,
-    CB_COMPONENT_TARGET_RATE:           -0.08,
+    CB_COMPONENT_TARGET_RATE:           -0.05,
     CB_COMPONENT_PBU_RATE:               0.12,
 }
 
