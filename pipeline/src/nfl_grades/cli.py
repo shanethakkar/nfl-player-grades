@@ -263,6 +263,95 @@ def grade(season: int, position: str | None) -> None:
         )
 
 
+@main.command()
+@click.option("--season", type=int, required=True)
+@click.option("--position", type=str, required=True)
+@click.option(
+    "--weight",
+    "weight_overrides",
+    multiple=True,
+    help='Override a single weight, e.g. --weight te_drop_rate=-0.10. Repeatable.',
+)
+@click.option("--top", type=int, default=20, help="Number of rows in the head/tail summary.")
+@click.option(
+    "--show-deltas",
+    is_flag=True,
+    help="Also print the players whose grade moved most (in either direction).",
+)
+def preview(
+    season: int,
+    position: str,
+    weight_overrides: tuple[str, ...],
+    top: int,
+    show_deltas: bool,
+) -> None:
+    """Preview a weight change without writing to the database.
+
+    Reads existing stat_components.z_score, applies the candidate weights,
+    and prints the resulting leaderboard side-by-side with the currently
+    shipped grades. Useful for "what if I bumped wr_drop_rate to -0.07"
+    style experiments before running the real grader.
+
+    Examples:
+
+      nflgrades preview --season 2024 --position TE --weight te_drop_rate=-0.10
+      nflgrades preview --season 2024 --position RB --weight rb_rec_epa_per_target=0.05 --weight rb_yac_over_expected_per_rec=0.28
+    """
+    from .grading.preview import parse_weight_overrides, preview_position
+
+    overrides = parse_weight_overrides(weight_overrides)
+    if not overrides:
+        click.echo("(no --weight overrides supplied — preview will match current grades)")
+    else:
+        click.echo("Overrides:")
+        for k, v in sorted(overrides.items()):
+            click.echo(f"  {k} = {v:+.3f}")
+
+    df = preview_position(season=season, position=position, overrides=overrides)
+
+    pd_repr = df.head(top)[
+        ["preview_rank", "full_name", "role", "current_grade", "preview_grade", "delta"]
+    ].copy()
+    pd_repr["current_grade"] = pd_repr["current_grade"].map(lambda v: f"{v:6.2f}")
+    pd_repr["preview_grade"] = pd_repr["preview_grade"].map(lambda v: f"{v:6.2f}")
+    pd_repr["delta"] = pd_repr["delta"].map(lambda v: f"{v:+5.2f}")
+    click.echo(f"\nTop {top} ({position} {season}):")
+    click.echo(pd_repr.to_string(index=False))
+
+    if show_deltas:
+        biggest = df.assign(abs_delta=df["delta"].abs()).sort_values(
+            "abs_delta", ascending=False
+        )
+        head = biggest.head(top)[
+            ["full_name", "role", "current_rank", "preview_rank", "current_grade",
+             "preview_grade", "delta"]
+        ].copy()
+        head["current_grade"] = head["current_grade"].map(lambda v: f"{v:6.2f}")
+        head["preview_grade"] = head["preview_grade"].map(lambda v: f"{v:6.2f}")
+        head["delta"] = head["delta"].map(lambda v: f"{v:+5.2f}")
+        click.echo(f"\nBiggest movers (top {top}):")
+        click.echo(head.to_string(index=False))
+
+
+@main.command()
+@click.option("--season", type=int, required=True)
+@click.option("--position", type=str, required=True)
+def regrade(season: int, position: str) -> None:
+    """Recompute composite_grade / composite_z / percentile from existing
+    stat_components z-scores, using current weights.py. Use this after a
+    pure weight change — no SQL re-extract, no z-score recompute.
+
+    For schema changes (adding/removing components, changing SQL), use the
+    full ``grade`` command instead.
+
+    Idempotent.
+    """
+    from .grading.preview import regrade_from_components
+
+    n = regrade_from_components(season=season, position=position)
+    click.echo(f"position={position} season={season} season_grades_updated={n}")
+
+
 @main.command(name="backfill-team-context")
 @click.option("--season", type=int, required=True)
 def backfill_team_context(season: int) -> None:

@@ -580,76 +580,68 @@ export function formatPercentile(z: number | null): string {
 
 // ---------------------------------------------------------------------------
 // Component weights — mirrors pipeline/grading/weights.py.
-// These are stable design constants (ADR-0013 through ADR-0016), not
-// computed values, so hardcoding here avoids a backend round-trip.
+// Both dicts below are kept in sync by `pipeline/scripts/sync_weights_to_web.py`.
+// Edit weights.py, then run that script. Do not hand-edit between
+// AUTOGEN-BEGIN / AUTOGEN-END markers.
 // ---------------------------------------------------------------------------
 
+// AUTOGEN-BEGIN weights
 const COMPONENT_WEIGHTS: Record<string, number> = {
-  // QB v1 (ADR-0013)
-  qb_epa_per_dropback:      0.50,
-  qb_cpoe:                  0.25,
-  qb_success_rate:          0.25,
-  // RB v1.1 (ADR-0014 revised) — removed catch_pct as noise
-  rb_ryoe_per_attempt:      0.28,
-  rb_rush_epa_per_attempt:  0.18,
-  rb_rush_success_rate:     0.14,
-  rb_rec_epa_per_target:    0.18,
-  rb_yac_over_expected_per_rec: 0.15,
-  rb_fumble_rate:          -0.05,
-  // WR v1.2 (ADR-0015 revised) — drop_rate lowered to -0.05 (matches TE)
-  wr_rec_epa_per_target:    0.35,
-  wr_yac_over_expected_per_rec: 0.27,
-  wr_separation:            0.10,
-  wr_target_earn_rate:      0.10,
-  wr_success_rate_per_target: 0.08,
-  wr_drop_rate:            -0.05,
-  // TE v1.1 (ADR-0016 revised) — drop_rate replaces fumble_rate at -0.05
-  te_rec_epa_per_target:    0.35,
-  te_yac_over_expected_per_rec: 0.27,
-  te_separation:            0.07,
-  te_target_earn_rate:      0.10,
-  te_success_rate_per_target: 0.08,
-  te_drop_rate:            -0.05,
-  // CB v1.1 (ADR-0018 revised) — passer rating allowed replaces comp%+INT
-  cb_passer_rating_allowed: -0.35,
-  cb_yac_per_rec_allowed:   -0.15,
-  cb_target_rate:           -0.08,
-  cb_pbu_rate:               0.12,
-  // Safety v1.1 (ADR-0019 revised) — passer rating allowed replaces comp%+yds/tgt+INT
-  s_passer_rating_allowed: -0.30,
-  s_pbu_rate:               0.12,
-  s_target_rate:           -0.08,
-  s_tackles_per_snap:       0.07,
-  s_missed_tackle_rate:    -0.09,
-  s_backfield_disruption_per_snap: 0.09,
-  // EDGE v1 (ADR-0020) — sum |abs| = 0.90
-  edge_pressure_rate:       0.35,
-  edge_sack_rate:           0.30,
-  edge_tfl_rate:            0.15,
-  edge_missed_tackle_rate: -0.10,
-  // iDL v1 (ADR-0021) — sum |abs| = 0.95
-  idl_tfl_rate:             0.35,
-  idl_pressure_rate:        0.30,
-  idl_sack_rate:            0.15,
-  idl_missed_tackle_rate:  -0.15,
-  // LB v1 (ADR-0022) — sum |abs| = 0.90
-  lb_tfl_rate:               0.20,
-  lb_passer_rating_allowed: -0.27,
-  lb_missed_tackle_rate:    -0.15,
-  lb_pbu_rate:               0.08,
-  lb_tackle_rate:            0.13,
-  lb_pressure_rate:          0.07,
+  qb_epa_per_dropback:               0.50,
+  qb_cpoe:                           0.25,
+  qb_success_rate:                   0.25,
+  rb_ryoe_per_attempt:               0.28,
+  rb_rush_epa_per_attempt:           0.18,
+  rb_rush_success_rate:              0.14,
+  rb_rec_epa_per_target:             0.05,
+  rb_yac_over_expected_per_rec:      0.28,
+  rb_fumble_rate:                   -0.05,
+  wr_rec_epa_per_target:             0.35,
+  wr_yac_over_expected_per_rec:      0.27,
+  wr_separation:                     0.10,
+  wr_target_earn_rate:               0.10,
+  wr_success_rate_per_target:        0.08,
+  wr_drop_rate:                     -0.05,
+  te_rec_epa_per_target:             0.35,
+  te_yac_over_expected_per_rec:      0.27,
+  te_separation:                     0.07,
+  te_target_earn_rate:               0.10,
+  te_success_rate_per_target:        0.08,
+  te_drop_rate:                     -0.05,
+  cb_passer_rating_allowed:         -0.35,
+  cb_yac_per_rec_allowed:           -0.15,
+  cb_target_rate:                   -0.08,
+  cb_pbu_rate:                       0.12,
+  s_passer_rating_allowed:          -0.30,
+  s_pbu_rate:                        0.12,
+  s_target_rate:                    -0.08,
+  s_tackles_per_snap:                0.07,
+  s_missed_tackle_rate:             -0.09,
+  s_backfield_disruption_per_snap:   0.09,
+  edge_pressure_rate:                0.35,
+  edge_sack_rate:                    0.30,
+  edge_tfl_rate:                     0.15,
+  edge_missed_tackle_rate:          -0.10,
+  idl_tfl_rate:                      0.35,
+  idl_pressure_rate:                 0.30,
+  idl_sack_rate:                     0.15,
+  idl_missed_tackle_rate:           -0.15,
+  lb_tfl_rate:                       0.20,
+  lb_passer_rating_allowed:         -0.27,
+  lb_missed_tackle_rate:            -0.15,
+  lb_pbu_rate:                       0.08,
+  lb_tackle_rate:                    0.13,
+  lb_pressure_rate:                  0.07,
 };
 
-// Blocking-TE path: earn rate excluded from composite; its weight is
-// redistributed to EPA and YAC in proportion (ADR-0016).
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {
-  te_rec_epa_per_target:        0.406,
-  te_yac_over_expected_per_rec: 0.314,
-  te_separation:                0.07,
-  te_success_rate_per_target:   0.08,
-  te_drop_rate:                -0.05,
+  te_rec_epa_per_target:         0.406,
+  te_yac_over_expected_per_rec:  0.314,
+  te_separation:                  0.07,
+  te_success_rate_per_target:     0.08,
+  te_drop_rate:                  -0.05,
 };
+// AUTOGEN-END weights
 
 /** Weight of a component in the composite, or null if not in the formula. */
 export function componentWeight(name: string, role?: string | null): number | null {

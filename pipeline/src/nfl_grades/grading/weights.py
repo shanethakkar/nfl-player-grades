@@ -33,17 +33,25 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 
 
 # ---------------------------------------------------------------------------
-# RB v1.1 (ADR-0014, revised 2026-05-14).
+# RB v1.2 (ADR-0014, revised 2026-05-14).
 # ---------------------------------------------------------------------------
-# v1.1 change: removed rb_catch_pct (+0.05). YoY r oscillates around 0
-# (-0.015, +0.035, +0.120, -0.322, mean ≈ -0.05 across 2020-2024) — noise
-# at RB sample sizes. Also correlates 0.61 with rb_rush_success_rate
-# (partly redundant). Weight redistributed: rb_yac_over_expected_per_rec
-# bumped from 0.12 → 0.15 (receiving share stays ~33%).
+# v1.1 (earlier 2026-05-14): removed rb_catch_pct (+0.05). YoY r oscillates
+# around 0 (-0.015, +0.035, +0.120, -0.322, mean ≈ -0.05 across 2020-2024) —
+# noise at RB sample sizes. Also correlates 0.61 with rb_rush_success_rate.
+# Weight redistributed: rb_yac_over_expected_per_rec bumped from 0.12 → 0.15.
+#
+# v1.2 (cross-position audit 2026-05-14): rebalanced within receiving.
+# rb_rec_epa_per_target lowered from +0.18 → +0.05. Mean YoY r = 0.027 across
+# 2016-2025 (worst signal in the entire audit). RB per-target EPA is largely
+# driven by QB choice + game state — not RB skill. Freed +0.13 shifted to
+# rb_yac_over_expected_per_rec (+0.15 → +0.28), the better-signal receiving
+# metric (YoY r = 0.205). Receiving share of the formula stays at 33%
+# (now 0.05 EPA + 0.28 YAC-OE), shape unchanged.
 #
 # Audit also rejected NGS rushing candidates (efficiency, rush_pct_over_
 # expected, avg_time_to_los, percent_eight_defenders) — all redundant
-# with RYOE or non-skill usage markers. See project_rb_v1_1_research.md.
+# with RYOE or non-skill usage markers. See project_rb_v1_1_research.md
+# and project_cross_position_yoy_audit.md.
 
 # Component names — strings written to stat_components.component_name.
 RB_COMPONENT_RYOE_PER_ATTEMPT: str = "rb_ryoe_per_attempt"
@@ -58,8 +66,8 @@ RB_V1_WEIGHTS: dict[str, float] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: 0.28,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: 0.18,
     RB_COMPONENT_RUSH_SUCCESS_RATE: 0.14,
-    RB_COMPONENT_REC_EPA_PER_TARGET: 0.18,
-    RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.15,
+    RB_COMPONENT_REC_EPA_PER_TARGET: 0.05,
+    RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.28,
     RB_COMPONENT_FUMBLE_RATE: -0.05,
 }
 

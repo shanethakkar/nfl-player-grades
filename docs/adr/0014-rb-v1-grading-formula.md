@@ -1,8 +1,8 @@
 # 0014 - RB v1 grading formula
 
-- **Status**: Accepted (v1.1 pruning revision — 2026-05-14)
+- **Status**: Accepted (v1.2 revision — 2026-05-14)
 - **Date**: 2026-04-24
-- **Updated**: 2026-05-14 (catch_pct removed — see "Revision History")
+- **Updated**: 2026-05-14 (v1.1 catch_pct removed, v1.2 rec_EPA weight lowered — see "Revision History")
 - **Supersedes**: None
 - **Companion to**: ADR-0013 (QB v1). Same pipeline shape, different
   components and per-skill sample sizes.
@@ -347,3 +347,17 @@ public contract with the web app.
 **Face-check after revision:** 2024 top 10 essentially unchanged at the top (Henry, Saquon, Gibbs). Josh Jacobs moved into the top 10 (previously sat just outside). 2023 top 10 with Christian McCaffrey #1 — unchanged.
 
 **Audit methodology:** Skill-tree mapping → correlation analysis on 2024 qualified RBs (n=41) → YoY noise check across 2020-2024 → face-check. Same playbook as WR v1.1. See memory: `project_rb_v1_1_research.md` and `reference_grading_methodology.md` for the full process.
+
+### v1.2 (2026-05-14) — `rb_rec_epa_per_target` lowered (noise), `rb_yac_over_expected_per_rec` bumped
+
+**Lowered `rb_rec_epa_per_target` from +0.18 → +0.05; bumped `rb_yac_over_expected_per_rec` from +0.15 → +0.28.** Sum |weights| unchanged at 0.98. Receiving share of the formula stays at 33% — just rebalanced within receiving.
+
+**Why rec_EPA weight slashed (not removed):** The cross-position YoY audit run after WR v1.2 / TE v1.1 found `rb_rec_epa_per_target` had mean YoY r = **+0.027 across 2016-2025** — the lowest of any component in the entire system. RB per-target EPA is largely a function of QB choice + game state (RBs are checkdown receivers) rather than RB skill. At +0.18 weight, this was the worst noise-to-weight ratio in any shipped grader.
+
+Kept at +0.05 (not removed entirely) because (a) it still captures *some* outcome signal on the rare deep-target RB plays, (b) removing entirely would require schema changes to stat_components which are out of scope for a weight-only revision, and (c) at +0.05 the noise contribution to the composite is bounded.
+
+**Why YAC-OE absorbs the freed weight (not RYOE):** YAC-OE has YoY r = 0.205 — modest but real signal, ~7× the rec_EPA signal. Moving the weight here preserves the formula's 60/33/5 rush/receive/security shape; the alternative (moving to RYOE) would have shifted the formula to rushing-heavy and disadvantaged pass-catching backs (McCaffrey-archetype). Within-receiving rebalance is the more conservative choice.
+
+**Face-check:** 2024 top 5 essentially unchanged (Henry/Gibbs/Saquon/Bucky/Bijan). Biggest movers down: De'Von Achane (−5.5), Chase Brown (−5.4), James Cook (−4.3) — all receiving-EPA-heavy backs. Biggest movers up: Jonathan Taylor (+7.2), Josh Jacobs (+5.1), Joe Mixon (+3.9), James Conner (+3.2) — all YAC-OE-strong workhorses. Story is coherent: weight shifted from noise to signal, and players sort accordingly.
+
+**Audit methodology + tooling note:** This was the first revision shipped via the new `preview` + `regrade` workflow. End-to-end shipping time (preview → weights.py edit → web sync → regrade 10 seasons → face-check) was ~30 seconds. See `memory/reference_formula_iteration_workflow.md`. Audit data in `memory/project_cross_position_yoy_audit.md`.
