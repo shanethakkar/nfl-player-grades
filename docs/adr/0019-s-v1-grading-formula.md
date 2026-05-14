@@ -1,6 +1,6 @@
 # ADR-0019: Safety v1 Grading Formula
 
-**Status:** Accepted (v1.1 passer-rating revision — 2026-05-14)
+**Status:** Accepted (v1.2 target_rate cleanup — 2026-05-14)
 **Date:** 2026-05-13
 
 ## Context
@@ -26,21 +26,21 @@ problem as CB, resolved the same way: use PFR's per-player coverage stats).
 
 ## Decision
 
-### Metric Set (v1.1 passer-rating revision, 2026-05-14)
+### Metric Set (v1.2 target_rate cleanup, 2026-05-14)
 
 | Component | Weight | Direction | Rationale |
 |---|---|---|---|
 | `s_passer_rating_allowed` | **−0.30** | Lower = better | NFL passer rating allowed when targeted. Industry-standard coverage damage metric combining comp%, yards per attempt, TDs allowed, and INTs into one number. Replaces separate `s_comp_pct_allowed`, `s_yards_per_target_allowed`, and `s_int_rate` components. 2024 face-check confirmed Kerby Joseph (9 INTs, All-Pro) #1, McKinney #2, Derwin James #3, Brian Branch #5 — consensus elites all in top 5. |
 | `s_pbu_rate` | +0.12 | Higher = better | Pass breakups per target. Active play that breaks up the catch. INTs now captured inside passer rating allowed; this is PBU-only (down from v1 PBU+INT bundle at 0.15). |
-| `s_target_rate` | −0.08 | Lower = better | Targets per defensive snap. QB avoidance signal. Denominator is snaps_defense (not coverage snaps, unavailable in public data), so it conflates avoidance with scheme role. Modest weight reflects this limitation. |
+| `s_target_rate` | **−0.05** | Lower = better | Targets per defensive snap. QB avoidance signal. v1.2 audit confirmed near-zero validity (+r=−0.006 vs next-year Pro Bowl, sign disagrees with design weight). Lowered from −0.08 to a residual weight that keeps the skill-tree slot without overstating the signal. Denominator is snaps_defense (not coverage snaps, unavailable in public data), so it conflates avoidance with scheme role. |
 | `s_tackles_per_snap` | +0.07 | Higher = better | Combined tackles per snap. Run support and box coverage both require reliable tackling. |
 | `s_missed_tackle_rate` | −0.09 | Lower = better | Missed tackles / tackle attempts. Open-field technique matters most for safeties: a miss in space typically becomes a big gain. |
 | `s_backfield_disruption_per_snap` | +0.09 | Higher = better | (TFL + sacks) / snaps_defense. Measures pass-rush versatility from depth. Combined into one metric because TFL and sacks measure the same skill; combining doubles the event count and improves stability. |
 
 **Weight breakdown:**
-Coverage (67%): `|−0.30| + |0.12| + |−0.08|` = 0.50
-Tackling (33%): `|0.07| + |−0.09| + |0.09|` = 0.25
-Sum |abs| = 0.75
+Coverage (62%): `|−0.30| + |0.12| + |−0.05|` = 0.47
+Tackling (38%): `|0.07| + |−0.09| + |0.09|` = 0.25
+Sum |abs| = 0.72
 
 ### Why yards/target instead of YAC/rec?
 
@@ -134,6 +134,16 @@ data for missed tackles. The raw rate is accepted as-is.
   all seasons 2018–2025.
 
 ## Revision History
+
+**2026-05-14 (v1.2 target_rate cleanup):** Lowered `s_target_rate` from −0.08 to −0.05 after the exhaustive candidate audit ([audits/2026-05-14-exhaustive-s.md](../grading/audits/2026-05-14-exhaustive-s.md)). 16 candidates were scored against four criteria (YoY reliability, cross-sectional discrimination, independence, predictive validity vs next-year Pro Bowl). `s_target_rate` returned validity r=−0.006 (essentially zero) with the sign disagreeing with the design weight direction — the same finding as CB v1.2. At the qualified-S level, top safeties face similar target volumes; voters do not reward target avoidance. The weight is kept (skill-tree placement: avoidance is part of coverage), just reduced.
+
+**Why:** Methodology cleanup, not validity gain. Validity gate moved +0.253 → +0.255 (essentially unchanged), which matches the CB pattern: defensive-back validity is structurally capped by Pro Bowl voter noise (INT-driven), not by formula error. Both DB positions converged on the same target_rate finding.
+
+**No new components added.** All four PFR passer-rating sub-components (`s_comp_pct_allowed`, `s_yards_per_target_allowed`, `s_int_rate`, `s_td_rate_allowed`) were rejected for subsumption — they correlate +0.55 to +0.62 with `s_passer_rating_allowed`, which already mathematically incorporates them. The nflvs aggregate event rates (`s_tfl_per_snap`, `s_sack_per_snap`, `s_forced_fumble_per_snap`, `s_int_per_snap`) were rejected for rare-event noise or redundancy with `s_backfield_disruption_per_snap`.
+
+**Face-check 2024:** Top 5 unchanged (Kerby Joseph #1, Derwin James, Xavier McKinney, Brian Branch, Calen Bullock). Biggest movers small (max ±4.8).
+
+**Weight totals:** v1.1 sum |abs| = 0.75 → v1.2 sum |abs| = 0.72.
 
 **2026-05-14 (passer-rating revision):** Replaced three components — `s_comp_pct_allowed` (−0.13), `s_yards_per_target_allowed` (−0.08), and `s_int_rate` (+0.13) — with a single `s_passer_rating_allowed` component at weight −0.30. Reduced `s_pbu_rate` from +0.15 (PBU+INT bundle) to +0.12 (PBU-only) since INTs are now inside passer rating allowed. Tackling components unchanged. Required schema migration `0013_safety_tds_allowed.sql` to add `tds_allowed` to `pfr_def_coverage_s` (CB table already had it).
 

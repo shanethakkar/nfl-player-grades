@@ -534,10 +534,14 @@ S_COMPONENT_BACKFIELD_DISRUPTION: str = "s_backfield_disruption_per_snap"
 # with a single passer_rating_allowed component. INTs are now captured inside
 # passer rating (hammers it ~25 pts per INT), so PBU rate dropped from
 # pbu+int bundle (v1: 0.15) → PBU-only (v1.1: 0.12).
+# v1.2 (2026-05-14, exhaustive Safety audit): lowered s_target_rate from
+# -0.08 to -0.05. Same pattern as CB v1.2 — validity essentially zero
+# (-0.006) with disagreeing sign. At qualified-S level, top safeties face
+# similar target volumes; "avoidance" doesn't differentiate.
 S_V1_WEIGHTS: dict[str, float] = {
     S_COMPONENT_PASSER_RATING_ALLOWED: -0.30,
     S_COMPONENT_PBU_RATE:               0.12,
-    S_COMPONENT_TARGET_RATE:           -0.08,
+    S_COMPONENT_TARGET_RATE:           -0.05,
     S_COMPONENT_TACKLES_PER_SNAP:       0.07,
     S_COMPONENT_MISSED_TACKLE_RATE:    -0.09,
     S_COMPONENT_BACKFIELD_DISRUPTION:   0.09,

@@ -1279,6 +1279,147 @@ def run_cb_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Safety candidates
+# ---------------------------------------------------------------------------
+
+def s_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full Safety candidate set for the exhaustive audit.
+
+    Same pattern as CB. Safety formula has 6 components vs CB's 4
+    (tackles, missed_tackle, backfield_disruption are S-specific).
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified S IDs + snap counts
+    s_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name,
+               ps.snaps_defense
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        LEFT JOIN (
+            SELECT DISTINCT ON (player_id, season) player_id, season, snaps_defense
+            FROM player_seasons
+            ORDER BY player_id, season, snaps_defense DESC NULLS LAST
+        ) ps ON ps.player_id = sg.player_id AND ps.season = sg.season
+        WHERE sg.position = 'S' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        s_ids = pd.read_sql(s_sql, conn)
+    seasons = sorted(s_ids["season"].unique())
+
+    # 2. Currently-shipped components
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'S'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 's_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. PFR def_advstats — same pull as CB
+    pfr_agg = _pfr_def_aggregated(seasons, position_filter=frozenset({"S"}))
+    if not pfr_agg.empty:
+        s_names = s_ids[["player_id", "season", "full_name", "snaps_defense"]].copy()
+        s_names["name_norm"] = s_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_agg["name_norm"] = pfr_agg["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged = pfr_agg.merge(s_names, on=["name_norm", "season"], how="inner")
+        merged["comp_pct_allowed"] = merged["completions"] / merged["targets"].replace(0, np.nan)
+        merged["yards_per_target"] = merged["yards"] / merged["targets"].replace(0, np.nan)
+        merged["int_rate"] = merged["ints"] / merged["targets"].replace(0, np.nan)
+        merged["td_rate_allowed"] = merged["tds"] / merged["targets"].replace(0, np.nan)
+        merged["adot_allowed"] = merged["adot"]
+        merged["yac_per_target_allowed"] = merged["yac"] / merged["targets"].replace(0, np.nan)
+        for col, display, denom_col, min_n in [
+            ("comp_pct_allowed", "s_comp_pct_allowed", "targets", 15),
+            ("yards_per_target", "s_yards_per_target_allowed", "targets", 15),
+            ("int_rate", "s_int_rate", "targets", 15),
+            ("td_rate_allowed", "s_td_rate_allowed", "targets", 15),
+            ("adot_allowed", "s_adot_allowed", "targets", 15),
+            ("yac_per_target_allowed", "s_yac_per_target_allowed", "targets", 15),
+        ]:
+            mask = merged[denom_col].fillna(0) >= min_n
+            panel = merged.loc[mask, ["player_id", "season", col]].rename(
+                columns={col: "value"}
+            )
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    # 4. nflvs aggregates: forced fumbles + interceptions per snap (defensive
+    # playmaking distinct from coverage)
+    nflvs_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        ps = ps[ps["position"] == "S"][[
+            "player_id",
+            "def_fumbles_forced",
+            "def_interceptions",
+            "def_tackles_for_loss",
+            "def_sacks",
+        ]].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        agg = ps.groupby("gsis_id", as_index=False).sum(numeric_only=True)
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(s_ids, on=["gsis_id", "season"], how="inner")
+        nflvs["forced_fumble_per_snap"] = nflvs["def_fumbles_forced"] / nflvs["snaps_defense"].replace(0, np.nan)
+        nflvs["int_per_snap"] = nflvs["def_interceptions"] / nflvs["snaps_defense"].replace(0, np.nan)
+        nflvs["tfl_per_snap"] = nflvs["def_tackles_for_loss"] / nflvs["snaps_defense"].replace(0, np.nan)
+        nflvs["sack_per_snap"] = nflvs["def_sacks"] / nflvs["snaps_defense"].replace(0, np.nan)
+        for col, display in [
+            ("forced_fumble_per_snap", "s_forced_fumble_per_snap"),
+            ("int_per_snap", "s_int_per_snap"),
+            ("tfl_per_snap", "s_tfl_per_snap"),
+            ("sack_per_snap", "s_sack_per_snap"),
+        ]:
+            mask = nflvs["snaps_defense"].fillna(0) >= 400
+            panel = nflvs.loc[mask, ["player_id", "season", col]].rename(
+                columns={col: "value"}
+            )
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    return candidates
+
+
+def run_s_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full Safety exhaustive audit."""
+    eng = engine or get_engine()
+    cands = s_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "S",
+            season_pairs=_DEFENSIVE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1293,4 +1434,6 @@ __all__ = [
     "run_te_audit",
     "cb_candidates",
     "run_cb_audit",
+    "s_candidates",
+    "run_s_audit",
 ]

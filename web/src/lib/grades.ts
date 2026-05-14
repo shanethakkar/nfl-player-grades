@@ -623,7 +623,7 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   cb_pbu_rate:                        0.12,
   s_passer_rating_allowed:           -0.30,
   s_pbu_rate:                         0.12,
-  s_target_rate:                     -0.08,
+  s_target_rate:                     -0.05,
   s_tackles_per_snap:                 0.07,
   s_missed_tackle_rate:              -0.09,
   s_backfield_disruption_per_snap:    0.09,
