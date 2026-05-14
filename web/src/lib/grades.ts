@@ -592,7 +592,7 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   qb_success_rate:                   0.10,
   rb_ryoe_per_attempt:               0.28,
   rb_rush_epa_per_attempt:           0.18,
-  rb_rush_success_rate:              0.14,
+  rb_rush_success_rate:              0.05,
   rb_rec_epa_per_target:             0.05,
   rb_yac_over_expected_per_rec:      0.28,
   rb_fumble_rate:                   -0.05,

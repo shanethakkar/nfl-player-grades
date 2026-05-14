@@ -1,4 +1,12 @@
-# RB v1.1 — Audit + Implementation (2026-05-14)
+# RB v1.1 → v1.3 — Audit + Implementation (2026-05-14)
+
+> **v1.3 ship (2026-05-14, exhaustive audit):** Lowered `rb_rush_success_rate` 0.14 → 0.05 — same EPA-vs-success-rate redundancy as QB and WR. Validity gate +0.243 → +0.247. Top 4 2024 unchanged.
+>
+> **v1.4 queued (Path B schema change):** Exhaustive audit found `rb_pfr_yards_after_contact` as the **highest-validity candidate of any audit so far** (+0.192, higher than any current component). Captures post-contact rushing skill not in the formula. Requires new PFR rush ingest module. Tracked in `pending.md`. Full audit at [`../audits/2026-05-14-exhaustive-rb.md`](../audits/2026-05-14-exhaustive-rb.md).
+
+---
+
+
 
 Status: **SHIPPED**. Pruning revision — removed one noise component, redistributed weight. Methodology applied: [../audit-playbook.md](../audit-playbook.md) (skill-tree + correlation + YoY noise check + face-check).
 

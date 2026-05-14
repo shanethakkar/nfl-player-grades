@@ -414,12 +414,14 @@ def audit_candidates(position: str) -> None:
     from .grading.exhaustive_audit import (
         format_results_table,
         run_qb_audit,
+        run_rb_audit,
         run_wr_audit,
     )
 
     pos = position.upper()
     runners = {
         "QB": run_qb_audit,
+        "RB": run_rb_audit,
         "WR": run_wr_audit,
     }
     if pos not in runners:

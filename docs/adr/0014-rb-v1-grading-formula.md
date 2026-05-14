@@ -1,6 +1,6 @@
 # 0014 - RB v1 grading formula
 
-- **Status**: Accepted (v1.2 revision — 2026-05-14)
+- **Status**: Accepted (v1.3 revision — 2026-05-14)
 - **Date**: 2026-04-24
 - **Updated**: 2026-05-14 (v1.1 catch_pct removed, v1.2 rec_EPA weight lowered — see "Revision History")
 - **Supersedes**: None
@@ -361,3 +361,23 @@ Kept at +0.05 (not removed entirely) because (a) it still captures *some* outcom
 **Face-check:** 2024 top 5 essentially unchanged (Henry/Gibbs/Saquon/Bucky/Bijan). Biggest movers down: De'Von Achane (−5.5), Chase Brown (−5.4), James Cook (−4.3) — all receiving-EPA-heavy backs. Biggest movers up: Jonathan Taylor (+7.2), Josh Jacobs (+5.1), Joe Mixon (+3.9), James Conner (+3.2) — all YAC-OE-strong workhorses. Story is coherent: weight shifted from noise to signal, and players sort accordingly.
 
 **Audit methodology + tooling note:** This was the first revision shipped via the new `preview` + `regrade` workflow. End-to-end shipping time (preview → weights.py edit → web sync → regrade 10 seasons → face-check) was ~30 seconds. See `memory/reference_formula_iteration_workflow.md`. Audit data in `memory/project_cross_position_yoy_audit.md`.
+
+### v1.3 (2026-05-14) — `rush_success_rate` lowered (exhaustive audit)
+
+**Lowered `rb_rush_success_rate` from +0.14 → +0.05.** Sum |w| 0.98 → 0.89. Combiner renormalizes — surviving components gain a few percentage points of effective share.
+
+**Why:** RB exhaustive candidate audit ([`docs/grading/audits/2026-05-14-exhaustive-rb.md`](../grading/audits/2026-05-14-exhaustive-rb.md)) scored 19 candidates. Two key findings:
+
+1. **Same EPA-vs-success-rate redundancy as QB and WR.** `rb_rush_success_rate` correlated +0.713 with `rb_rush_epa_per_attempt` (structurally — success_rate ≈ fraction of plays with positive EPA). Validity (+0.079) was the **lowest of any current RB component**. Combination of high redundancy + low validity → reduce weight.
+
+2. **`rb_pfr_yards_after_contact` emerged as the strongest candidate in any audit so far.** Validity +0.192 — higher than ANY current component (max was RYOE at +0.130). Modest YoY (+0.313), moderate overlap with RYOE (+0.596). Real RB skill (post-contact yardage / breaking tackles / falling forward) not in the current formula.
+
+The success_rate reduction shipped immediately (pure weight tweak via Path A workflow). **The yards_after_contact addition is queued as v1.4** because it requires a new ingest module for `pfr_advstats` rush data (a Path B schema change). Tracked in `docs/grading/pending.md`.
+
+**Validity gate:** RB composite vs next-year Pro Bowl correlation **+0.243 → +0.247** post-regrade. Modest improvement (smaller than QB/WR's improvements because v1.2's rec_EPA reduction already partially mitigated the redundancy). Other positions unchanged.
+
+**Face-check 2024:** Top 4 unchanged (Henry, Gibbs, Saquon, Bucky Irving). Same explosive-vs-consistent reshuffling pattern as QB v1.1 and WR v1.3: Joe Mixon +4.17 and Najee Harris +2.90 (explosive) rose; Bijan Robinson −3.29, Montgomery −2.97, Allgeier −3.16 (consistent operators) dropped.
+
+**What the audit confirmed about RB v1.2 decisions:** `rb_rec_epa_per_target` had YoY r = +0.010 in this audit — even worse than the +0.027 we measured in the cross-position YoY audit that drove v1.2's reduction. The v1.2 decision to lower this from 0.18 → 0.05 was validated.
+
+**What the audit confirmed about NGS rushing:** all 5 NGS rushing candidates (efficiency, time_to_los, rush_pct_over_expected, pct_eight_defenders, ryoe_per_att) rejected. Either duplicate of RYOE (`ngs_ryoe_per_att` at +0.961), inverse of RYOE (`ngs_efficiency` at −0.653), or style markers with zero validity. Confirmed all the v1.1 research findings using the new validity criterion.

@@ -47,25 +47,31 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 
 
 # ---------------------------------------------------------------------------
-# RB v1.2 (ADR-0014, revised 2026-05-14).
+# RB v1.3 (ADR-0014, revised 2026-05-14).
 # ---------------------------------------------------------------------------
-# v1.1 (earlier 2026-05-14): removed rb_catch_pct (+0.05). YoY r oscillates
-# around 0 (-0.015, +0.035, +0.120, -0.322, mean ≈ -0.05 across 2020-2024) —
-# noise at RB sample sizes. Also correlates 0.61 with rb_rush_success_rate.
-# Weight redistributed: rb_yac_over_expected_per_rec bumped from 0.12 → 0.15.
+# v1.1 (earlier 2026-05-14): removed rb_catch_pct (noise + redundant).
+#   Weight redistributed: rb_yac_over_expected_per_rec 0.12 → 0.15.
 #
-# v1.2 (cross-position audit 2026-05-14): rebalanced within receiving.
-# rb_rec_epa_per_target lowered from +0.18 → +0.05. Mean YoY r = 0.027 across
-# 2016-2025 (worst signal in the entire audit). RB per-target EPA is largely
-# driven by QB choice + game state — not RB skill. Freed +0.13 shifted to
-# rb_yac_over_expected_per_rec (+0.15 → +0.28), the better-signal receiving
-# metric (YoY r = 0.205). Receiving share of the formula stays at 33%
-# (now 0.05 EPA + 0.28 YAC-OE), shape unchanged.
+# v1.2 (cross-position YoY audit): lowered rb_rec_epa_per_target +0.18 →
+#   +0.05. Mean YoY r = 0.027 (worst signal in the entire grader system).
+#   Freed weight shifted to rb_yac_over_expected_per_rec (+0.15 → +0.28).
 #
-# Audit also rejected NGS rushing candidates (efficiency, rush_pct_over_
-# expected, avg_time_to_los, percent_eight_defenders) — all redundant
-# with RYOE or non-skill usage markers. See project_rb_v1_1_research.md
-# and project_cross_position_yoy_audit.md.
+# v1.3 (exhaustive RB audit 2026-05-14): lowered rb_rush_success_rate
+#   from +0.14 → +0.05. The exhaustive audit confirmed the same EPA-vs-
+#   success-rate redundancy pattern seen at QB and WR: max |r| = +0.713
+#   with rb_rush_epa_per_attempt, and rush_success_rate had the LOWEST
+#   validity of any current component (+0.079 vs next-year Pro Bowl).
+#   Sum |w| drops 0.98 → 0.89; combiner renormalizes.
+#
+# KNOWN GAP (queued for follow-up): exhaustive audit identified
+# `rb_pfr_yards_after_contact` as the highest-validity RB candidate
+# (+0.192, higher than any current component) with modest YoY (+0.313)
+# and only moderate overlap with RYOE (+0.596). Real post-contact RB
+# skill not in formula. Requires a new ingest module for pfr_advstats
+# rush (path B schema change). Tracked in pending.md.
+#
+# See docs/grading/audits/2026-05-14-exhaustive-rb.md for the full audit
+# log (19 candidates scored).
 
 # Component names — strings written to stat_components.component_name.
 RB_COMPONENT_RYOE_PER_ATTEMPT: str = "rb_ryoe_per_attempt"
@@ -79,7 +85,7 @@ RB_COMPONENT_FUMBLE_RATE: str = "rb_fumble_rate"
 RB_V1_WEIGHTS: dict[str, float] = {
     RB_COMPONENT_RYOE_PER_ATTEMPT: 0.28,
     RB_COMPONENT_RUSH_EPA_PER_ATTEMPT: 0.18,
-    RB_COMPONENT_RUSH_SUCCESS_RATE: 0.14,
+    RB_COMPONENT_RUSH_SUCCESS_RATE: 0.05,
     RB_COMPONENT_REC_EPA_PER_TARGET: 0.05,
     RB_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.28,
     RB_COMPONENT_FUMBLE_RATE: -0.05,
