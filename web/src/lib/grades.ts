@@ -511,6 +511,57 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Longest field goal made on the season — power capability. Context only — the audit found this signal is subsumed by FGOE / att.",
     sampleNoun: "FG attempt",
   },
+
+  // --- P v1 (ADR-0024) ---
+  p_net_avg: {
+    label: "Net avg",
+    suffix: " yd",
+    formatValue: (v) => v.toFixed(1),
+    description:
+      "Net yards per punt (gross yards minus return yards). The primary punter metric — captures both leg strength and return prevention. Best YoY (r ≈ +0.36) and second-best Pro Bowl validity in the audit. Sole 'distance' signal in the formula.",
+    sampleNoun: "punt",
+  },
+  p_inside_20_rate: {
+    label: "Inside 20%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Share of punts pinned inside the opponent's 20-yard line. Highest Pro Bowl validity in the audit (r ≈ +0.19). Captures placement skill — orthogonal to net yardage (a 40-yard punt downed at the 5 looks identical to a 40-yard punt downed at the 35 by net average alone).",
+    sampleNoun: "punt",
+  },
+  p_blocked_rate: {
+    label: "Block%",
+    suffix: "%",
+    formatValue: pctFraction(2),
+    description:
+      "Punts blocked per attempt. Lower is better. Small weight (-0.05) in the formula because blocks are mostly snap/protection failures rather than punter skill (audit YoY r ≈ -0.05, near-zero), but conceptually a punter owns the play and a blocked punt is catastrophic — small penalty bounds the cost.",
+    sampleNoun: "punt",
+  },
+  // P context columns (displayed but not scored)
+  p_gross_avg: {
+    label: "Gross avg",
+    suffix: " yd",
+    formatValue: (v) => v.toFixed(1),
+    description:
+      "Gross yards per punt (raw kick distance, ignores returns). CONTEXT ONLY — net average is the formula component because it accounts for return yardage allowed.",
+    sampleNoun: "punt",
+  },
+  p_long_punt: {
+    label: "Long",
+    suffix: " yd",
+    formatValue: (v) => v.toFixed(0),
+    description:
+      "Longest punt of the season. CONTEXT ONLY — power proxy with weak audit signal (YoY r ≈ +0.08, validity r ≈ +0.08).",
+    sampleNoun: "punt",
+  },
+  p_touchback_rate: {
+    label: "TB%",
+    suffix: "%",
+    formatValue: pctFraction(1),
+    description:
+      "Share of punts that became touchbacks (opponent gets ball at the 20). Lower is better. CONTEXT ONLY — touchback avoidance is implicitly captured by net average (touchbacks cap net at LOS-to-opponent's-20).",
+    sampleNoun: "punt",
+  },
 };
 
 // TE role labels stored on season_grades.role (see ADR-0016). Kept here so
@@ -705,6 +756,9 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   lb_tackle_rate:                     0.13,
   lb_pressure_rate:                   0.10,
   k_fg_over_expected_per_att:         1.00,
+  p_net_avg:                          0.55,
+  p_inside_20_rate:                   0.30,
+  p_blocked_rate:                    -0.05,
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {

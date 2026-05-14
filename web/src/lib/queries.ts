@@ -576,6 +576,62 @@ async function _getLeaderboard(
     return rows.map(coerceLeaderboardEntry);
   }
 
+  if (position === "P") {
+    // P v1 (ADR-0024): formula = net_avg + inside_20_rate + blocked_rate.
+    // Context columns (gross_avg, long, touchback_rate) pulled from
+    // punter_stats — displayed but NOT scored.
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        sg.player_id,
+        p.full_name,
+        sg.position,
+        sg.season,
+        sg.composite_grade,
+        sg.composite_z,
+        sg.percentile,
+        sg.qualified,
+        sg.confidence,
+        sg.data_tier,
+        sg.role,
+        t.abbr                        AS team_abbr,
+        sc_net.sample_size            AS n_punts,
+        sc_net.raw_value              AS p_net_avg,
+        sc_i20.raw_value              AS p_inside_20_rate,
+        sc_blk.raw_value              AS p_blocked_rate,
+        -- Context columns (not in formula)
+        CASE WHEN COALESCE(ps.punts, 0) > 0
+             THEN ps.gross_yards::float / ps.punts
+             ELSE NULL END            AS p_gross_avg,
+        ps.long_punt                  AS p_long_punt,
+        CASE WHEN COALESCE(ps.punts, 0) > 0
+             THEN ps.touchbacks::float / ps.punts
+             ELSE NULL END            AS p_touchback_rate
+      FROM season_grades sg
+      JOIN players p ON p.player_id = sg.player_id
+      LEFT JOIN player_seasons psn
+        ON psn.player_id = sg.player_id AND psn.season = sg.season
+      LEFT JOIN teams t ON t.team_id = psn.team_id
+      LEFT JOIN stat_components sc_net
+        ON sc_net.player_id = sg.player_id
+       AND sc_net.season = sg.season
+       AND sc_net.component_name = 'p_net_avg'
+      LEFT JOIN stat_components sc_i20
+        ON sc_i20.player_id = sg.player_id
+       AND sc_i20.season = sg.season
+       AND sc_i20.component_name = 'p_inside_20_rate'
+      LEFT JOIN stat_components sc_blk
+        ON sc_blk.player_id = sg.player_id
+       AND sc_blk.season = sg.season
+       AND sc_blk.component_name = 'p_blocked_rate'
+      LEFT JOIN punter_stats ps
+        ON ps.player_id = sg.player_id AND ps.season = sg.season
+      WHERE sg.season = ${season}
+        AND sg.position = 'P'
+      ORDER BY sg.qualified DESC, sg.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
   // Any other position — return the minimum shape.
   const rows = await sql<LeaderboardEntry[]>`
     SELECT
@@ -1143,5 +1199,13 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     k_fg_pct_40_plus: coerceNullableNumber(row.k_fg_pct_40_plus),
     k_pat_pct: coerceNullableNumber(row.k_pat_pct),
     k_fg_long: coerceNullableNumber(row.k_fg_long),
+    // P-only
+    n_punts: coerceNullableInt(row.n_punts),
+    p_net_avg: coerceNullableNumber(row.p_net_avg),
+    p_inside_20_rate: coerceNullableNumber(row.p_inside_20_rate),
+    p_blocked_rate: coerceNullableNumber(row.p_blocked_rate),
+    p_gross_avg: coerceNullableNumber(row.p_gross_avg),
+    p_long_punt: coerceNullableNumber(row.p_long_punt),
+    p_touchback_rate: coerceNullableNumber(row.p_touchback_rate),
   };
 }

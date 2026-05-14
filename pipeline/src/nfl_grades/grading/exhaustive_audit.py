@@ -2033,6 +2033,93 @@ def run_k_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# P (Punter) candidates — audit-first design, FGOE lesson applied
+# ---------------------------------------------------------------------------
+
+_P_SEASONS = _K_SEASONS  # same range (2016+)
+
+
+def p_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full P candidate set for the v1 audit.
+
+    Per the K v1.1 lesson: include the over-expected variant FROM THE START
+    (epa_per_punt) alongside raw rate metrics. EPA-per-punt naturally captures
+    distance, placement, returns allowed, and blocks — the punter analog of
+    FGOE.
+    """
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    sql = text(
+        """
+        SELECT player_id, season,
+               punts, gross_yards, return_yards, net_yards,
+               inside_20, touchbacks, blocked, fair_catches, out_of_bounds, downed,
+               epa_total, long_punt
+        FROM punter_stats
+        """
+    )
+    with engine.connect() as conn:
+        raw = pd.read_sql(sql, conn)
+
+    # Qualified threshold for audit: >= 30 punts (real workload — most
+    # starters have 50-80 punts/season).
+    raw = raw[raw["punts"].fillna(0) >= 30].copy()
+    if raw.empty:
+        return candidates
+
+    punts = raw["punts"].astype(float).replace(0, np.nan)
+    raw["gross_avg"] = raw["gross_yards"].astype(float) / punts
+    raw["net_avg"] = raw["net_yards"].astype(float) / punts
+    raw["inside_20_rate"] = raw["inside_20"].astype(float) / punts
+    raw["touchback_rate"] = raw["touchbacks"].astype(float) / punts
+    raw["blocked_rate"] = raw["blocked"].astype(float) / punts
+    raw["return_yards_per_punt"] = raw["return_yards"].astype(float) / punts
+    raw["fair_catch_rate"] = raw["fair_catches"].astype(float) / punts
+    raw["i20_minus_tb_per_punt"] = (
+        raw["inside_20"].astype(float) - raw["touchbacks"].astype(float)
+    ) / punts
+    # Over-expected metric (the FGOE analog for punters):
+    raw["epa_per_punt"] = raw["epa_total"].astype(float) / punts
+
+    for col, name, min_n in [
+        ("gross_avg", "p_gross_avg", 30),
+        ("net_avg", "p_net_avg", 30),
+        ("inside_20_rate", "p_inside_20_rate", 30),
+        ("touchback_rate", "p_touchback_rate", 30),
+        ("blocked_rate", "p_blocked_rate", 30),
+        ("return_yards_per_punt", "p_return_yards_per_punt", 30),
+        ("fair_catch_rate", "p_fair_catch_rate", 30),
+        ("i20_minus_tb_per_punt", "p_i20_minus_tb_per_punt", 30),
+        ("long_punt", "p_long_punt", 30),
+        # The principled over-expected metric — like FGOE/att for K.
+        ("epa_per_punt", "p_epa_per_punt", 30),
+    ]:
+        mask = raw["punts"].fillna(0) >= min_n
+        panel = raw.loc[mask, ["player_id", "season", col]].rename(
+            columns={col: "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append((name, panel, False))
+
+    return candidates
+
+
+def run_p_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the P v1 audit (no existing components — pure candidate screening)."""
+    eng = engine or get_engine()
+    cands = p_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "P",
+            season_pairs=_P_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -2057,4 +2144,6 @@ __all__ = [
     "run_lb_audit",
     "k_candidates",
     "run_k_audit",
+    "p_candidates",
+    "run_p_audit",
 ]

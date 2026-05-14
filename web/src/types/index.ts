@@ -72,6 +72,8 @@ export type DepthChartEntry = DepthChartsRow;
  *        lb_pbu_rate, lb_tackle_rate, lb_pressure_rate (n_snaps reused)
  *   K   → k_fg_pct_40_plus, k_fg_pct, k_pat_pct, k_fg_long, n_fg_att
  *        (kickers have no snap count — FG attempts are the qualifying sample)
+ *   P   → p_net_avg, p_inside_20_rate, p_blocked_rate (formula);
+ *        p_gross_avg, p_long_punt, p_touchback_rate (context); n_punts
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -157,6 +159,17 @@ export type LeaderboardEntry = {
   k_fg_pct_40_plus: number | null;
   k_pat_pct: number | null;
   k_fg_long: number | null;
+  // --- P columns ---
+  // n_punts is the qualifying sample for punters.
+  // p_net_avg + p_inside_20_rate + p_blocked_rate are FORMULA components.
+  // p_gross_avg, p_long_punt, p_touchback_rate are CONTEXT (displayed, not scored).
+  n_punts: number | null;
+  p_net_avg: number | null;
+  p_inside_20_rate: number | null;
+  p_blocked_rate: number | null;
+  p_gross_avg: number | null;
+  p_long_punt: number | null;
+  p_touchback_rate: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

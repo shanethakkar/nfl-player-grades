@@ -759,6 +759,71 @@ const K_COLUMNS: SortableColumn[] = [
   },
 ];
 
+const P_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_punts",
+    header: "Punts",
+    hoverLabel: "Qualifying punts — sample size (punters have no snap count)",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_punts,
+    render: (e) => fmtInt(e.n_punts),
+  },
+  {
+    key: "p_net_avg",
+    header: "Net avg",
+    hoverLabel: "Net yards per punt (gross minus return). Primary punter signal — best YoY in the audit. Captures distance + return prevention.",
+    defaultDir: "desc",
+    sortValue: (e) => e.p_net_avg,
+    render: (e) => (e.p_net_avg == null ? "—" : e.p_net_avg.toFixed(1)),
+    group: "formula",
+  },
+  {
+    key: "p_inside_20_rate",
+    header: "Inside 20%",
+    hoverLabel: "Share of punts pinned inside opp 20-yd line. Highest validity in the audit. Placement skill — orthogonal to net avg.",
+    defaultDir: "desc",
+    sortValue: (e) => e.p_inside_20_rate,
+    render: (e) => fmtPct(e.p_inside_20_rate, 1),
+    group: "formula",
+  },
+  {
+    key: "p_blocked_rate",
+    header: "Block%",
+    hoverLabel: "Punts blocked per attempt. Lower is better. Small penalty (-0.05) — blocks are mostly snap/protection failures but a punter conceptually owns the play.",
+    defaultDir: "asc",
+    sortValue: (e) => e.p_blocked_rate,
+    render: (e) => fmtPct(e.p_blocked_rate, 2),
+    group: "formula",
+  },
+  {
+    key: "p_gross_avg",
+    header: "Gross avg",
+    hoverLabel: "Gross yards per punt (raw kick distance, ignores returns). CONTEXT ONLY — not in formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.p_gross_avg,
+    render: (e) => (e.p_gross_avg == null ? "—" : e.p_gross_avg.toFixed(1)),
+    group: "context",
+  },
+  {
+    key: "p_long_punt",
+    header: "Long",
+    hoverLabel: "Longest punt of the season. CONTEXT ONLY — power proxy with weak audit signal.",
+    defaultDir: "desc",
+    sortValue: (e) => e.p_long_punt,
+    render: (e) => (e.p_long_punt == null ? "—" : e.p_long_punt.toFixed(0)),
+    group: "context",
+  },
+  {
+    key: "p_touchback_rate",
+    header: "TB%",
+    hoverLabel: "Share of punts that became touchbacks (opp ball at 20). Lower is better. CONTEXT ONLY — touchback avoidance is implicitly captured by net avg.",
+    defaultDir: "asc",
+    sortValue: (e) => e.p_touchback_rate,
+    render: (e) => fmtPct(e.p_touchback_rate, 1),
+    group: "context",
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB:   QB_COLUMNS,
   RB:   RB_COLUMNS,
@@ -770,6 +835,7 @@ const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   iDL:  IDL_COLUMNS,
   LB:   LB_COLUMNS,
   K:    K_COLUMNS,
+  P:    P_COLUMNS,
 };
 
 function Row({

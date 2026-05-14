@@ -53,7 +53,7 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop, edgeTop, idlTop, lbTop, kTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, cbTop, sTop, edgeTop, idlTop, lbTop, kTop, pTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
@@ -65,6 +65,7 @@ export default async function MethodologyPage() {
     getCurrentTopAtPosition("iDL"),
     getCurrentTopAtPosition("LB"),
     getCurrentTopAtPosition("K"),
+    getCurrentTopAtPosition("P"),
   ]);
 
   const positions: PositionCardData[] = [
@@ -131,6 +132,13 @@ export default async function MethodologyPage() {
       components: positionComponents("K"),
       availabilityNote: "Data available from 2016. Scope is placekicking only (FG + XP) — kickoffs intentionally excluded because the 2024 dynamic-kickoff rule change broke continuity of touchback/return rates. Qualified threshold is 20 FG attempts. Single-component formula: FG Over Expected per attempt. Each kick is compared to the league baseline make rate for its distance (computed from 2016-2024 data: 40-49 yd ≈ 80%, 50-59 ≈ 69%, 60+ ≈ 40%, XP ≈ 94%). A 60-yard make adds +0.60; an XP miss subtracts -0.94. This is risk-asymmetric by construction — a kicker isn't punished for attempting (and sometimes missing) long FGs, but IS heavily penalized for missing easy ones. v1 used raw make-rate metrics which actively punished risk-takers like Brandon Aubrey; v1.1 corrected that. The leaderboard shows FGOE/att (the scored metric) plus context columns (raw FG%, XP%, longest FG) for reader recognition — only FGOE/att counts toward the grade.",
       top: kTop,
+    },
+    {
+      position: "P",
+      headline: "Punter",
+      components: positionComponents("P"),
+      availabilityNote: "Data available from 2016. Aggregated directly from play-by-play (nflverse player_stats doesn't carry detailed punting columns). Qualified threshold is 40 punts. Composite of net average (primary, captures distance + return prevention), inside-20 placement rate (orthogonal placement skill — best Pro Bowl validity in the audit), and a small block-rate penalty. The over-expected approach (EPA per punt) was tested as an alternative single-component formula but did NOT dominate net average on YoY or validity — the K v1.1 lesson didn't fully generalize because punt EPA mixes punter skill with opponent quality and field position. The leaderboard shows FORMULA columns (net avg, Inside 20%, Block%) plus CONTEXT columns (Gross avg, Long, TB%) for reader recognition. Punter Pro Bowl voting is the noisiest of any graded position (only 2 picks per year out of ~30 qualified) — expect the lowest validity baseline.",
+      top: pTop,
     },
   ];
 
@@ -238,7 +246,7 @@ const TIER_ACCENT: Record<GradeTierId, { text: string; borderL: string }> = {
 // ---------------------------------------------------------------------------
 
 type PositionCardData = {
-  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S" | "EDGE" | "iDL" | "LB" | "K";
+  position: "QB" | "RB" | "WR" | "TE" | "CB" | "S" | "EDGE" | "iDL" | "LB" | "K" | "P";
   headline: string;
   components: ComponentEntry[];
   /** When true, renders a note about the blocking-TE path. */

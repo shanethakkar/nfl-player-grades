@@ -50,7 +50,7 @@ export async function generateMetadata({
 }
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first.
-const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB", "K"];
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB", "K", "P"];
 const DEFAULT_POSITION = "QB";
 
 /** Short phrase following "{N} qualified starters · composite of ..." */
@@ -65,6 +65,7 @@ const COMPOSITE_BLURB: Record<string, string> = {
   iDL:  "composite of run-stop TFL rate, pressure rate, sack rate, and missed tackle rate (data 2018+)",
   LB:   "composite of TFL rate, coverage damage (yds/tgt), tackle volume + technique, and coverage playmaking (PBU/INT) (data 2018+)",
   K:    "single-component grade: Field Goal Over Expected per attempt — each kick compared to league baseline make rate for its distance, XPs folded in. Rewards risk-taking, penalizes easy misses (data 2016+)",
+  P:    "composite of net average (distance + return prevention), inside-20 placement rate, and a small block penalty (data 2016+)",
 };
 
 /** Heading + threshold text used for the below-qualification section. */
@@ -119,6 +120,11 @@ const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = 
     threshold:
       "Fewer than 20 FG attempts. Grades still computed on the same 0-100 scale but treat them as noisy (rookies, mid-season callups, kickers in heavy committees).",
   },
+  P: {
+    heading: "Low-volume punters",
+    threshold:
+      "Fewer than 40 punts. Grades still computed on the same 0-100 scale but treat them as noisy (rookies, mid-season callups, punters who lost their job).",
+  },
 };
 
 /** Noun used in the "{N} qualified X" header under the title. */
@@ -133,6 +139,7 @@ const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
   iDL:  { singular: "qualified interior lineman", plural: "qualified interior linemen" },
   LB:   { singular: "qualified linebacker",       plural: "qualified linebackers" },
   K:    { singular: "qualified kicker",           plural: "qualified kickers" },
+  P:    { singular: "qualified punter",           plural: "qualified punters" },
 };
 
 export default async function HomePage({ searchParams }: Props) {
