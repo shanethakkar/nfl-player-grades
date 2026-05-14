@@ -45,6 +45,10 @@ data/
 *.feather
 !pipeline/tests/fixtures/*.csv
 !pipeline/tests/fixtures/*.parquet
+# Curated reference data — small hand-maintained datasets that must be in
+# repo for reproducibility (Pro Bowl rosters from Wikipedia, etc.)
+!pipeline/data/
+!pipeline/data/*.csv
 
 # Pipeline parquet cache + manifest + one-off backfill logs.
 # Per ADR-0009, raw nflverse pulls live on disk here (not in git).

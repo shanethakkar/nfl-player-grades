@@ -71,6 +71,24 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
 ---
 
+## Component Overlap (intentional)
+
+The three positive components (pressure_rate, sack_rate, tfl_rate) correlate strongly by design. Confirmed empirically by the 2026-05-14 pairwise correlation audit (qualified EDGE-seasons pooled 2018-2025, z-score correlation):
+
+| Pair | Pearson r |
+|---|---:|
+| pressure_rate ↔ sack_rate | +0.728 |
+| sack_rate ↔ tfl_rate | +0.778 |
+| pressure_rate ↔ tfl_rate | +0.599 |
+
+The 0.80 of total positive weight (pressure 0.35 + sack 0.30 + tfl 0.15) carries roughly 0.50–0.60 worth of *independent* signal once redundancy is netted out. **This is intentional, not a flaw.** Sack rate is layered on pressure rate as a premium-event multiplier (the Hendrickson example in "Sack rate separate" above); tfl_rate adds run-stop credit that pure pass-rush weighting would miss. Edge rushers who make plays in the backfield tend to do all three — they're variants of the same underlying skill, weighted separately so each play-type contributes.
+
+This block is documented so a future audit doesn't try to "fix" the redundancy by dropping one of the components. The correlation is a design feature.
+
+See [../grading/audits/2026-05-14-correlation.md](../grading/audits/2026-05-14-correlation.md) for the cross-position context (iDL has the same pattern; CB/S/LB do not).
+
+---
+
 ## Known Limitations
 
 **OLB gap (3-4 schemes):** ~~Original v1 limitation~~ — **closed in v1.1 (2026-05-14)**. The EDGE grader now reads from both `pfr_def_pass_rush` (EDGE-tagged) and `pfr_def_lb` (LB-tagged pass-rush OLBs with ≥25 pressures and target rate <3.5%). See Revision History.

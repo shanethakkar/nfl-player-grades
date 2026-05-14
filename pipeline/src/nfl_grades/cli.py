@@ -352,6 +352,79 @@ def regrade(season: int, position: str) -> None:
     click.echo(f"position={position} season={season} season_grades_updated={n}")
 
 
+@main.command()
+@click.option("--diagnose", is_flag=True, help="Print Pro Bowl name-match diagnostics.")
+def validity(diagnose: bool) -> None:
+    """Run the downstream predictive validity check for all positions.
+
+    Computes the Pearson correlation between this-year composite grade
+    and next-year Pro Bowl selection (0/1) for qualified player-seasons.
+    Useful as a baseline before any weight-change decision.
+
+    Pro Bowl data: pipeline/data/pro_bowl_selections.csv (2018-2024).
+    """
+    from .grading.validity import diagnose_match_rate, run_all
+
+    if diagnose:
+        diag = diagnose_match_rate()
+        click.echo("Pro Bowl name-match diagnostics:")
+        click.echo(f"  n_pro_bowl_unique_players = {diag['n_pro_bowl_unique_players']}")
+        click.echo(f"  n_matched_in_grades       = {diag['n_matched_in_grades']}")
+        click.echo(f"  match_rate                = {diag['match_rate']:.1%}")
+        click.echo(f"  n_unmatched               = {diag['n_unmatched']}")
+        click.echo(f"  unmatched sample          = {diag['unmatched_sample']}")
+        click.echo()
+
+    results = run_all()
+    click.echo(
+        f"{'POS':<6} {'n_qual':>7} {'n_PB':>5} {'PB_rate':>8} "
+        f"{'pearson_r':>10}   seasons"
+    )
+    click.echo("-" * 60)
+    for r in results:
+        r_str = f"{r.pearson_r:>+10.3f}" if r.pearson_r == r.pearson_r else f"{'n/a':>10}"
+        click.echo(
+            f"{r.position:<6} {r.n_player_seasons:>7d} "
+            f"{r.n_pro_bowls_next_year:>5d} "
+            f"{r.pro_bowl_rate:>7.1%} "
+            f"{r_str}   {r.seasons_covered}"
+        )
+
+
+@main.command(name="audit-candidates")
+@click.option(
+    "--position",
+    type=str,
+    required=True,
+    help="Position to audit. Currently only QB is implemented as a worked example; "
+         "other positions get candidate fetchers added when their audit lands.",
+)
+def audit_candidates(position: str) -> None:
+    """Run the exhaustive candidate audit for a position.
+
+    Scores each candidate stat against four criteria (reliability, cross-
+    sectional discrimination, independence from existing components, and
+    downstream predictive validity). Prints a table with auto-generated
+    verdict hints.
+
+    The candidate set per position is defined in
+    ``grading/exhaustive_audit.py::<pos>_candidates()``. Expand that
+    function during each position's audit phase.
+    """
+    from .grading.exhaustive_audit import format_results_table, run_qb_audit
+
+    pos = position.upper()
+    if pos != "QB":
+        click.echo(
+            f"Position {pos!r} not yet implemented. The exhaustive audit "
+            "framework is in place; add a candidate fetcher in "
+            "grading/exhaustive_audit.py to enable other positions."
+        )
+        raise SystemExit(1)
+    results = run_qb_audit()
+    click.echo(format_results_table(results))
+
+
 @main.command(name="backfill-team-context")
 @click.option("--season", type=int, required=True)
 def backfill_team_context(season: int) -> None:

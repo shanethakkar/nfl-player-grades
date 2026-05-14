@@ -75,6 +75,24 @@ Sum |weights| = 0.95. Normalized dynamically by `composite.combine`.
 
 ---
 
+## Component Overlap (intentional)
+
+The three positive components (tfl_rate, pressure_rate, sack_rate) measure overlapping aspects of "backfield disruption" and correlate strongly. Confirmed empirically by the 2026-05-14 pairwise correlation audit (qualified iDL-seasons pooled 2018-2025, z-score correlation):
+
+| Pair | Pearson r |
+|---|---:|
+| tfl_rate ↔ sack_rate | +0.737 |
+| pressure_rate ↔ sack_rate | +0.778 |
+| tfl_rate ↔ pressure_rate | +0.574 |
+
+The 0.80 of total positive weight (tfl 0.35 + pressure 0.30 + sack 0.15) carries roughly 0.50–0.60 worth of *independent* signal. Interior linemen who beat blocks tend to do all three — make TFLs on runs, generate pressures on passes, and convert some pressures into sacks. The formula weights them separately so each play-type contributes to the grade, but the underlying skill they tap is largely shared.
+
+This is **intentional**: weighting only one (say, TFL) would undercount pass-rush interior penetration; weighting only pressure would miss run-stop production. Documenting this here so a future audit doesn't try to "fix" the correlation by dropping a component.
+
+Same pattern as EDGE (see [ADR-0020 § Component Overlap](0020-edge-v1-grading-formula.md#component-overlap-intentional)). CB/S/LB formulas do not have this pattern — their components were designed to be more independent. See [../grading/audits/2026-05-14-correlation.md](../grading/audits/2026-05-14-correlation.md) for cross-position context.
+
+---
+
 ## Known Limitations
 
 **No pass-rush snap denominator:** Total defensive snaps is used. iDL players may be subbed out in passing situations less often than EDGE rushers, so this conflation is less severe for iDL than for EDGE.
