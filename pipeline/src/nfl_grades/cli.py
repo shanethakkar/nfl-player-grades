@@ -432,6 +432,7 @@ def audit_candidates(position: str) -> None:
         format_results_table,
         run_qb_audit,
         run_rb_audit,
+        run_te_audit,
         run_wr_audit,
     )
 
@@ -440,6 +441,7 @@ def audit_candidates(position: str) -> None:
         "QB": run_qb_audit,
         "RB": run_rb_audit,
         "WR": run_wr_audit,
+        "TE": run_te_audit,
     }
     if pos not in runners:
         click.echo(

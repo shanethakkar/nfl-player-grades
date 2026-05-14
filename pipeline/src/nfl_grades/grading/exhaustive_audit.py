@@ -903,6 +903,228 @@ def run_rb_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# TE candidates
+# ---------------------------------------------------------------------------
+
+_TE_OFFENSE_SEASONS = _QB_OFFENSE_SEASONS  # same range
+
+
+def te_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full TE candidate set for the exhaustive audit.
+
+    Parallels wr_candidates but with TE position filter. Candidates pulled
+    from:
+      - stat_components (current TE formula components, re-scored)
+      - nflvs_player_stats (per-season totals → rates)
+      - ngs_receiving (separation, cushion, intended air yards, NGS YAC)
+      - ftn_receiving_charting (contested rate, created reception rate)
+      - pfr_advstats rec (broken tackles per reception, PFR drops)
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified TE ID set
+    te_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        WHERE sg.position = 'TE' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        te_ids = pd.read_sql(te_sql, conn)
+    seasons = sorted(te_ids["season"].unique())
+
+    # 2. Currently-shipped components (re-score)
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'TE'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'te_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. nflvs_player_stats TE totals → rates
+    nflvs_frames = []
+    for s in seasons:
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        ps = ps[ps["position"] == "TE"][[
+            "player_id",
+            "targets", "receptions",
+            "receiving_yards", "receiving_air_yards",
+            "receiving_tds", "receiving_first_downs",
+            "target_share", "air_yards_share",
+        ]].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        agg = ps.groupby("gsis_id", as_index=False).agg(
+            targets=("targets", "sum"),
+            receptions=("receptions", "sum"),
+            receiving_yards=("receiving_yards", "sum"),
+            receiving_air_yards=("receiving_air_yards", "sum"),
+            receiving_tds=("receiving_tds", "sum"),
+            receiving_first_downs=("receiving_first_downs", "sum"),
+            target_share=("target_share", "mean"),
+            air_yards_share=("air_yards_share", "mean"),
+        )
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(te_ids, on=["gsis_id", "season"], how="inner")
+        nflvs["td_rate"] = nflvs["receiving_tds"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["first_down_rate"] = nflvs["receiving_first_downs"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["yards_per_target"] = nflvs["receiving_yards"] / nflvs["targets"].replace(0, np.nan)
+        nflvs["catch_rate"] = nflvs["receptions"] / nflvs["targets"].replace(0, np.nan)
+        for col, display in [
+            ("td_rate", "te_td_rate"),
+            ("first_down_rate", "te_first_down_rate"),
+            ("yards_per_target", "te_yards_per_target"),
+            ("catch_rate", "te_catch_rate"),
+            ("target_share", "te_target_share"),
+            ("air_yards_share", "te_air_yards_share"),
+        ]:
+            panel = nflvs[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    # 4. ngs_receiving (2017+)
+    ngs_frames = []
+    for s in seasons:
+        if s < 2017:
+            continue
+        ngs = nfl.load_nextgen_stats(seasons=[int(s)], stat_type="receiving")
+        if hasattr(ngs, "to_pandas"):
+            ngs = ngs.to_pandas()
+        ngs = ngs[ngs["week"] == 0][[
+            "player_gsis_id",
+            "avg_cushion", "avg_intended_air_yards",
+            "avg_yac_above_expectation",
+            "percent_share_of_intended_air_yards",
+            "catch_percentage",
+        ]].copy()
+        ngs["season"] = s
+        ngs_frames.append(ngs)
+    if ngs_frames:
+        ngs_all = pd.concat(ngs_frames, ignore_index=True)
+        ngs_all = ngs_all.rename(columns={"player_gsis_id": "gsis_id"})
+        ngs_all = ngs_all.merge(te_ids, on=["gsis_id", "season"], how="inner")
+        for col, display in [
+            ("avg_cushion", "te_ngs_cushion"),
+            ("avg_intended_air_yards", "te_ngs_intended_air_yards"),
+            ("avg_yac_above_expectation", "te_ngs_yac_above_expectation"),
+            ("percent_share_of_intended_air_yards", "te_ngs_air_yards_share"),
+            ("catch_percentage", "te_ngs_catch_pct"),
+        ]:
+            panel = ngs_all[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    # 5. FTN (2022+)
+    ftn_sql = text(
+        """
+        SELECT player_id, season, catchable_balls, contested_balls,
+               created_receptions
+        FROM ftn_receiving_charting
+        WHERE catchable_balls > 0
+        """
+    )
+    with engine.connect() as conn:
+        ftn = pd.read_sql(ftn_sql, conn)
+    ftn = ftn.merge(
+        te_ids[["player_id", "season"]], on=["player_id", "season"], how="inner"
+    )
+    if not ftn.empty:
+        ftn["contested_rate"] = ftn["contested_balls"] / ftn["catchable_balls"].replace(0, np.nan)
+        ftn["created_rate"] = ftn["created_receptions"] / ftn["catchable_balls"].replace(0, np.nan)
+        for col, display in [
+            ("contested_rate", "te_ftn_contested_rate"),
+            ("created_rate", "te_ftn_created_reception_rate"),
+        ]:
+            panel = ftn[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            # Outlier guard: at least 15 catchable balls (TEs have smaller
+            # denominators than WRs)
+            panel = panel[ftn["catchable_balls"] >= 15].reset_index(drop=True)
+            candidates.append((display, panel, False))
+
+    # 6. PFR rec (2018+): broken tackles per reception
+    pfr_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        pfr = nfl.load_pfr_advstats(seasons=[int(s)], stat_type="rec")
+        if hasattr(pfr, "to_pandas"):
+            pfr = pfr.to_pandas()
+        pfr = pfr[[
+            "pfr_player_name",
+            "receiving_broken_tackles", "receiving_drop", "receiving_rat",
+        ]].copy()
+        agg = pfr.groupby("pfr_player_name", as_index=False).agg(
+            broken_tackles=("receiving_broken_tackles", "sum"),
+            drops_pfr=("receiving_drop", "sum"),
+            receiving_rat=("receiving_rat", "mean"),
+        )
+        agg["season"] = s
+        pfr_frames.append(agg)
+    if pfr_frames and nflvs_frames:
+        pfr_all = pd.concat(pfr_frames, ignore_index=True)
+        te_names = te_ids[["player_id", "season", "full_name"]].copy()
+        te_names["name_norm"] = te_names["full_name"].str.lower().str.replace(".", "", regex=False)
+        pfr_all["name_norm"] = pfr_all["pfr_player_name"].str.lower().str.replace(".", "", regex=False)
+        merged = pfr_all.merge(te_names, on=["name_norm", "season"], how="inner")
+        denom = nflvs[["player_id", "season", "receptions", "targets"]]
+        merged = merged.merge(denom, on=["player_id", "season"], how="left")
+        merged["broken_tackle_per_rec"] = (
+            merged["broken_tackles"] / merged["receptions"].replace(0, np.nan)
+        )
+        merged["pfr_drop_pct"] = (
+            merged["drops_pfr"] / merged["targets"].replace(0, np.nan)
+        )
+        for col, display in [
+            ("broken_tackle_per_rec", "te_pfr_broken_tackle_per_rec"),
+            ("pfr_drop_pct", "te_pfr_drop_pct"),
+            ("receiving_rat", "te_pfr_receiving_rat"),
+        ]:
+            panel = merged[["player_id", "season", col]].rename(columns={col: "value"})
+            panel = panel.dropna(subset=["value"])
+            candidates.append((display, panel, False))
+
+    return candidates
+
+
+def run_te_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full TE exhaustive audit."""
+    eng = engine or get_engine()
+    cands = te_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "TE",
+            season_pairs=_TE_OFFENSE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -913,4 +1135,6 @@ __all__ = [
     "run_wr_audit",
     "rb_candidates",
     "run_rb_audit",
+    "te_candidates",
+    "run_te_audit",
 ]

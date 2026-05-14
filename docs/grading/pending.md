@@ -14,7 +14,7 @@ Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, th
 | 5 | Exhaustive audit | WR (largest cohort, validates scaling) | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-wr.md), [research](research/wr-v1-1.md)) |
 | 6 | Exhaustive audit | RB | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-rb.md)) — v1.3 shipped success_rate reduction; v1.4 queued below |
 | **6b** | New component (Path B) | RB v1.4: add `rb_yards_after_contact` from pfr_advstats rush — highest-validity candidate of any audit so far (+0.192) | 0.5-1 day | **SHIPPED 2026-05-14** — first Path B ship from the framework. Validity +0.247→+0.259. |
-| 7 | Exhaustive audit | TE | 0.5 day | pending |
+| 7 | Exhaustive audit | TE | 0.5 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-te.md)) — v1.2: target_earn 0.10→0.15, success_rate 0.08→0.05. Validity +0.384→+0.407 (strongest Path A gain in any audit). Brock Bowers rises 18→13. |
 | 8 | Exhaustive audit | CB | 0.5 day | pending |
 | 9 | Exhaustive audit | S | 0.5 day | pending |
 | 10 | Exhaustive audit | EDGE | 0.5 day | pending |
@@ -71,4 +71,5 @@ Output per position: `docs/grading/audits/2026-XX-XX-exhaustive-<pos>.md` with f
 - ~~WR exhaustive audit + WR v1.3 ship~~ — done. See [audits/2026-05-14-exhaustive-wr.md](audits/2026-05-14-exhaustive-wr.md). 22 candidates scored, target_earn_rate bumped 0.10→0.15 (strongest signal), success_rate lowered 0.08→0.05 (EPA redundancy). Validity +0.280→+0.300.
 - ~~RB exhaustive audit + RB v1.3 ship~~ — done. See [audits/2026-05-14-exhaustive-rb.md](audits/2026-05-14-exhaustive-rb.md). 19 candidates scored, rush_success_rate lowered 0.14→0.05 (EPA redundancy). Validity +0.243→+0.247.
 - ~~RB v1.4 Path B ship (yards_after_contact)~~ — done. New migration 0015 + ingest module + grader update. Validity +0.247→+0.259. **First Path B ship from the exhaustive audit framework.** Demonstrates the methodology surfaces real new components, not just redundancy fixes.
+- ~~TE exhaustive audit + TE v1.2 ship~~ — done. See [audits/2026-05-14-exhaustive-te.md](audits/2026-05-14-exhaustive-te.md). 22 candidates scored. target_earn_rate 0.10→0.15 (strongest signal), success_rate 0.08→0.05. **Validity +0.384→+0.407 — strongest Path A gain in any audit so far.** Brock Bowers rises 18→13 (addresses face-check miss).
 - ~~Methodology-page percentage-share display~~ — done. Weights now display as "share of formula" (sums to 100%) on the methodology page, derived from auto-synced grades.ts; hardcoded POSITION_COMPONENTS list removed. Math unchanged; reader experience cleaner.

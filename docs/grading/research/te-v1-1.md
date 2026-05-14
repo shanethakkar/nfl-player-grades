@@ -1,4 +1,10 @@
-# TE v1.1 + WR v1.2 — SHIPPED 2026-05-14
+# TE v1.1 → v1.2 + WR v1.2 — SHIPPED 2026-05-14
+
+> **v1.2 ship (2026-05-14, exhaustive audit):** Bumped `te_target_earn_rate` 0.10 → 0.15 (highest-validity signal in formula, +0.301); lowered `te_success_rate_per_target` 0.08 → 0.05 (EPA redundancy +0.723, same pattern as QB/WR/RB). **Validity +0.384 → +0.407 (+0.023 — strongest Path A gain in any audit so far).** Top 5 hold; Brock Bowers rises 18 → 13. Full audit: [`../audits/2026-05-14-exhaustive-te.md`](../audits/2026-05-14-exhaustive-te.md). Also notable: te_separation has NEGATIVE validity (-0.053) at TE — voters reward tight-window over open routes — but kept at 0.07 (strong YoY says real skill, don't reverse-engineer).
+
+---
+
+
 
 Status: **SHIPPED**. Weights, graders, ADRs, web layer all updated. TE 2016-2025 + WR 2016-2025 re-graded on Neon. Cache TTL = 1 hour; users see new grades after hard refresh or expiry.
 

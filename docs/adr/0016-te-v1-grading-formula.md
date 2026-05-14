@@ -1,6 +1,6 @@
 # 0016 — TE v1 grading formula
 
-- **Status**: Accepted (v1.1 revision — 2026-05-14)
+- **Status**: Accepted (v1.2 revision — 2026-05-14)
 - **Date**: 2026-04-23
 - **Companion to**: ADR-0013 (QB), 0014 (RB), 0015 (WR); ADR-0003 (data tier); ADR-0009 (parquet cache)
 
@@ -138,3 +138,52 @@ CB matchup, etc.
 **Schema:** No migration needed — `ftn_receiving_charting` already exists from WR v1.1 (migration 0014). TE grader joins it via `player_id + season`.
 
 **Follow-up:** the WR drop_rate gap exposed a methodology hole — additions skipped the YoY noise check that removals applied. A cross-position audit (every component × every shipped position) is queued before any more positions ship. See `memory/project_pending_audits.md`.
+
+### v1.2 (2026-05-14) — `target_earn_rate` bumped, `success_rate` lowered (exhaustive audit)
+
+**Two weight changes:**
+
+- **`te_target_earn_rate`** bumped from +0.10 → **+0.15** (effective share 11% → 16%).
+- **`te_success_rate_per_target`** lowered from +0.08 → **+0.05** (effective share 9% → 5%).
+
+Sum |weights| 0.92 → 0.94. Other components unchanged.
+
+For the **blocking_te tier-2** path, the redistribution of `target_earn_rate` weight scales: 0.15 redistributed to EPA + YAC in 0.35:0.27 proportion → EPA = **0.435**, YAC = **0.335**, separation = 0.07, success_rate = 0.05, drop_rate = −0.05.
+
+**Why:** TE exhaustive candidate audit ([`docs/grading/audits/2026-05-14-exhaustive-te.md`](../grading/audits/2026-05-14-exhaustive-te.md)) scored 22 plausible TE candidates. Two key findings:
+
+1. **`te_target_earn_rate` is the strongest signal in the formula** — Pro Bowl validity r = **+0.301** (highest of any candidate, current or proposed) and YoY r = +0.610 (also highest among current components). At v1.1's 0.10 weight (11% share), it was meaningfully underweighted. Same finding pattern as WR v1.3.
+
+2. **EPA-vs-success-rate redundancy at TE** — max |r| = +0.723 with `te_rec_epa_per_target`. Same mathematical pattern now confirmed at FOUR positions (QB 0.88, WR 0.76, RB 0.71, TE 0.72). Bounded at 0.05.
+
+**Validity gate passed (strongest Path A gain in any audit so far):** TE composite vs next-year Pro Bowl correlation **+0.384 → +0.407** (+0.023 improvement). TE was already the strongest offensive position in pre-audit baseline; now it's even stronger.
+
+**Face-check 2024:**
+
+| Rank | Player | v1.1 grade | v1.2 grade | Δ |
+|---:|---|---:|---:|---:|
+| 1 | George Kittle | 89.7 | 88.9 | −0.7 |
+| 2 | Tucker Kraft | 86.2 | 85.2 | −1.0 |
+| 3 | Jonnu Smith | 72.1 | 71.8 | −0.3 |
+| 4 | Isaiah Likely | 73.1 | 71.5 | −1.6 |
+| 5 | Mark Andrews | 72.6 | 70.7 | −1.9 |
+| 6 | Trey McBride | 60.6 | 63.3 | **+2.7** |
+
+**Brock Bowers rises 18 → 13** (+2.98). One of the known face-check misses — Bowers was undergraded by v1.1's efficiency-heavy formula despite elite target volume (153 targets as a rookie). The earn_rate bump partially corrects this.
+
+**Audit also found and documented:**
+
+- `te_separation` has **NEGATIVE Pro Bowl validity (−0.053)**. Interpretation: TE voters reward tight-window catchers (Kelce/Andrews/Kittle) over open-route runners. Strong YoY (+0.413) says we're measuring real skill. **Kept at 0.07** — don't reverse-engineer validity.
+- `te_pfr_broken_tackle_per_rec`: independent signal (max_r +0.43), modest YoY (+0.419), weak validity (+0.117). Same YAC-skill gap as the QB rush/WR broken-tackle/RB-pre-v1.4 patterns. **Documented as future consideration; not shipped** — validity isn't strong enough to justify a Path B schema change (vs RB yards_after_contact which had +0.192).
+- 18 other candidates rejected with documented reasoning. Full table in the audit log.
+
+**Pattern across offensive positions** (all 4 now audited):
+
+| Position | EPA↔success r | success_rate change | target_earn change |
+|---|---:|---|---|
+| QB | +0.883 | 0.25 → 0.10 | n/a |
+| RB | +0.713 | 0.14 → 0.05 | n/a |
+| WR | +0.763 | 0.08 → 0.05 | 0.10 → 0.15 |
+| TE | +0.723 | 0.08 → 0.05 | 0.10 → 0.15 |
+
+Consistent application of the methodology. The EPA-vs-success-rate redundancy is a structural pattern, not a coincidence.

@@ -614,8 +614,8 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   te_rec_epa_per_target:              0.35,
   te_yac_over_expected_per_rec:       0.27,
   te_separation:                      0.07,
-  te_target_earn_rate:                0.10,
-  te_success_rate_per_target:         0.08,
+  te_target_earn_rate:                0.15,
+  te_success_rate_per_target:         0.05,
   te_drop_rate:                      -0.05,
   cb_passer_rating_allowed:          -0.35,
   cb_yac_per_rec_allowed:            -0.15,
@@ -644,10 +644,10 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {
-  te_rec_epa_per_target:         0.406,
-  te_yac_over_expected_per_rec:  0.314,
+  te_rec_epa_per_target:         0.435,
+  te_yac_over_expected_per_rec:  0.335,
   te_separation:                  0.07,
-  te_success_rate_per_target:     0.08,
+  te_success_rate_per_target:     0.05,
   te_drop_rate:                  -0.05,
 };
 // AUTOGEN-END weights

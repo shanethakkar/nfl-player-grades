@@ -275,26 +275,40 @@ WR_V1_CONFIDENCE_FULL_TARGETS: int = 100
 
 
 # ---------------------------------------------------------------------------
-# TE v1.1 (ADR-0016, revised 2026-05-14).
+# TE v1.2 (ADR-0016, revised 2026-05-14).
 # ---------------------------------------------------------------------------
 # v1.1 changes:
-#   - Removed te_fumble_rate (-0.05). YoY mean r = +0.08 across 2020-2025
-#     (oscillates: +0.01, +0.20, +0.07, -0.25, +0.36). ~50% of qualified
-#     TEs have 0 fumbles in a season, max 3. Same noise pattern as WR
-#     fumble rate (removed in WR v1.1).
-#   - Added te_drop_rate from FTN per-play charting at weight -0.05. YoY
-#     mean r = +0.13 across 2022-2025 (modest signal, weaker than the
-#     0.20 threshold but stronger than fumble rate's signal). Light weight
-#     justified by face-check + independence from other components + the
-#     measurement-error caveat at low catchable-ball denominators.
+#   - Removed te_fumble_rate (-0.05). YoY mean r ≈ +0.08, oscillates;
+#     50% of qualified TEs have 0 fumbles. Same noise pattern as WR fumble.
+#   - Added te_drop_rate from FTN at -0.05. YoY mean r = +0.13 (modest).
+#     Light weight justified by independence + face-check + measurement-
+#     error caveat at low catchable-ball denominators.
 #
-# Symmetric with WR v1.2 (also at -0.05). The TE-specific intuition that
-# hands matter more than for WRs isn't supported by YoY data — the gap
-# (+0.13 vs +0.09) is within noise at n~30 pairs.
+# v1.2 changes (TE exhaustive audit 2026-05-14):
+#   - Bumped te_target_earn_rate from +0.10 → +0.15. The exhaustive audit
+#     found earn_rate is the strongest signal in the formula (validity
+#     +0.301 vs next-year Pro Bowl, YoY r +0.610) — underweighted at 11%.
+#     Now 16% of formula. Same finding as WR v1.3.
+#   - Lowered te_success_rate_per_target from +0.08 → +0.05. Same EPA-vs-
+#     success-rate redundancy pattern confirmed at TE (max |r| = +0.723).
+#     Now confirmed at all 4 receiver/passer positions (QB +0.88, WR +0.76,
+#     RB +0.71, TE +0.72). Bounded at light weight.
+#
+# Sum |w| 0.92 → 0.94. blocking_te tier-2 redistribution updated to match:
+# the 0.15 of target_earn_rate is redistributed to EPA + YAC in 0.35:0.27
+# proportion → EPA 0.435, YAC 0.335.
+#
+# v1.2 audit also found:
+#   - te_separation has slightly NEGATIVE Pro Bowl validity (-0.053).
+#     Interpretation: TE Pro Bowl voters reward tight-window catchers
+#     (Kelce/Andrews/Kittle archetype) over open-route runners. Kept at
+#     0.07 anyway — strong YoY (+0.413) says we're measuring real skill;
+#     don't reverse-engineer validity.
+#   - 22 candidates scored, no new components added. te_pfr_broken_tackle_
+#     per_rec documented as YAC-skill gap (similar to RB's pre-v1.4 state).
 #
 # FTN drop data starts 2022; for 2016-2021 the drop_rate component is
-# NaN-neutralized to 0 contribution (grade comes from the other 5
-# components only).
+# NaN-neutralized to 0 contribution.
 
 TE_COMPONENT_REC_EPA_PER_TARGET: str = "te_rec_epa_per_target"
 TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "te_yac_over_expected_per_rec"
@@ -303,24 +317,26 @@ TE_COMPONENT_TARGET_EARN_RATE: str = "te_target_earn_rate"
 TE_COMPONENT_SUCCESS_RATE_PER_TARGET: str = "te_success_rate_per_target"
 TE_COMPONENT_DROP_RATE: str = "te_drop_rate"
 
-# Sum of |weights| = 0.92. Separation 7% (vs WR 10%) — NGS metric is
+# Sum of |weights| = 0.94. Separation 7% (vs WR 10%) — NGS metric is
 # WR-geometry-calibrated; TE matchups are noisier in the same number.
 TE_V1_WEIGHTS: dict[str, float] = {
     TE_COMPONENT_REC_EPA_PER_TARGET: 0.35,
     TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.27,
     TE_COMPONENT_SEPARATION: 0.07,
-    TE_COMPONENT_TARGET_EARN_RATE: 0.10,
-    TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
+    TE_COMPONENT_TARGET_EARN_RATE: 0.15,
+    TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.05,
     TE_COMPONENT_DROP_RATE: -0.05,
 }
 
-# Blocking-TE (role) path: omit earn in composite; redistribute 0.10 to
-# EPA+YAC in proportion 0.35/0.62 and 0.27/0.62.
+# Blocking-TE (role) path: omit earn in composite; redistribute the 0.15
+# target_earn_rate weight to EPA+YAC in proportion 0.35/0.62 and 0.27/0.62.
+#   EPA: 0.35 + 0.15*(0.35/0.62) = 0.435
+#   YAC: 0.27 + 0.15*(0.27/0.62) = 0.335
 TE_V1_BLOCKING_WEIGHTS: dict[str, float] = {
-    TE_COMPONENT_REC_EPA_PER_TARGET: 0.406,
-    TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.314,
+    TE_COMPONENT_REC_EPA_PER_TARGET: 0.435,
+    TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: 0.335,
     TE_COMPONENT_SEPARATION: 0.07,
-    TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.08,
+    TE_COMPONENT_SUCCESS_RATE_PER_TARGET: 0.05,
     TE_COMPONENT_DROP_RATE: -0.05,
 }
 
