@@ -1,6 +1,6 @@
 # ADR-0020 — EDGE v1 Grading Formula
 
-**Status:** Accepted (v1.1 OLB-gap closure — 2026-05-14)
+**Status:** Accepted (v1.2 tackle-volume add — 2026-05-14)
 **Date:** 2026-05-13
 
 ---
@@ -23,18 +23,19 @@ EDGE rushers are the primary pass-rush specialists on the defensive line. Gradin
 
 ---
 
-## Components
+## Components (v1.2, 2026-05-14)
 
 | Component | Formula | Weight | Direction |
 |---|---|---|---|
 | `edge_pressure_rate` | pressures / snaps_defense | +0.35 | higher = better |
 | `edge_sack_rate` | sacks / snaps_defense | +0.30 | higher = better |
 | `edge_tfl_rate` | tfl / snaps_defense | +0.15 | higher = better |
+| `edge_tackles_per_snap` | comb_tackles / snaps_defense | **+0.05** | higher = better |
 | `edge_missed_tackle_rate` | missed / (comb + missed) | −0.10 | lower = better |
 
-Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
+Sum |weights| = 0.95. Normalized dynamically by `composite.combine`.
 
-**Relative shares:** pressure 39%, sack 33%, TFL 17%, missed tackles −11%.
+**Relative shares:** pressure 37%, sack 32%, TFL 16%, tackles 5%, missed tackles −11%.
 
 ---
 
@@ -55,6 +56,7 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 | pressure_rate | 200 snaps | Moderate stability (r ≈ 0.5 YoY) |
 | sack_rate | 350 snaps | Rarer events; heavier pull toward mean |
 | tfl_rate | 300 snaps | Low per-snap frequency; needs shrinkage |
+| tackles_per_snap | 200 snaps | Stable signal (YoY +0.520); matches pressure_rate's stability tier |
 | missed_tackle_rate | 100 tackle_attempts | Real skill signal; moderate shrinkage |
 
 ---
@@ -65,7 +67,9 @@ Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
 
 **Sack rate separate (33%):** Intentional partial overlap with pressure rate. Sacks are the premium outcome — the weight difference rewards players who convert pressure into sacks at a higher rate. Trey Hendrickson (54 pressures, 17.5 sacks, 2024) grades higher than a player with 54 pressures and 7 sacks, as intended.
 
-**TFL rate included (17%):** EDGE rushers set the edge on run plays. Elite rushers like Myles Garrett (22 TFL, 2023) generate meaningful run-stop production beyond just pass rush. Excluding TFL would undervalue complete DEs.
+**TFL rate included (16%):** EDGE rushers set the edge on run plays. Elite rushers like Myles Garrett (22 TFL, 2023) generate meaningful run-stop production beyond just pass rush. Excluding TFL would undervalue complete DEs.
+
+**Tackles per snap added (5%, v1.2):** Captures activity level — chase tackles, RB at the catch point, screen-pass tackles — that the 89%-behind-LOS rest of the formula misses. The exhaustive audit confirmed this is an independent signal (max correlation +0.468 with TFL) with real validity (+0.216) and strong reliability (YoY +0.520). Voters reward EDGEs who show up across the box score, not only on premium-event plays. Weight kept small so it diversifies the signal without diluting the pressure-and-sack core.
 
 **Missed tackle rate penalty (−11%):** Technique matters for edge rushers who must disengage and pursue in space. Weight kept modest (lower than Safety's −11%) because edge rushers make fewer total tackles and the metric is noisier per position.
 
@@ -110,6 +114,25 @@ See [../grading/audits/2026-05-14-correlation.md](../grading/audits/2026-05-14-c
 ---
 
 ## Revision History
+
+### v1.2 (2026-05-14) — tackle-volume add from exhaustive audit
+
+Added `edge_tackles_per_snap` at +0.05 after the exhaustive candidate audit ([../grading/audits/2026-05-14-exhaustive-edge.md](../grading/audits/2026-05-14-exhaustive-edge.md)). Ten candidates were scored against four criteria (YoY reliability, cross-sectional discrimination, independence, predictive validity vs next-year Pro Bowl). `edge_tackles_per_snap` returned YoY r=+0.520, validity r=+0.216, and max correlation with existing components +0.468 (with `edge_tfl_rate`). It is an **independent signal** capturing chase-tackles / ahead-of-LOS plays that the existing 89%-behind-LOS formula misses. Voter mechanism: elite EDGEs show up in the box score as tackle volume too, not only as pressure events.
+
+**Rejected candidates (documented in audit doc):**
+- `edge_qb_hits_per_snap` (+0.735 correlation with pressure_rate — sub-component, would double-count)
+- `edge_hurries_per_snap` (+0.706 correlation with pressure_rate — sub-component)
+- `edge_sack_per_pressure` (+0.689 correlation with sack_rate — finishing already captured)
+- `edge_hit_per_pressure` (validity −0.038 — near-zero, voters don't reward this slice)
+- `edge_forced_fumble_per_snap` (validity +0.141, rare-event noise: typical EDGE has 1-2 FF/season)
+
+**Existing components confirmed:** All four returned correct-sign, real-magnitude validity (pressure +0.291, sack +0.330, TFL +0.285, missed_tackle −0.056). No rebalance needed.
+
+**Validity gate:** EDGE composite vs next-year Pro Bowl correlation **+0.420 → +0.424**. Modest gain, expected for a +0.05-weight add to an already-strong formula.
+
+**Face-check 2024:** Top 5 unchanged in spirit — Trey Hendrickson (#1, 17.5 sacks, 1st Team All-Pro), Myles Garrett, Will Anderson Jr., Micah Parsons, Nik Bonitto. T.J. Watt at #15 reflects his down-sack year (11.5 vs career norm).
+
+**Weight totals:** v1.1 sum |abs| = 0.90 → v1.2 sum |abs| = 0.95.
 
 ### v1.1 (2026-05-14) — OLB-gap closure
 

@@ -1420,6 +1420,163 @@ def run_s_audit(engine: Engine | None = None) -> list[CandidateScore]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# EDGE candidates
+# ---------------------------------------------------------------------------
+
+def edge_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
+    """Full EDGE candidate set for the exhaustive audit.
+
+    Mirrors the EDGE grader's data flow: pulls raw pass-rush stats from
+    both pfr_def_pass_rush (DL-tagged players) and pfr_def_lb (OLB-gap
+    closure: T.J. Watt / Micah Parsons / Burns class) to cover all
+    qualified EDGE players.
+
+    Candidates:
+      - 4 currently shipped (pressure_rate, sack_rate, tfl_rate,
+        missed_tackle_rate)
+      - PFR-derived: qb_hits_per_snap, hurries_per_snap, tackles_per_snap,
+        sack_per_pressure (finishing/conversion), hit_per_pressure
+      - nflvs aggregate: forced_fumble_per_snap (strip-sack proxy)
+    """
+    import nflreadpy as nfl
+
+    candidates: list[tuple[str, pd.DataFrame, bool]] = []
+
+    # 1. Qualified EDGE IDs + snap counts + gsis_id for nflvs join.
+    edge_sql = text(
+        """
+        SELECT sg.player_id, sg.season, p.gsis_id, p.full_name,
+               ps.snaps_defense
+        FROM season_grades sg
+        JOIN players p USING (player_id)
+        LEFT JOIN (
+            SELECT DISTINCT ON (player_id, season) player_id, season, snaps_defense
+            FROM player_seasons
+            ORDER BY player_id, season, snaps_defense DESC NULLS LAST
+        ) ps ON ps.player_id = sg.player_id AND ps.season = sg.season
+        WHERE sg.position = 'EDGE' AND sg.qualified = true
+        """
+    )
+    with engine.connect() as conn:
+        edge_ids = pd.read_sql(edge_sql, conn)
+    seasons = sorted(edge_ids["season"].unique())
+
+    # 2. Currently-shipped components.
+    existing_sql = text(
+        """
+        SELECT sc.player_id, sc.season, sc.component_name, sc.raw_value
+        FROM stat_components sc
+        JOIN season_grades sg
+          ON sg.player_id = sc.player_id
+         AND sg.season    = sc.season
+         AND sg.position  = 'EDGE'
+        WHERE sg.qualified = true
+          AND sc.component_name LIKE 'edge_%'
+          AND sc.raw_value IS NOT NULL
+        """
+    )
+    with engine.connect() as conn:
+        existing = pd.read_sql(existing_sql, conn)
+    for comp_name, sub in existing.groupby("component_name"):
+        panel = sub[["player_id", "season", "raw_value"]].rename(
+            columns={"raw_value": "value"}
+        )
+        candidates.append((comp_name, panel, True))
+
+    # 3. Raw pass-rush stats — UNION from both DL and LB tables (since the
+    # EDGE grader's two branches pull from these). A player who appears in
+    # both takes whichever row has the larger pressures value.
+    raw_sql = text(
+        """
+        SELECT pr.player_id, pr.season, pr.pressures, pr.sacks, pr.qb_hits,
+               pr.hurries, pr.comb_tackles
+        FROM pfr_def_pass_rush pr
+        UNION ALL
+        SELECT lb.player_id, lb.season, lb.pressures, lb.sacks, lb.qb_hits,
+               lb.hurries, lb.comb_tackles
+        FROM pfr_def_lb lb
+        """
+    )
+    with engine.connect() as conn:
+        raw = pd.read_sql(raw_sql, conn)
+    raw = raw.sort_values("pressures", ascending=False).drop_duplicates(
+        subset=["player_id", "season"], keep="first"
+    )
+
+    merged = raw.merge(
+        edge_ids[["player_id", "season", "snaps_defense", "gsis_id"]],
+        on=["player_id", "season"], how="inner",
+    )
+    snaps = merged["snaps_defense"].astype(float).replace(0, np.nan)
+    pressures = merged["pressures"].astype(float).replace(0, np.nan)
+    merged["qb_hits_per_snap"] = merged["qb_hits"] / snaps
+    merged["hurries_per_snap"] = merged["hurries"] / snaps
+    merged["tackles_per_snap"] = merged["comb_tackles"] / snaps
+    merged["sack_per_pressure"] = merged["sacks"] / pressures
+    merged["hit_per_pressure"] = merged["qb_hits"] / pressures
+
+    for col, display, denom_col, min_n in [
+        ("qb_hits_per_snap", "edge_qb_hits_per_snap", "snaps_defense", 200),
+        ("hurries_per_snap", "edge_hurries_per_snap", "snaps_defense", 200),
+        ("tackles_per_snap", "edge_tackles_per_snap", "snaps_defense", 200),
+        ("sack_per_pressure", "edge_sack_per_pressure", "pressures", 15),
+        ("hit_per_pressure", "edge_hit_per_pressure", "pressures", 15),
+    ]:
+        mask = merged[denom_col].fillna(0) >= min_n
+        panel = merged.loc[mask, ["player_id", "season", col]].rename(
+            columns={col: "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append((display, panel, False))
+
+    # 4. nflvs aggregate: forced fumbles per snap (strip-sack proxy).
+    nflvs_frames = []
+    for s in seasons:
+        if s < 2018:
+            continue
+        ps = nfl.load_player_stats(seasons=[int(s)])
+        if hasattr(ps, "to_pandas"):
+            ps = ps.to_pandas()
+        cols_needed = ["player_id", "def_fumbles_forced"]
+        keep_cols = [c for c in cols_needed if c in ps.columns]
+        if "player_id" not in keep_cols:
+            continue
+        ps = ps[keep_cols].copy()
+        ps = ps.rename(columns={"player_id": "gsis_id"})
+        agg = ps.groupby("gsis_id", as_index=False).sum(numeric_only=True)
+        agg["season"] = s
+        nflvs_frames.append(agg)
+    if nflvs_frames:
+        nflvs = pd.concat(nflvs_frames, ignore_index=True)
+        nflvs = nflvs.merge(edge_ids, on=["gsis_id", "season"], how="inner")
+        snaps2 = nflvs["snaps_defense"].astype(float).replace(0, np.nan)
+        nflvs["forced_fumble_per_snap"] = nflvs.get("def_fumbles_forced", 0) / snaps2
+        mask = nflvs["snaps_defense"].fillna(0) >= 200
+        panel = nflvs.loc[mask, ["player_id", "season", "forced_fumble_per_snap"]].rename(
+            columns={"forced_fumble_per_snap": "value"}
+        )
+        panel = panel.dropna(subset=["value"])
+        candidates.append(("edge_forced_fumble_per_snap", panel, False))
+
+    return candidates
+
+
+def run_edge_audit(engine: Engine | None = None) -> list[CandidateScore]:
+    """Run the full EDGE exhaustive audit."""
+    eng = engine or get_engine()
+    cands = edge_candidates(eng)
+    return [
+        score_candidate(
+            name, panel, "EDGE",
+            season_pairs=_DEFENSIVE_SEASONS,
+            engine=eng,
+            is_existing_component=is_existing,
+        )
+        for name, panel, is_existing in cands
+    ]
+
+
 __all__ = [
     "CandidateScore",
     "format_results_table",
@@ -1436,4 +1593,6 @@ __all__ = [
     "run_cb_audit",
     "s_candidates",
     "run_s_audit",
+    "edge_candidates",
+    "run_edge_audit",
 ]

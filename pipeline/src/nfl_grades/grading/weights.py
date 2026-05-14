@@ -592,7 +592,7 @@ S_V1_CONFIDENCE_FULL_SNAPS: int = 700
 
 
 # ---------------------------------------------------------------------------
-# EDGE v1 (ADR-0020).
+# EDGE v1.2 (ADR-0020, revised 2026-05-14 via exhaustive audit).
 # ---------------------------------------------------------------------------
 # Data sources:
 #   - Pressures, sacks, QB hits, hurries, tackles, missed tackles:
@@ -602,17 +602,30 @@ S_V1_CONFIDENCE_FULL_SNAPS: int = 700
 #
 # Coverage begins 2018 (PFR per-player data limitation).
 #
-# Formula: 72% pass rush / 17% run stop / 11% technique penalty.
-# Sum |abs| = 0.90. Positive weights = higher is better.
-# Negative weight = lower is better (missed tackles).
+# v1.1 (2026-05-14): OLB-gap closure — EDGE grader now reads from both
+# pfr_def_pass_rush AND pfr_def_lb (LB-tagged pass-rush OLBs like T.J. Watt,
+# Micah Parsons, Burns). No weight change.
 #
-# edge_pressure_rate (39%): pressures (sacks+hits+hurries) per snap.
+# v1.2 (2026-05-14): added edge_tackles_per_snap at +0.05 from the
+# exhaustive audit. Validity +0.216 (moderate), YoY +0.520 (strong
+# reliability), max correlation with existing components only +0.468 vs
+# tfl_rate (independent signal — captures chase-tackles and ahead-of-LOS
+# plays that pressure/sack/TFL don't). Rejected new candidates:
+# qb_hits_per_snap, hurries_per_snap (subsumed by pressure_rate, +0.71-0.73
+# correlation); sack_per_pressure (subsumed by sack_rate, +0.689);
+# hit_per_pressure (validity -0.038, near-zero signal);
+# forced_fumble_per_snap (rare-event noise, validity +0.141).
+#
+# v1.2 weight breakdown:
+# edge_pressure_rate (37%): pressures (sacks+hits+hurries) per snap.
 #   Primary signal — total pass rush impact per opportunity.
-# edge_sack_rate (33%): sacks per snap. Premium outcome; extra credit
+# edge_sack_rate (32%): sacks per snap. Premium outcome; extra credit
 #   for converting pressure to sacks. Intentional overlap with pressure_rate
 #   to weight the highest-value plays more heavily.
-# edge_tfl_rate (17%): run-stop TFLs (sacks excluded) per snap.
+# edge_tfl_rate (16%): run-stop TFLs (sacks excluded) per snap.
 #   EDGE rushers set the edge on run plays; elite ones generate real TFLs.
+# edge_tackles_per_snap (5%): combined tackles per snap. Captures activity
+#   level / chase tackles that don't show up as behind-LOS plays.
 # edge_missed_tackle_rate (11%): missed / (comb + missed). Technique
 #   penalty. k=100 tackle_attempts — moderate shrinkage, some real skill.
 #
@@ -624,12 +637,14 @@ S_V1_CONFIDENCE_FULL_SNAPS: int = 700
 EDGE_COMPONENT_PRESSURE_RATE: str = "edge_pressure_rate"
 EDGE_COMPONENT_SACK_RATE: str = "edge_sack_rate"
 EDGE_COMPONENT_TFL_RATE: str = "edge_tfl_rate"
+EDGE_COMPONENT_TACKLES_PER_SNAP: str = "edge_tackles_per_snap"
 EDGE_COMPONENT_MISSED_TACKLE_RATE: str = "edge_missed_tackle_rate"
 
 EDGE_V1_WEIGHTS: dict[str, float] = {
     EDGE_COMPONENT_PRESSURE_RATE:      0.35,
     EDGE_COMPONENT_SACK_RATE:          0.30,
     EDGE_COMPONENT_TFL_RATE:           0.15,
+    EDGE_COMPONENT_TACKLES_PER_SNAP:   0.05,
     EDGE_COMPONENT_MISSED_TACKLE_RATE: -0.10,
 }
 
@@ -637,6 +652,7 @@ EDGE_V1_SHRINKAGE_K: dict[str, float] = {
     EDGE_COMPONENT_PRESSURE_RATE:      200.0,
     EDGE_COMPONENT_SACK_RATE:          350.0,
     EDGE_COMPONENT_TFL_RATE:           300.0,
+    EDGE_COMPONENT_TACKLES_PER_SNAP:   200.0,
     EDGE_COMPONENT_MISSED_TACKLE_RATE: 100.0,
 }
 
@@ -644,6 +660,7 @@ EDGE_V1_RAW_VALUE_COLS: dict[str, str] = {
     EDGE_COMPONENT_PRESSURE_RATE:      "pressure_rate",
     EDGE_COMPONENT_SACK_RATE:          "sack_rate",
     EDGE_COMPONENT_TFL_RATE:           "tfl_rate",
+    EDGE_COMPONENT_TACKLES_PER_SNAP:   "tackles_per_snap",
     EDGE_COMPONENT_MISSED_TACKLE_RATE: "missed_tackle_rate",
 }
 
@@ -651,6 +668,7 @@ EDGE_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     EDGE_COMPONENT_PRESSURE_RATE:      "snaps_defense",
     EDGE_COMPONENT_SACK_RATE:          "snaps_defense",
     EDGE_COMPONENT_TFL_RATE:           "snaps_defense",
+    EDGE_COMPONENT_TACKLES_PER_SNAP:   "snaps_defense",
     EDGE_COMPONENT_MISSED_TACKLE_RATE: "tackle_attempts",
 }
 

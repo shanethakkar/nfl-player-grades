@@ -431,6 +431,7 @@ def audit_candidates(position: str) -> None:
     from .grading.exhaustive_audit import (
         format_results_table,
         run_cb_audit,
+        run_edge_audit,
         run_qb_audit,
         run_rb_audit,
         run_s_audit,
@@ -446,6 +447,7 @@ def audit_candidates(position: str) -> None:
         "TE": run_te_audit,
         "CB": run_cb_audit,
         "S": run_s_audit,
+        "EDGE": run_edge_audit,
     }
     if pos not in runners:
         click.echo(
