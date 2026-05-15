@@ -167,6 +167,17 @@ function Hero() {
       <h1 className="text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
         How grades work
       </h1>
+      <p className="mt-4 max-w-2xl text-sm text-neutral-400">
+        This page covers what each grade measures and what the scale means.
+        For how every weight in every formula was decided &mdash; the
+        statistical audit, the rejected candidates, the lessons &mdash; see{" "}
+        <Link
+          href="/methodology/audit"
+          className="text-emerald-400 hover:underline"
+        >
+          Research &rarr;
+        </Link>
+      </p>
     </header>
   );
 }
@@ -527,14 +538,6 @@ function Limitations() {
     {
       title: "QB context for receivers",
       body: "Great receivers stuck on terrible offenses look worse than the tape suggests. We flag this on the player page when it matters.",
-    },
-    {
-      title: "Linemen and off-ball linebackers",
-      body: "Public play-by-play data isn't there yet. Offensive line, defensive line, and most LB work doesn't show up cleanly in the numbers.",
-    },
-    {
-      title: "Special teams",
-      body: "Kickers, punters, returners, and coverage units are out of scope.",
     },
     {
       title: "Career trajectory smoothing",

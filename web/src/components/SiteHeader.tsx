@@ -25,6 +25,9 @@ export function SiteHeader() {
             <Link href="/methodology" className="hover:text-white">
               Methodology
             </Link>
+            <Link href="/methodology/audit" className="hover:text-white">
+              Research
+            </Link>
           </nav>
           <PlayerSearch />
         </div>
