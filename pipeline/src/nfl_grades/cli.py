@@ -238,6 +238,54 @@ def ingest_kicker_stats(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="qb-stats")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_qb_stats(season: int, refresh: bool) -> None:
+    """Pull QB box-score volume stats from nflvs_player_stats (2016+)."""
+    from .ingest import qb_stats as qb_stats_ingest
+
+    result = qb_stats_ingest.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_match={result.rows_skipped_no_match}"
+    )
+
+
+@ingest.command(name="skill-stats")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_skill_stats(season: int, refresh: bool) -> None:
+    """Pull RB/WR/TE box-score volume stats from nflvs_player_stats (2016+)."""
+    from .ingest import skill_player_stats as skill_ingest
+
+    result = skill_ingest.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_match={result.rows_skipped_no_match}"
+    )
+
+
+@ingest.command(name="defensive-stats")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_defensive_stats(season: int, refresh: bool) -> None:
+    """Pull CB/S/EDGE/iDL/LB box-score volume stats from nflvs_player_stats (2016+)."""
+    from .ingest import defensive_player_stats as def_ingest
+
+    result = def_ingest.run(season, refresh=refresh)
+    click.echo(
+        f"season={result.season} "
+        f"rows_ingested={result.rows_ingested} "
+        f"rows_written={result.rows_written} "
+        f"skipped_no_match={result.rows_skipped_no_match}"
+    )
+
+
 @ingest.command(name="punter-stats")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -279,6 +327,9 @@ def ingest_all(season: int, refresh: bool) -> None:
         ctx.invoke(ingest_ngs, season=season, stat_type="all", refresh=refresh)
         ctx.invoke(ingest_kicker_stats, season=season, refresh=refresh)
         ctx.invoke(ingest_punter_stats, season=season, refresh=refresh)
+        ctx.invoke(ingest_qb_stats, season=season, refresh=refresh)
+        ctx.invoke(ingest_skill_stats, season=season, refresh=refresh)
+        ctx.invoke(ingest_defensive_stats, season=season, refresh=refresh)
     if season >= 2018:
         ctx.invoke(ingest_pfr_def_coverage, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)

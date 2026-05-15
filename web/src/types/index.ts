@@ -104,6 +104,12 @@ export type LeaderboardEntry = {
   epa_per_dropback: number | null;
   cpoe: number | null;
   success_rate: number | null;
+  // QB CONTEXT (box-score volume; not in formula, sourced from qb_season_stats)
+  qb_pass_yards: number | null;
+  qb_pass_tds: number | null;
+  qb_interceptions: number | null;
+  qb_rush_yards: number | null;
+  qb_rush_tds: number | null;
   // --- RB columns ---
   n_touches: number | null;
   rb_ryoe_per_attempt: number | null;
@@ -112,6 +118,13 @@ export type LeaderboardEntry = {
   rb_yac_over_expected_per_rec: number | null;
   rb_yards_after_contact_per_carry: number | null;
   rb_fumble_rate: number | null;
+  // Shared skill-position CONTEXT (RB/WR/TE box-score volume from
+  // skill_player_season_stats; not in formula)
+  skill_rush_yards: number | null;
+  skill_rush_tds: number | null;
+  skill_receptions: number | null;
+  skill_rec_yards: number | null;
+  skill_rec_tds: number | null;
   // --- WR / TE columns (position-agnostic names; underlying component is
   // wr_* or te_* depending on sg.position) ---
   // drop_rate from FTN charting (2022+), used by both WR (v1.2) and TE (v1.1).
@@ -154,6 +167,14 @@ export type LeaderboardEntry = {
   lb_pbu_rate: number | null;
   lb_tackle_rate: number | null;
   lb_pressure_rate: number | null;
+  // Shared defensive CONTEXT (CB/S/EDGE/iDL/LB box-score volume from
+  // defensive_player_season_stats; not in formula). def_sacks and
+  // def_tackles_for_loss can be fractional (half-credits).
+  def_tackles_combined: number | null;
+  def_sacks: number | null;
+  def_tackles_for_loss: number | null;
+  def_interceptions: number | null;
+  def_forced_fumbles: number | null;
   // --- K columns ---
   // n_fg_att is the qualifying sample for kickers (FG attempts, not snaps).
   // FGOE / att (k_fg_over_expected_per_att) is the SOLE formula component
@@ -184,6 +205,12 @@ export type LeaderboardEntry = {
   ol_sack_rate: number | null;
   ol_sacks_allowed: number | null;
   ol_penalty_rate: number | null;
+  /**
+   * Optional last-N-seasons grade history for the player at this position.
+   * Populated only by leaderboard branches that opt-in (e.g. QB demo).
+   * Sorted oldest -> newest. Empty array when not populated.
+   */
+  gradeTrend: { season: number; grade: number }[];
 };
 
 /** One stat_components row rehydrated for a player detail page. */

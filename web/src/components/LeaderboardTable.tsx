@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { SparklinePopover } from "@/components/SparklinePopover";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Tooltip } from "@/components/Tooltip";
 import { cbRoleLabel, gradeColor, teRoleLabel } from "@/lib/grades";
@@ -97,18 +98,8 @@ export function LeaderboardTable({ entries, position }: Props) {
 
   return (
     <div>
-      {columns.length > 0 && (
-        <>
-          <p className="mb-2 text-right text-xs text-neutral-600 sm:hidden">
-            Hold column headers for stat definitions
-          </p>
-          <p className="mb-2 hidden text-right text-xs text-neutral-600 sm:block">
-            Hover column headers for stat definitions
-          </p>
-        </>
-      )}
-      <div className="overflow-x-auto rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
-      <table className="w-max min-w-full text-sm [font-variant-numeric:tabular-nums]">
+      <ScrollableTableWrapper>
+      <table className="w-max text-sm [font-variant-numeric:tabular-nums]">
         <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-400">
           {columns.some((c) => c.group) && (
             <tr className="border-b border-neutral-800/60">
@@ -189,7 +180,137 @@ export function LeaderboardTable({ entries, position }: Props) {
           ))}
         </tbody>
       </table>
+      </ScrollableTableWrapper>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ScrollableTableWrapper
+//
+// Wraps the leaderboard table with a premium horizontal-scroll affordance:
+//   - Hides the native scrollbar (Firefox + WebKit) so the table looks clean
+//     when content fits, and avoids OS-level "always-on scrollbar" empty
+//     tracks (Windows in particular).
+//   - Soft right-edge fade gradient when there's content past the viewport,
+//     fading out smoothly when the user reaches the rightmost column. No
+//     left fade — the sticky Player column already anchors the view.
+//   - Desktop: click-and-drag to pan (cursor: grab/grabbing). Mousedown on
+//     interactive descendants (links, sort headers, sparkline buttons) is
+//     ignored so existing click behavior keeps working. A small drag
+//     threshold (>4px) distinguishes pan from click; "moved" state is
+//     latched and suppresses the trailing click event so the user doesn't
+//     accidentally navigate when they meant to drag.
+//   - Mobile: native touch swipe handles scrolling; the JS mouse handlers
+//     don't fire, the fade still works.
+// ---------------------------------------------------------------------------
+function ScrollableTableWrapper({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const drag = useRef({
+    startX: 0,
+    startScrollLeft: 0,
+    active: false,
+    moved: false,
+  });
+
+  const updateFades = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateFades();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateFades, { passive: true });
+    const ro = new ResizeObserver(updateFades);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateFades);
+      ro.disconnect();
+    };
+  }, [updateFades]);
+
+  useEffect(() => {
+    // mousemove/mouseup live on window so the drag survives the cursor
+    // leaving the wrapper mid-pan.
+    const onMove = (e: MouseEvent) => {
+      if (!drag.current.active) return;
+      const dx = e.pageX - drag.current.startX;
+      if (Math.abs(dx) > 4) drag.current.moved = true;
+      if (scrollRef.current) {
+        scrollRef.current.scrollLeft = drag.current.startScrollLeft - dx;
+      }
+      if (drag.current.moved) e.preventDefault();
+    };
+    const onUp = () => {
+      if (!drag.current.active) return;
+      drag.current.active = false;
+      // Keep `moved` true through the trailing click event so we can
+      // suppress it, then reset on the next tick.
+      setTimeout(() => {
+        drag.current.moved = false;
+      }, 0);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    // Don't hijack drags that started on a clickable child.
+    const target = e.target as HTMLElement;
+    if (target.closest("a, button, input, [role='button'], select, textarea")) {
+      return;
+    }
+    if (!scrollRef.current) return;
+    drag.current = {
+      startX: e.pageX,
+      startScrollLeft: scrollRef.current.scrollLeft,
+      active: true,
+      moved: false,
+    };
+  };
+
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (drag.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const canScroll = canScrollLeft || canScrollRight;
+
+  return (
+    <div className="relative w-max max-w-full overflow-hidden rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
+      <div
+        ref={scrollRef}
+        onMouseDown={onMouseDown}
+        onClickCapture={onClickCapture}
+        className={
+          "overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
+          (canScroll ? "cursor-grab active:cursor-grabbing" : "")
+        }
+      >
+        {children}
+      </div>
+      {/* Right-edge fade: signals "more columns to the right". Auto-hides
+          when there's no more content to scroll to. */}
+      <div
+        aria-hidden
+        className={
+          "pointer-events-none absolute inset-y-0 right-0 z-20 w-12 bg-gradient-to-l from-neutral-950 to-transparent transition-opacity duration-150 " +
+          (canScrollRight ? "opacity-100" : "opacity-0")
+        }
+      />
     </div>
   );
 }
@@ -273,6 +394,14 @@ function fmtInt(v: number | null): string {
   return v === null || !Number.isFinite(v) ? "—" : String(v);
 }
 
+// Box-score counts that may carry half-credit (sacks, TFLs). Whole numbers
+// render without a decimal; .5 values keep the decimal so the half-sack is
+// preserved.
+function fmtCount(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "—";
+  return Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1);
+}
+
 const QB_COLUMNS: SortableColumn[] = [
   {
     key: "n_dropbacks",
@@ -289,6 +418,7 @@ const QB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.epa_per_dropback,
     render: (e) => fmtSigned(e.epa_per_dropback, 3),
+    group: "formula",
   },
   {
     key: "cpoe",
@@ -297,6 +427,7 @@ const QB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.cpoe,
     render: (e) => fmtSigned(e.cpoe, 2),
+    group: "formula",
   },
   {
     key: "success_rate",
@@ -305,6 +436,53 @@ const QB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.success_rate,
     render: (e) => fmtPct(e.success_rate, 1),
+    group: "formula",
+  },
+  // CONTEXT — box-score volume from qb_season_stats (NOT in formula).
+  {
+    key: "qb_pass_yards",
+    header: "Pass Yds",
+    hoverLabel: "Passing yards — season total. CONTEXT ONLY, not part of the QB grading formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.qb_pass_yards,
+    render: (e) => fmtInt(e.qb_pass_yards),
+    group: "context",
+  },
+  {
+    key: "qb_pass_tds",
+    header: "Pass TD",
+    hoverLabel: "Passing touchdowns — season total. CONTEXT ONLY, not part of the QB grading formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.qb_pass_tds,
+    render: (e) => fmtInt(e.qb_pass_tds),
+    group: "context",
+  },
+  {
+    key: "qb_interceptions",
+    header: "INT",
+    hoverLabel: "Interceptions thrown — season total. CONTEXT ONLY (INT impact is already captured inside EPA/dropback).",
+    defaultDir: "asc",
+    sortValue: (e) => e.qb_interceptions,
+    render: (e) => fmtInt(e.qb_interceptions),
+    group: "context",
+  },
+  {
+    key: "qb_rush_yards",
+    header: "Rush Yds",
+    hoverLabel: "Rushing yards — season total. CONTEXT ONLY, not part of the QB grading formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.qb_rush_yards,
+    render: (e) => fmtInt(e.qb_rush_yards),
+    group: "context",
+  },
+  {
+    key: "qb_rush_tds",
+    header: "Rush TD",
+    hoverLabel: "Rushing touchdowns — season total. CONTEXT ONLY, not part of the QB grading formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.qb_rush_tds,
+    render: (e) => fmtInt(e.qb_rush_tds),
+    group: "context",
   },
 ];
 
@@ -324,6 +502,7 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rb_ryoe_per_attempt,
     render: (e) => fmtSigned(e.rb_ryoe_per_attempt, 2),
+    group: "formula",
   },
   {
     key: "rush_epa",
@@ -332,6 +511,7 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_epa_per_attempt,
     render: (e) => fmtSigned(e.rb_rush_epa_per_attempt, 3),
+    group: "formula",
   },
   {
     key: "rush_succ",
@@ -340,6 +520,7 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rb_rush_success_rate,
     render: (e) => fmtPct(e.rb_rush_success_rate, 1),
+    group: "formula",
   },
   {
     key: "rec_epa",
@@ -348,6 +529,7 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
+    group: "formula",
   },
   {
     key: "rb_yac_oe",
@@ -356,6 +538,7 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rb_yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.rb_yac_over_expected_per_rec, 2),
+    group: "formula",
   },
   {
     key: "rb_yac_carry",
@@ -366,6 +549,7 @@ const RB_COLUMNS: SortableColumn[] = [
     render: (e) => (e.rb_yards_after_contact_per_carry == null
       ? "—"
       : e.rb_yards_after_contact_per_carry.toFixed(2)),
+    group: "formula",
   },
   {
     key: "rb_fumble",
@@ -374,6 +558,53 @@ const RB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.rb_fumble_rate,
     render: (e) => fmtPct(e.rb_fumble_rate, 2),
+    group: "formula",
+  },
+  // CONTEXT — box-score volume from skill_player_season_stats (NOT in formula).
+  {
+    key: "rb_rush_yards",
+    header: "Rush Yds",
+    hoverLabel: "Rushing yards — season total. CONTEXT ONLY, not part of the RB grading formula.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rush_yards,
+    render: (e) => fmtInt(e.skill_rush_yards),
+    group: "context",
+  },
+  {
+    key: "rb_rush_tds",
+    header: "Rush TD",
+    hoverLabel: "Rushing touchdowns — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rush_tds,
+    render: (e) => fmtInt(e.skill_rush_tds),
+    group: "context",
+  },
+  {
+    key: "rb_receptions",
+    header: "Rec",
+    hoverLabel: "Receptions — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_receptions,
+    render: (e) => fmtInt(e.skill_receptions),
+    group: "context",
+  },
+  {
+    key: "rb_rec_yards",
+    header: "Rec Yds",
+    hoverLabel: "Receiving yards — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rec_yards,
+    render: (e) => fmtInt(e.skill_rec_yards),
+    group: "context",
+  },
+  {
+    key: "rb_rec_tds",
+    header: "Rec TD",
+    hoverLabel: "Receiving touchdowns — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rec_tds,
+    render: (e) => fmtInt(e.skill_rec_tds),
+    group: "context",
   },
 ];
 
@@ -393,6 +624,7 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.rec_epa_per_target,
     render: (e) => fmtSigned(e.rec_epa_per_target, 3),
+    group: "formula",
   },
   {
     key: "yac_oe",
@@ -401,6 +633,7 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.yac_over_expected_per_rec,
     render: (e) => fmtSigned(e.yac_over_expected_per_rec, 2),
+    group: "formula",
   },
   {
     key: "separation",
@@ -409,6 +642,7 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.separation,
     render: (e) => e.separation === null || !Number.isFinite(e.separation) ? "—" : e.separation.toFixed(1),
+    group: "formula",
   },
   {
     key: "succ_rate",
@@ -417,6 +651,7 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.success_rate_per_target,
     render: (e) => fmtPct(e.success_rate_per_target, 1),
+    group: "formula",
   },
   {
     key: "earn",
@@ -425,6 +660,7 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.target_earn_rate,
     render: (e) => fmtPct(e.target_earn_rate, 1),
+    group: "formula",
   },
   {
     key: "drop_rate",
@@ -433,6 +669,36 @@ const WR_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.drop_rate,
     render: (e) => fmtPct(e.drop_rate, 1),
+    group: "formula",
+  },
+  // CONTEXT — box-score volume from skill_player_season_stats (NOT in formula).
+  // Shared with TE_COLUMNS (TE_COLUMNS = WR_COLUMNS).
+  {
+    key: "receptions",
+    header: "Rec",
+    hoverLabel: "Receptions — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_receptions,
+    render: (e) => fmtInt(e.skill_receptions),
+    group: "context",
+  },
+  {
+    key: "rec_yards",
+    header: "Rec Yds",
+    hoverLabel: "Receiving yards — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rec_yards,
+    render: (e) => fmtInt(e.skill_rec_yards),
+    group: "context",
+  },
+  {
+    key: "rec_tds",
+    header: "Rec TD",
+    hoverLabel: "Receiving touchdowns — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.skill_rec_tds,
+    render: (e) => fmtInt(e.skill_rec_tds),
+    group: "context",
   },
 ];
 
@@ -456,6 +722,7 @@ const CB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.cb_passer_rating_allowed,
     render: (e) => e.cb_passer_rating_allowed === null || !Number.isFinite(e.cb_passer_rating_allowed) ? "—" : e.cb_passer_rating_allowed.toFixed(1),
+    group: "formula",
   },
   {
     key: "cb_yac_per_rec",
@@ -464,6 +731,7 @@ const CB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.cb_yac_per_rec_allowed,
     render: (e) => e.cb_yac_per_rec_allowed === null || !Number.isFinite(e.cb_yac_per_rec_allowed) ? "—" : e.cb_yac_per_rec_allowed.toFixed(1),
+    group: "formula",
   },
   {
     key: "cb_target_rate",
@@ -472,6 +740,7 @@ const CB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.cb_target_rate,
     render: (e) => fmtPct(e.cb_target_rate, 1),
+    group: "formula",
   },
   {
     key: "cb_pbu_rate",
@@ -480,6 +749,35 @@ const CB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.cb_pbu_rate,
     render: (e) => fmtPct(e.cb_pbu_rate, 2),
+    group: "formula",
+  },
+  // CONTEXT — defensive box-score volume (NOT in formula).
+  {
+    key: "cb_tackles",
+    header: "Tkl",
+    hoverLabel: "Combined tackles (solo + assists) — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_tackles_combined,
+    render: (e) => fmtInt(e.def_tackles_combined),
+    group: "context",
+  },
+  {
+    key: "cb_int",
+    header: "INT",
+    hoverLabel: "Interceptions — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_interceptions,
+    render: (e) => fmtInt(e.def_interceptions),
+    group: "context",
+  },
+  {
+    key: "cb_ff",
+    header: "FF",
+    hoverLabel: "Forced fumbles — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_forced_fumbles,
+    render: (e) => fmtInt(e.def_forced_fumbles),
+    group: "context",
   },
 ];
 
@@ -499,6 +797,7 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.s_passer_rating_allowed,
     render: (e) => e.s_passer_rating_allowed === null || !Number.isFinite(e.s_passer_rating_allowed) ? "—" : e.s_passer_rating_allowed.toFixed(1),
+    group: "formula",
   },
   {
     key: "s_target_rate",
@@ -507,6 +806,7 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.s_target_rate,
     render: (e) => fmtPct(e.s_target_rate, 1),
+    group: "formula",
   },
   {
     key: "s_pbu_rate",
@@ -515,6 +815,7 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.s_pbu_rate,
     render: (e) => fmtPct(e.s_pbu_rate, 2),
+    group: "formula",
   },
   {
     key: "s_tackles_per_snap",
@@ -523,6 +824,7 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.s_tackles_per_snap,
     render: (e) => e.s_tackles_per_snap === null || !Number.isFinite(e.s_tackles_per_snap) ? "—" : e.s_tackles_per_snap.toFixed(3),
+    group: "formula",
   },
   {
     key: "s_missed_tkl",
@@ -531,6 +833,7 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.s_missed_tackle_rate,
     render: (e) => fmtPct(e.s_missed_tackle_rate, 1),
+    group: "formula",
   },
   {
     key: "s_disruption",
@@ -539,6 +842,35 @@ const S_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.s_backfield_disruption_per_snap,
     render: (e) => e.s_backfield_disruption_per_snap === null || !Number.isFinite(e.s_backfield_disruption_per_snap) ? "—" : (e.s_backfield_disruption_per_snap * 100).toFixed(2),
+    group: "formula",
+  },
+  // CONTEXT — defensive box-score volume (NOT in formula).
+  {
+    key: "s_tackles",
+    header: "Tkl",
+    hoverLabel: "Combined tackles (solo + assists) — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_tackles_combined,
+    render: (e) => fmtInt(e.def_tackles_combined),
+    group: "context",
+  },
+  {
+    key: "s_int",
+    header: "INT",
+    hoverLabel: "Interceptions — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_interceptions,
+    render: (e) => fmtInt(e.def_interceptions),
+    group: "context",
+  },
+  {
+    key: "s_ff",
+    header: "FF",
+    hoverLabel: "Forced fumbles — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_forced_fumbles,
+    render: (e) => fmtInt(e.def_forced_fumbles),
+    group: "context",
   },
 ];
 
@@ -558,6 +890,7 @@ const EDGE_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.edge_pressure_rate,
     render: (e) => fmtPct(e.edge_pressure_rate, 1),
+    group: "formula",
   },
   {
     key: "edge_sack_rate",
@@ -566,6 +899,7 @@ const EDGE_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.edge_sack_rate,
     render: (e) => fmtPct(e.edge_sack_rate, 2),
+    group: "formula",
   },
   {
     key: "edge_tfl_rate",
@@ -574,6 +908,7 @@ const EDGE_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.edge_tfl_rate,
     render: (e) => fmtPct(e.edge_tfl_rate, 2),
+    group: "formula",
   },
   {
     key: "edge_tackles_per_snap",
@@ -582,6 +917,7 @@ const EDGE_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.edge_tackles_per_snap,
     render: (e) => fmtPct(e.edge_tackles_per_snap, 1),
+    group: "formula",
   },
   {
     key: "edge_missed_tkl",
@@ -590,6 +926,35 @@ const EDGE_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.edge_missed_tackle_rate,
     render: (e) => fmtPct(e.edge_missed_tackle_rate, 1),
+    group: "formula",
+  },
+  // CONTEXT — raw counts (NOT in formula).
+  {
+    key: "edge_sacks",
+    header: "Sacks",
+    hoverLabel: "Sacks — season total. Half-credits possible. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_sacks,
+    render: (e) => fmtCount(e.def_sacks),
+    group: "context",
+  },
+  {
+    key: "edge_tfl",
+    header: "TFL",
+    hoverLabel: "Tackles for loss — season total (sacks included in NFL accounting). CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_tackles_for_loss,
+    render: (e) => fmtCount(e.def_tackles_for_loss),
+    group: "context",
+  },
+  {
+    key: "edge_ff",
+    header: "FF",
+    hoverLabel: "Forced fumbles — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_forced_fumbles,
+    render: (e) => fmtInt(e.def_forced_fumbles),
+    group: "context",
   },
 ];
 
@@ -609,6 +974,7 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.idl_tfl_rate,
     render: (e) => fmtPct(e.idl_tfl_rate, 2),
+    group: "formula",
   },
   {
     key: "idl_pressure_rate",
@@ -617,6 +983,7 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.idl_pressure_rate,
     render: (e) => fmtPct(e.idl_pressure_rate, 1),
+    group: "formula",
   },
   {
     key: "idl_sack_rate",
@@ -625,6 +992,7 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.idl_sack_rate,
     render: (e) => fmtPct(e.idl_sack_rate, 2),
+    group: "formula",
   },
   {
     key: "idl_tackles_per_snap",
@@ -633,6 +1001,7 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.idl_tackles_per_snap,
     render: (e) => fmtPct(e.idl_tackles_per_snap, 1),
+    group: "formula",
   },
   {
     key: "idl_missed_tkl",
@@ -641,6 +1010,35 @@ const IDL_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.idl_missed_tackle_rate,
     render: (e) => fmtPct(e.idl_missed_tackle_rate, 1),
+    group: "formula",
+  },
+  // CONTEXT — raw counts (NOT in formula).
+  {
+    key: "idl_sacks",
+    header: "Sacks",
+    hoverLabel: "Sacks — season total. Half-credits possible. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_sacks,
+    render: (e) => fmtCount(e.def_sacks),
+    group: "context",
+  },
+  {
+    key: "idl_tfl",
+    header: "TFL",
+    hoverLabel: "Tackles for loss — season total (sacks included in NFL accounting). CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_tackles_for_loss,
+    render: (e) => fmtCount(e.def_tackles_for_loss),
+    group: "context",
+  },
+  {
+    key: "idl_ff",
+    header: "FF",
+    hoverLabel: "Forced fumbles — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_forced_fumbles,
+    render: (e) => fmtInt(e.def_forced_fumbles),
+    group: "context",
   },
 ];
 
@@ -660,6 +1058,7 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.lb_tfl_rate,
     render: (e) => fmtPct(e.lb_tfl_rate, 2),
+    group: "formula",
   },
   {
     key: "lb_passer_rating_allowed",
@@ -668,6 +1067,7 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.lb_passer_rating_allowed,
     render: (e) => (e.lb_passer_rating_allowed == null ? "—" : e.lb_passer_rating_allowed.toFixed(1)),
+    group: "formula",
   },
   {
     key: "lb_missed_tkl",
@@ -676,6 +1076,7 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "asc",
     sortValue: (e) => e.lb_missed_tackle_rate,
     render: (e) => fmtPct(e.lb_missed_tackle_rate, 1),
+    group: "formula",
   },
   {
     key: "lb_pbu_rate",
@@ -684,6 +1085,7 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.lb_pbu_rate,
     render: (e) => fmtPct(e.lb_pbu_rate, 1),
+    group: "formula",
   },
   {
     key: "lb_tackle_rate",
@@ -692,6 +1094,7 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.lb_tackle_rate,
     render: (e) => (e.lb_tackle_rate == null ? "—" : e.lb_tackle_rate.toFixed(3)),
+    group: "formula",
   },
   {
     key: "lb_pressure_rate",
@@ -700,6 +1103,44 @@ const LB_COLUMNS: SortableColumn[] = [
     defaultDir: "desc",
     sortValue: (e) => e.lb_pressure_rate,
     render: (e) => fmtPct(e.lb_pressure_rate, 1),
+    group: "formula",
+  },
+  // CONTEXT — raw counts (NOT in formula).
+  {
+    key: "lb_tackles",
+    header: "Tkl",
+    hoverLabel: "Combined tackles (solo + assists) — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_tackles_combined,
+    render: (e) => fmtInt(e.def_tackles_combined),
+    group: "context",
+  },
+  {
+    key: "lb_sacks",
+    header: "Sacks",
+    hoverLabel: "Sacks — season total. Half-credits possible. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_sacks,
+    render: (e) => fmtCount(e.def_sacks),
+    group: "context",
+  },
+  {
+    key: "lb_int",
+    header: "INT",
+    hoverLabel: "Interceptions — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_interceptions,
+    render: (e) => fmtInt(e.def_interceptions),
+    group: "context",
+  },
+  {
+    key: "lb_ff",
+    header: "FF",
+    hoverLabel: "Forced fumbles — season total. CONTEXT ONLY.",
+    defaultDir: "desc",
+    sortValue: (e) => e.def_forced_fumbles,
+    render: (e) => fmtInt(e.def_forced_fumbles),
+    group: "context",
   },
 ];
 
@@ -938,26 +1379,33 @@ function Row({
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
       <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
-        {isTeamRow ? (
-          <span className="font-medium text-neutral-100">{e.full_name}</span>
-        ) : (
-          <Link
-            href={{ pathname: `/players/${e.player_id}` }}
-            className="font-medium text-neutral-100 hover:text-white hover:underline"
-          >
-            {e.full_name}
-          </Link>
-        )}
-        {roleText && (
-          <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-400">
-            {roleText}
-          </span>
-        )}
-        {!e.qualified && (
-          <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-500">
-            low volume
-          </span>
-        )}
+        <div className="flex items-center gap-4">
+          <div>
+            {isTeamRow ? (
+              <span className="font-medium text-neutral-100">{e.full_name}</span>
+            ) : (
+              <Link
+                href={{ pathname: `/players/${e.player_id}` }}
+                className="font-medium text-neutral-100 hover:text-white hover:underline"
+              >
+                {e.full_name}
+              </Link>
+            )}
+            {roleText && (
+              <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-400">
+                {roleText}
+              </span>
+            )}
+            {!e.qualified && (
+              <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-500">
+                low volume
+              </span>
+            )}
+          </div>
+          {e.gradeTrend.length > 0 && (
+            <SparklinePopover points={e.gradeTrend} />
+          )}
+        </div>
       </Td>
       <Td>
         {e.team_abbr ? (

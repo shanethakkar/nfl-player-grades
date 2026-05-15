@@ -63,6 +63,48 @@ export async function getGradedPositions(): Promise<string[]> {
 }
 
 /**
+ * Attach a `gradeTrend` array (last N qualifying seasons) to each entry
+ * by fetching one batched query for all player_ids on the leaderboard.
+ *
+ * Used by leaderboards that opt-in to inline sparklines. Currently QB
+ * only as a demo — broaden once the visual treatment is approved.
+ */
+async function _attachGradeTrend(
+  entries: LeaderboardEntry[],
+  position: string,
+  currentSeason: number,
+  span: number = 5,
+): Promise<LeaderboardEntry[]> {
+  const playerIds = entries.map((e) => e.player_id);
+  if (playerIds.length === 0) return entries;
+
+  const minSeason = currentSeason - (span - 1);
+
+  const rows = await sql<
+    { player_id: number; season: number; composite_grade: number }[]
+  >`
+    SELECT player_id, season, composite_grade
+    FROM season_grades
+    WHERE position = ${position}
+      AND player_id = ANY(${playerIds})
+      AND season BETWEEN ${minSeason} AND ${currentSeason}
+    ORDER BY player_id, season ASC
+  `;
+
+  const trendByPlayer = new Map<number, { season: number; grade: number }[]>();
+  for (const r of rows) {
+    const list = trendByPlayer.get(r.player_id) ?? [];
+    list.push({ season: Number(r.season), grade: Number(r.composite_grade) });
+    trendByPlayer.set(r.player_id, list);
+  }
+
+  return entries.map((e) => ({
+    ...e,
+    gradeTrend: trendByPlayer.get(e.player_id) ?? [],
+  }));
+}
+
+/**
  * Full leaderboard for one (season, position).
  *
  * Returns all rows — qualified first (sorted by grade desc), then
@@ -153,7 +195,13 @@ async function _getLeaderboard(
         sc_epa.sample_size      AS n_dropbacks,
         sc_epa.raw_value        AS epa_per_dropback,
         sc_cpoe.raw_value       AS cpoe,
-        sc_succ.raw_value       AS success_rate
+        sc_succ.raw_value       AS success_rate,
+        -- Context columns (box-score volume; NOT in formula)
+        qbs.pass_yards          AS qb_pass_yards,
+        qbs.pass_tds            AS qb_pass_tds,
+        qbs.interceptions       AS qb_interceptions,
+        qbs.rush_yards          AS qb_rush_yards,
+        qbs.rush_tds            AS qb_rush_tds
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -169,11 +217,15 @@ async function _getLeaderboard(
         ON sc_succ.player_id = sg.player_id
        AND sc_succ.season = sg.season
        AND sc_succ.component_name = 'qb_success_rate'
+      LEFT JOIN qb_season_stats qbs
+        ON qbs.player_id = sg.player_id
+       AND qbs.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'QB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "QB", season);
   }
 
   if (position === "RB") {
@@ -203,7 +255,13 @@ async function _getLeaderboard(
         sc_rec_epa.raw_value    AS rec_epa_per_target,
         sc_yac_oe.raw_value     AS rb_yac_over_expected_per_rec,
         sc_yac_carry.raw_value  AS rb_yards_after_contact_per_carry,
-        sc_fumble.raw_value     AS rb_fumble_rate
+        sc_fumble.raw_value     AS rb_fumble_rate,
+        -- Context (NOT in formula)
+        sps.rush_yards          AS skill_rush_yards,
+        sps.rush_tds            AS skill_rush_tds,
+        sps.receptions          AS skill_receptions,
+        sps.rec_yards           AS skill_rec_yards,
+        sps.rec_tds             AS skill_rec_tds
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -235,11 +293,15 @@ async function _getLeaderboard(
         ON sc_yac_carry.player_id = sg.player_id
        AND sc_yac_carry.season = sg.season
        AND sc_yac_carry.component_name = 'rb_yards_after_contact_per_carry'
+      LEFT JOIN skill_player_season_stats sps
+        ON sps.player_id = sg.player_id
+       AND sps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'RB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "RB", season);
   }
 
   if (position === "WR" || position === "TE") {
@@ -274,7 +336,11 @@ async function _getLeaderboard(
         sc_sep.raw_value        AS separation,
         sc_succ.raw_value       AS success_rate_per_target,
         sc_earn.raw_value       AS target_earn_rate,
-        sc_ball.raw_value       AS drop_rate
+        sc_ball.raw_value       AS drop_rate,
+        -- Context (NOT in formula)
+        sps.receptions          AS skill_receptions,
+        sps.rec_yards           AS skill_rec_yards,
+        sps.rec_tds             AS skill_rec_tds
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       ${teamLookupLateralForSgP}
@@ -302,6 +368,9 @@ async function _getLeaderboard(
         ON sc_ball.player_id = sg.player_id
        AND sc_ball.season = sg.season
        AND sc_ball.component_name = ${cBallSec}
+      LEFT JOIN skill_player_season_stats sps
+        ON sps.player_id = sg.player_id
+       AND sps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = ${position}
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -329,7 +398,13 @@ async function _getLeaderboard(
         sc_pra.raw_value         AS cb_passer_rating_allowed,
         sc_yac.raw_value         AS cb_yac_per_rec_allowed,
         sc_tgt.raw_value         AS cb_target_rate,
-        sc_pbu.raw_value         AS cb_pbu_rate
+        sc_pbu.raw_value         AS cb_pbu_rate,
+        -- Context (NOT in formula)
+        (COALESCE(dps.tackles_solo, 0) + COALESCE(dps.tackle_assists, 0)) AS def_tackles_combined,
+        dps.sacks                AS def_sacks,
+        dps.tackles_for_loss     AS def_tackles_for_loss,
+        dps.interceptions        AS def_interceptions,
+        dps.forced_fumbles       AS def_forced_fumbles
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -351,6 +426,9 @@ async function _getLeaderboard(
         ON sc_pbu.player_id = sg.player_id
        AND sc_pbu.season = sg.season
        AND sc_pbu.component_name = 'cb_pbu_rate'
+      LEFT JOIN defensive_player_season_stats dps
+        ON dps.player_id = sg.player_id
+       AND dps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'CB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -380,7 +458,13 @@ async function _getLeaderboard(
         sc_pbu.raw_value              AS s_pbu_rate,
         sc_tkl.raw_value              AS s_tackles_per_snap,
         sc_miss.raw_value             AS s_missed_tackle_rate,
-        sc_dis.raw_value              AS s_backfield_disruption_per_snap
+        sc_dis.raw_value              AS s_backfield_disruption_per_snap,
+        -- Context (NOT in formula)
+        (COALESCE(dps.tackles_solo, 0) + COALESCE(dps.tackle_assists, 0)) AS def_tackles_combined,
+        dps.sacks                     AS def_sacks,
+        dps.tackles_for_loss          AS def_tackles_for_loss,
+        dps.interceptions             AS def_interceptions,
+        dps.forced_fumbles            AS def_forced_fumbles
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -410,6 +494,9 @@ async function _getLeaderboard(
         ON sc_dis.player_id = sg.player_id
        AND sc_dis.season = sg.season
        AND sc_dis.component_name = 's_backfield_disruption_per_snap'
+      LEFT JOIN defensive_player_season_stats dps
+        ON dps.player_id = sg.player_id
+       AND dps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'S'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -439,7 +526,13 @@ async function _getLeaderboard(
         sc_sack.raw_value             AS edge_sack_rate,
         sc_tfl.raw_value              AS edge_tfl_rate,
         sc_tps.raw_value              AS edge_tackles_per_snap,
-        sc_miss.raw_value             AS edge_missed_tackle_rate
+        sc_miss.raw_value             AS edge_missed_tackle_rate,
+        -- Context (NOT in formula)
+        (COALESCE(dps.tackles_solo, 0) + COALESCE(dps.tackle_assists, 0)) AS def_tackles_combined,
+        dps.sacks                     AS def_sacks,
+        dps.tackles_for_loss          AS def_tackles_for_loss,
+        dps.interceptions             AS def_interceptions,
+        dps.forced_fumbles            AS def_forced_fumbles
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -465,6 +558,9 @@ async function _getLeaderboard(
         ON sc_miss.player_id = sg.player_id
        AND sc_miss.season = sg.season
        AND sc_miss.component_name = 'edge_missed_tackle_rate'
+      LEFT JOIN defensive_player_season_stats dps
+        ON dps.player_id = sg.player_id
+       AND dps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'EDGE'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -495,7 +591,13 @@ async function _getLeaderboard(
         sc_miss.raw_value             AS lb_missed_tackle_rate,
         sc_pbu.raw_value              AS lb_pbu_rate,
         sc_tkl.raw_value              AS lb_tackle_rate,
-        sc_prs.raw_value              AS lb_pressure_rate
+        sc_prs.raw_value              AS lb_pressure_rate,
+        -- Context (NOT in formula)
+        (COALESCE(dps.tackles_solo, 0) + COALESCE(dps.tackle_assists, 0)) AS def_tackles_combined,
+        dps.sacks                     AS def_sacks,
+        dps.tackles_for_loss          AS def_tackles_for_loss,
+        dps.interceptions             AS def_interceptions,
+        dps.forced_fumbles            AS def_forced_fumbles
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -525,6 +627,9 @@ async function _getLeaderboard(
         ON sc_prs.player_id = sg.player_id
        AND sc_prs.season = sg.season
        AND sc_prs.component_name = 'lb_pressure_rate'
+      LEFT JOIN defensive_player_season_stats dps
+        ON dps.player_id = sg.player_id
+       AND dps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'LB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -554,7 +659,13 @@ async function _getLeaderboard(
         sc_press.raw_value            AS idl_pressure_rate,
         sc_sack.raw_value             AS idl_sack_rate,
         sc_tps.raw_value              AS idl_tackles_per_snap,
-        sc_miss.raw_value             AS idl_missed_tackle_rate
+        sc_miss.raw_value             AS idl_missed_tackle_rate,
+        -- Context (NOT in formula)
+        (COALESCE(dps.tackles_solo, 0) + COALESCE(dps.tackle_assists, 0)) AS def_tackles_combined,
+        dps.sacks                     AS def_sacks,
+        dps.tackles_for_loss          AS def_tackles_for_loss,
+        dps.interceptions             AS def_interceptions,
+        dps.forced_fumbles            AS def_forced_fumbles
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       LEFT JOIN player_seasons ps
@@ -580,6 +691,9 @@ async function _getLeaderboard(
         ON sc_miss.player_id = sg.player_id
        AND sc_miss.season = sg.season
        AND sc_miss.component_name = 'idl_missed_tackle_rate'
+      LEFT JOIN defensive_player_season_stats dps
+        ON dps.player_id = sg.player_id
+       AND dps.season = sg.season
       WHERE sg.season = ${season}
         AND sg.position = 'iDL'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
@@ -1206,6 +1320,11 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     epa_per_dropback: coerceNullableNumber(row.epa_per_dropback),
     cpoe: coerceNullableNumber(row.cpoe),
     success_rate: coerceNullableNumber(row.success_rate),
+    qb_pass_yards: coerceNullableInt(row.qb_pass_yards),
+    qb_pass_tds: coerceNullableInt(row.qb_pass_tds),
+    qb_interceptions: coerceNullableInt(row.qb_interceptions),
+    qb_rush_yards: coerceNullableInt(row.qb_rush_yards),
+    qb_rush_tds: coerceNullableInt(row.qb_rush_tds),
     // RB-only
     n_touches: coerceNullableInt(row.n_touches),
     rb_ryoe_per_attempt: coerceNullableNumber(row.rb_ryoe_per_attempt),
@@ -1214,6 +1333,12 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     rb_yac_over_expected_per_rec: coerceNullableNumber(row.rb_yac_over_expected_per_rec),
     rb_yards_after_contact_per_carry: coerceNullableNumber(row.rb_yards_after_contact_per_carry),
     rb_fumble_rate: coerceNullableNumber(row.rb_fumble_rate),
+    // Shared skill-position CONTEXT (RB/WR/TE box-score volume; not in formula)
+    skill_rush_yards: coerceNullableInt(row.skill_rush_yards),
+    skill_rush_tds: coerceNullableInt(row.skill_rush_tds),
+    skill_receptions: coerceNullableInt(row.skill_receptions),
+    skill_rec_yards: coerceNullableInt(row.skill_rec_yards),
+    skill_rec_tds: coerceNullableInt(row.skill_rec_tds),
     // WR/TE shared
     n_targets: coerceNullableInt(row.n_targets),
     rec_epa_per_target: coerceNullableNumber(row.rec_epa_per_target),
@@ -1254,6 +1379,12 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     lb_pbu_rate: coerceNullableNumber(row.lb_pbu_rate),
     lb_tackle_rate: coerceNullableNumber(row.lb_tackle_rate),
     lb_pressure_rate: coerceNullableNumber(row.lb_pressure_rate),
+    // Shared defensive CONTEXT (CB/S/EDGE/iDL/LB box-score volume; not in formula)
+    def_tackles_combined: coerceNullableInt(row.def_tackles_combined),
+    def_sacks: coerceNullableNumber(row.def_sacks),
+    def_tackles_for_loss: coerceNullableNumber(row.def_tackles_for_loss),
+    def_interceptions: coerceNullableInt(row.def_interceptions),
+    def_forced_fumbles: coerceNullableInt(row.def_forced_fumbles),
     // K-only
     n_fg_att: coerceNullableInt(row.n_fg_att),
     k_fg_over_expected_per_att: coerceNullableNumber(row.k_fg_over_expected_per_att),
@@ -1278,5 +1409,8 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     ol_sack_rate: coerceNullableNumber(row.ol_sack_rate),
     ol_sacks_allowed: coerceNullableInt(row.ol_sacks_allowed),
     ol_penalty_rate: coerceNullableNumber(row.ol_penalty_rate),
+    // Empty by default; leaderboard branches that opt in (currently QB
+    // only) will populate this via _attachGradeTrend.
+    gradeTrend: [],
   };
 }
