@@ -577,9 +577,11 @@ async function _getLeaderboard(
   }
 
   if (position === "P") {
-    // P v1 (ADR-0024): formula = net_avg + inside_20_rate + blocked_rate.
-    // Context columns (gross_avg, long, touchback_rate) pulled from
-    // punter_stats — displayed but NOT scored.
+    // P v1.1 (ADR-0024 revised): formula = net_avg + inside_20_rate.
+    // Context columns (gross_avg, blocked_rate, long, touchback_rate) pulled
+    // from punter_stats — displayed but NOT scored. Block% was in v1's
+    // formula but removed in v1.1 (audit YoY/validity near zero, and most
+    // blocks are snap/protection failures rather than punter skill).
     const rows = await sql<LeaderboardEntry[]>`
       SELECT
         sg.player_id,
@@ -597,8 +599,10 @@ async function _getLeaderboard(
         sc_net.sample_size            AS n_punts,
         sc_net.raw_value              AS p_net_avg,
         sc_i20.raw_value              AS p_inside_20_rate,
-        sc_blk.raw_value              AS p_blocked_rate,
         -- Context columns (not in formula)
+        CASE WHEN COALESCE(ps.punts, 0) > 0
+             THEN ps.blocked::float / ps.punts
+             ELSE NULL END            AS p_blocked_rate,
         CASE WHEN COALESCE(ps.punts, 0) > 0
              THEN ps.gross_yards::float / ps.punts
              ELSE NULL END            AS p_gross_avg,
@@ -619,10 +623,6 @@ async function _getLeaderboard(
         ON sc_i20.player_id = sg.player_id
        AND sc_i20.season = sg.season
        AND sc_i20.component_name = 'p_inside_20_rate'
-      LEFT JOIN stat_components sc_blk
-        ON sc_blk.player_id = sg.player_id
-       AND sc_blk.season = sg.season
-       AND sc_blk.component_name = 'p_blocked_rate'
       LEFT JOIN punter_stats ps
         ON ps.player_id = sg.player_id AND ps.season = sg.season
       WHERE sg.season = ${season}

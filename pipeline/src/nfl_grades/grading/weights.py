@@ -956,15 +956,25 @@ K_V1_CONFIDENCE_FULL_FG_ATT: int = 30     # full confidence (career-year starter
 
 
 # ---------------------------------------------------------------------------
-# P v1 (ADR-0024, 2026-05-14, audit-first design — Option B from K v1.1 lesson).
+# P v1.1 (ADR-0024, revised 2026-05-14 same-day — blocked_rate removed).
 # ---------------------------------------------------------------------------
-# Punter grading. Scope: placement + return prevention + block penalty.
+# Punter grading. Scope: distance + return prevention + placement.
 # Hangtime intentionally excluded — not in nflverse data.
 #
 # Data source: punter_stats (aggregated from pbp punt_attempt rows by
 # punter_player_id). Coverage: 2016+.
 #
-# Audit findings (2026-05-14, see audits/2026-05-14-exhaustive-p.md):
+# v1 → v1.1 (same-day): removed `p_blocked_rate` (-0.05) from the formula.
+# The audit had already shown blocked_rate was near-zero on both YoY (-0.046)
+# and validity (-0.046) — it was kept at small weight on "punter conceptually
+# owns the play" grounds. v1.1 drops it: most blocks are snap/protection
+# failures rather than punter skill, and the event is so rare (1-2 per
+# punter per season) that the small negative weight was punishing punters
+# for their teammates' mistakes without measuring real punter skill.
+# Block% remains visible on the leaderboard as a CONTEXT column (pulled
+# directly from punter_stats raw counts) but is not scored.
+#
+# Audit findings (see audits/2026-05-14-exhaustive-p.md):
 # Unlike K (where FGOE per attempt cleanly dominated all alternatives),
 # the EPA-per-punt over-expected metric did NOT dominate raw rate metrics
 # for P. EPA at the punt level mixes punter skill with opponent quality,
@@ -973,33 +983,22 @@ K_V1_CONFIDENCE_FULL_FG_ATT: int = 30     # full confidence (career-year starter
 # Best individual signals from audit:
 #   - p_net_avg:        YoY +0.355 (best YoY), validity +0.166 (2nd best)
 #   - p_inside_20_rate: YoY +0.168, validity +0.188 (best)
-#   - p_epa_per_punt:   YoY +0.269, validity +0.163 (comprehensive but doesn't dominate)
+#   - p_epa_per_punt:   YoY +0.269, validity +0.163 (didn't dominate)
 #
-# v1 chose Option B: composite of net_avg (primary) + inside_20_rate
-# (placement) + blocked_rate penalty. Net_avg captures distance + return
-# prevention; inside_20_rate captures placement skill (orthogonal to net).
+# Weight breakdown (sum |abs| = 0.85):
+#   p_net_avg (65%):        primary distance + return prevention signal
+#   p_inside_20_rate (35%): placement skill (orthogonal to net)
 #
-# Rejected: p_gross_avg (subsumed by net_avg + worse), p_touchback_rate
-# (validity -0.030, near-zero), p_return_yards_per_punt (subsumed by net_avg),
-# p_fair_catch_rate (validity +0.013, near-zero), p_long_punt (weak both ways),
-# p_epa_per_punt (doesn't dominate; would be a viable single-component
-# alternative — Option A in the audit).
-#
-# Weight breakdown (sum |abs| = 0.90):
-#   p_net_avg (61%):        primary distance + return prevention signal
-#   p_inside_20_rate (33%): placement skill (orthogonal to net)
-#   p_blocked_rate (-6%):   small penalty for blocks (mostly snap/protection
-#                           failures, but conceptually owned by punter)
+# Rejected from v1.1 (in addition to v1's audit log):
+#   p_blocked_rate: removed per "blocks are not punter skill" framing.
 # ---------------------------------------------------------------------------
 
 P_COMPONENT_NET_AVG: str = "p_net_avg"
 P_COMPONENT_INSIDE_20_RATE: str = "p_inside_20_rate"
-P_COMPONENT_BLOCKED_RATE: str = "p_blocked_rate"
 
 P_V1_WEIGHTS: dict[str, float] = {
     P_COMPONENT_NET_AVG:        0.55,
     P_COMPONENT_INSIDE_20_RATE: 0.30,
-    P_COMPONENT_BLOCKED_RATE:   -0.05,
 }
 
 P_V1_SHRINKAGE_K: dict[str, float] = {
@@ -1007,20 +1006,16 @@ P_V1_SHRINKAGE_K: dict[str, float] = {
     P_COMPONENT_NET_AVG:        10.0,
     # Inside-20 is bucketed (~30% league-wide); moderate shrinkage.
     P_COMPONENT_INSIDE_20_RATE: 15.0,
-    # Blocks are very rare (1-2 per season); heavy shrinkage toward 0.
-    P_COMPONENT_BLOCKED_RATE:   30.0,
 }
 
 P_V1_RAW_VALUE_COLS: dict[str, str] = {
     P_COMPONENT_NET_AVG:        "net_avg",
     P_COMPONENT_INSIDE_20_RATE: "inside_20_rate",
-    P_COMPONENT_BLOCKED_RATE:   "blocked_rate",
 }
 
 P_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
     P_COMPONENT_NET_AVG:        "punts",
     P_COMPONENT_INSIDE_20_RATE: "punts",
-    P_COMPONENT_BLOCKED_RATE:   "punts",
 }
 
 # Qualification thresholds — punt-count based.

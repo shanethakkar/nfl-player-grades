@@ -1,6 +1,6 @@
 # ADR-0024 — P v1 Grading Formula
 
-**Status:** Accepted (v1 audit-first release — 2026-05-14)
+**Status:** Accepted (v1.1 blocked_rate removed — 2026-05-14)
 **Date:** 2026-05-14
 
 ---
@@ -27,17 +27,18 @@ Grain: one row per (player_id, season). Aggregated from pbp rows where `punt_att
 
 ---
 
-## Components (v1, 2026-05-14)
+## Components (v1.1, 2026-05-14)
 
 | Component | Formula | Weight | Direction |
 |---|---|---|---|
 | `p_net_avg` | net_yards / punts | **+0.55** | higher = better |
 | `p_inside_20_rate` | inside_20 / punts | **+0.30** | higher = better |
-| `p_blocked_rate` | blocked / punts | **−0.05** | lower = better |
 
-Sum |weights| = 0.90. Normalized dynamically by `composite.combine`.
+Sum |weights| = 0.85. Normalized dynamically by `composite.combine`.
 
-**Relative shares:** net average 61%, inside-20 placement 33%, block penalty 6%.
+**Relative shares:** net average 65%, inside-20 placement 35%.
+
+(Block% remains visible on the leaderboard as a CONTEXT column — pulled directly from `punter_stats` raw counts — but is not scored. See v1.1 revision history for rationale.)
 
 ---
 
@@ -59,7 +60,6 @@ Most starting punters have 50-80 punts per season. 40-punt threshold filters mid
 |---|---|---|
 | `p_net_avg` | 10 punts | Light — starters have 50-80 punts |
 | `p_inside_20_rate` | 15 punts | Moderate — bucketed event, ~30% league-wide |
-| `p_blocked_rate` | 30 punts | Heavy — blocks very rare (1-2/season per punter); shrink toward league mean |
 
 ---
 
@@ -69,7 +69,7 @@ Most starting punters have 50-80 punts per season. 40-punt threshold filters mid
 
 **Inside-20 rate (+0.30):** Captures placement skill — the ability to angle a punt so it pins opponents deep without bouncing into the endzone. This is **orthogonal to net avg**: a 40-yard punt downed at the 5 looks identical to a 40-yard punt downed at the 35 by net average. The audit gave this the highest validity (+0.188) of any candidate. Lower YoY (+0.168) reflects that inside-20 attempts are partly opportunity-driven (you only get them when punting from the right field position).
 
-**Block-rate penalty (−0.05):** Small. Blocks are mostly snap/protection failures rather than punter skill (audit YoY r = −0.05, near-zero), so weighting them heavily would punish punters for their teammates' mistakes. But a blocked punt is catastrophic (often a TD for the opponent), and the punter is the player most associated with the play. The small penalty acknowledges ownership without overweighting.
+**Block-rate (removed in v1.1):** v1 had `p_blocked_rate` at -0.05 weight on "punter conceptually owns the play" grounds. v1.1 removed it. The audit's near-zero YoY (-0.046) and validity (-0.046) showed it carries no skill signal, and most blocks are snap/protection failures. Even at small weight, the penalty was punishing punters for their teammates' mistakes. Block% remains on the leaderboard as context but is not scored.
 
 **iDL vs EDGE-style decision rejected (Option A):** A single-component `p_epa_per_punt` formula was considered — analogous to K v1.1's FGOE/att. EPA per punt comprehensively captures distance, placement, return prevention, and blocks. But the audit showed it does NOT dominate net average:
 
@@ -150,3 +150,28 @@ Known NaN sources:
 - Net-over-expected (NEPA) model — would be the cleanest "over-expected" version if we can build a stable model.
 
 Any v2 add will go through the same four-criterion audit before shipping.
+
+---
+
+## Revision History
+
+### v1.1 (2026-05-14) — `p_blocked_rate` removed (same-day)
+
+**Removed `p_blocked_rate` from the formula** (was -0.05 in v1). v1 kept it at small weight on "punter conceptually owns the play" grounds, but two issues made it unjustifiable:
+
+1. **Audit signals were near-zero.** YoY r = -0.046 (essentially noise — slightly negative), validity r = -0.046 (sign correct but tiny magnitude). Even at -0.05 weight the metric wasn't measuring skill, just adding noise to the composite.
+2. **Most blocks are not punter responsibility.** Snap quality and protection collapses cause the majority of blocks. Including it as a penalty punishes punters for their teammates' failures.
+
+The event is also rare (1-2 per punter per season), so the per-punt rate is dominated by variance even at qualified samples.
+
+**Block% remains visible on the leaderboard** as a CONTEXT column, pulled directly from `punter_stats` raw counts (not from `stat_components` since it's no longer scored). Readers can still see who got blocked; it just doesn't affect the grade.
+
+**Validity gate:** unchanged at +0.122 (matches expectation — blocked_rate had near-zero contribution to the composite).
+
+**Face-check 2024:** Top 3 unchanged (Jack Fox #1, Tommy Townsend #2, Logan Cooke #3). Small movements lower in the order: AJ Cole rose from #8 → #6 (had a 2.99% block rate — removing the small penalty helped him).
+
+**Weight totals:** v1 sum |abs| = 0.90 → v1.1 sum |abs| = 0.85. Combiner normalizes, so net_avg's effective share rose from 61% → 65% and inside_20_rate from 33% → 35%.
+
+### v1 (2026-05-14, deprecated same-day for blocked_rate piece)
+
+Initial release with three components: `p_net_avg` +0.55, `p_inside_20_rate` +0.30, `p_blocked_rate` -0.05. Audit-first design via Option B (multi-component) chosen over Option A (single-component EPA per punt) because the K v1.1 FGOE-dominance pattern didn't generalize for punters. Replaced same-day by v1.1 after recognizing the blocked_rate flaw.

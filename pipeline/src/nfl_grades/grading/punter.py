@@ -29,7 +29,6 @@ from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
-    P_COMPONENT_BLOCKED_RATE,
     P_COMPONENT_INSIDE_20_RATE,
     P_COMPONENT_NET_AVG,
     P_V1_CONFIDENCE_FULL_PUNTS,

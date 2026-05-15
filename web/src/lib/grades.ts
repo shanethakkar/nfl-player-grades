@@ -529,15 +529,15 @@ const COMPONENT_FORMATS: Record<string, ComponentFormat> = {
       "Share of punts pinned inside the opponent's 20-yard line. Highest Pro Bowl validity in the audit (r ≈ +0.19). Captures placement skill — orthogonal to net yardage (a 40-yard punt downed at the 5 looks identical to a 40-yard punt downed at the 35 by net average alone).",
     sampleNoun: "punt",
   },
+  // P context columns (displayed but not scored)
   p_blocked_rate: {
     label: "Block%",
     suffix: "%",
     formatValue: pctFraction(2),
     description:
-      "Punts blocked per attempt. Lower is better. Small weight (-0.05) in the formula because blocks are mostly snap/protection failures rather than punter skill (audit YoY r ≈ -0.05, near-zero), but conceptually a punter owns the play and a blocked punt is catastrophic — small penalty bounds the cost.",
+      "Punts blocked per attempt. CONTEXT ONLY — removed from the formula in v1.1. Most blocks are snap/protection failures rather than punter skill (audit YoY r ≈ -0.05, near-zero), and the event is too rare (1-2/season) to carry weight without punishing punters for their teammates' mistakes.",
     sampleNoun: "punt",
   },
-  // P context columns (displayed but not scored)
   p_gross_avg: {
     label: "Gross avg",
     suffix: " yd",
@@ -758,7 +758,6 @@ const COMPONENT_WEIGHTS: Record<string, number> = {
   k_fg_over_expected_per_att:         1.00,
   p_net_avg:                          0.55,
   p_inside_20_rate:                   0.30,
-  p_blocked_rate:                    -0.05,
 };
 
 const TE_BLOCKING_WEIGHTS: Record<string, number> = {
