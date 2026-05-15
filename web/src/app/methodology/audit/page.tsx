@@ -21,7 +21,7 @@ export const metadata = {
 
 export default function AuditPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <Hero />
       <FrameworkSection />
       <CaseStudySection />
@@ -39,14 +39,14 @@ export default function AuditPage() {
 
 function Hero() {
   return (
-    <section className="mb-20 border-b border-neutral-800 pb-16">
+    <section className="mb-12 border-b border-neutral-800 pb-10">
       <div className="mb-3 text-xs uppercase tracking-[0.2em] text-emerald-400/80">
         Research
       </div>
       <h1 className="mb-6 text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
         How every weight was decided.
       </h1>
-      <p className="mb-12 max-w-2xl text-lg leading-relaxed text-neutral-300">
+      <p className="mb-8 max-w-2xl text-lg leading-relaxed text-neutral-300">
         Each player grade is a weighted composite of 2&ndash;7 statistical
         components. Picking those components &mdash; and choosing what to
         leave out &mdash; was the hard part. This is what we did, what we
@@ -100,7 +100,7 @@ function BigStat({
 
 function FrameworkSection() {
   return (
-    <section className="mb-24">
+    <section className="mb-16">
       <SectionHeading
         eyebrow="The framework"
         title="Four criteria a metric must survive"
@@ -113,7 +113,7 @@ function FrameworkSection() {
         in the football world actually rewards.
       </p>
 
-      <div className="mb-12 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-2">
         {CRITERIA.map((c, i) => (
           <CriterionCard key={c.key} idx={i + 1} criterion={c} />
         ))}
@@ -448,7 +448,7 @@ function CaseStudySection() {
   );
 
   return (
-    <section className="mb-24">
+    <section className="mb-16">
       <SectionHeading
         eyebrow="When the framework caught a flaw"
         title="WR: the most validity-driven signal was underweighted"
@@ -634,7 +634,7 @@ function ScoreboardSection() {
   );
 
   return (
-    <section className="mb-24">
+    <section className="mb-16">
       <SectionHeading
         eyebrow="The result, position by position"
         title="How well does each formula predict Pro Bowl voting?"
@@ -741,7 +741,7 @@ function AuditLogSection() {
   const maxCandidates = Math.max(...FUNNEL.map((r) => r.totalCandidates));
 
   return (
-    <section className="mb-24">
+    <section className="mb-16">
       <SectionHeading
         eyebrow="The full audit log"
         title="What we considered, what we shipped, what we rejected"
@@ -837,7 +837,7 @@ function FunnelRow({
 
 function LessonsSection() {
   return (
-    <section className="mb-24">
+    <section className="mb-16">
       <SectionHeading
         eyebrow="What we learned"
         title="Patterns that compounded across positions"
@@ -958,7 +958,7 @@ function SubHeading({
   title: string;
 }) {
   return (
-    <div className="mb-3 mt-10">
+    <div className="mb-3 mt-8">
       <div className="mb-0.5 text-[11px] uppercase tracking-wider text-neutral-500">
         {eyebrow}
       </div>
