@@ -22,6 +22,9 @@ export function SiteHeader() {
             <Link href="/" className="hover:text-white">
               Leaderboard
             </Link>
+            <Link href="/teams" className="hover:text-white">
+              Teams
+            </Link>
             <Link href="/methodology" className="hover:text-white">
               Methodology
             </Link>

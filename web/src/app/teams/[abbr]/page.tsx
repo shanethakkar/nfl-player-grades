@@ -1,18 +1,140 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { LineupDiagram } from "@/components/LineupDiagram";
+import { RosterTable } from "@/components/RosterTable";
+import { TeamLogo } from "@/components/TeamLogo";
+import { TeamSeasonPicker } from "@/components/TeamSeasonPicker";
+import { TeamSwitcher } from "@/components/TeamSwitcher";
+import {
+  getAllTeams,
+  getTeamByAbbr,
+  getTeamLineup,
+  getTeamRoster,
+  getTeamSeasons,
+} from "@/lib/queries";
+
 type PageProps = {
   params: Promise<{ abbr: string }>;
+  searchParams: Promise<{ season?: string | string[] }>;
 };
 
-export default async function TeamPage({ params }: PageProps) {
+function firstOf(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PageProps): Promise<Metadata> {
   const { abbr } = await params;
+  const { season } = await searchParams;
+  const team = await getTeamByAbbr(abbr.toUpperCase());
+  if (!team) return { title: "Team — NFL Player Grades" };
+  const seasonStr = firstOf(season);
+  if (seasonStr && Number.isFinite(Number(seasonStr))) {
+    return { title: `${team.name} — ${seasonStr}` };
+  }
+  return { title: `${team.name} — NFL Player Grades` };
+}
+
+export default async function TeamPage({ params, searchParams }: PageProps) {
+  const { abbr: abbrRaw } = await params;
+  const { season: seasonRaw } = await searchParams;
+  const abbr = abbrRaw.toUpperCase();
+
+  const [team, allTeams] = await Promise.all([
+    getTeamByAbbr(abbr),
+    getAllTeams(),
+  ]);
+  if (!team) notFound();
+
+  const seasons = await getTeamSeasons(abbr);
+  // Resolve the active season: ?season= param if valid, otherwise the
+  // newest season we have player_seasons rows for.
+  const seasonParam = firstOf(seasonRaw);
+  const requested = seasonParam ? Number(seasonParam) : NaN;
+  const activeSeason =
+    Number.isFinite(requested) && seasons.includes(requested)
+      ? requested
+      : (seasons[0] ?? null);
+
+  const [roster, lineup] =
+    activeSeason !== null
+      ? await Promise.all([
+          getTeamRoster(abbr, activeSeason),
+          getTeamLineup(abbr, activeSeason),
+        ])
+      : [[], null];
+
   return (
-    <main className="mx-auto max-w-5xl p-8">
-      <h1 className="text-3xl font-bold">{abbr.toUpperCase()}</h1>
-      <p className="mt-2 text-sm opacity-70">
-        Roster, depth chart, and grades go here (build step 4). Roster should list
-        all TEs; pure blocking TEs with &lt;15 targets have no
-        <code className="mx-0.5">season_grades</code> row—surface explicitly, do
-        not omit silently.
-      </p>
+    <main className="mx-auto max-w-[1600px] px-6 py-10">
+      <div className="mb-2 text-xs uppercase tracking-wider text-neutral-600">
+        <Link href="/teams" className="hover:text-neutral-300">
+          Teams
+        </Link>
+        <span className="mx-2 text-neutral-700">/</span>
+        <span>{abbr}</span>
+      </div>
+
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <TeamLogo abbr={team.abbr} size={56} />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
+              {team.name}
+            </h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              {team.conference} {team.division}
+              {" · "}
+              {roster.length === 0
+                ? "No roster data for this season"
+                : `${roster.length} players`}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <TeamSwitcher
+            teams={allTeams}
+            activeAbbr={abbr}
+            activeSeason={activeSeason}
+          />
+          {activeSeason !== null && (
+            <TeamSeasonPicker
+              abbr={abbr}
+              seasons={seasons}
+              activeSeason={activeSeason}
+            />
+          )}
+        </div>
+      </div>
+
+      <section className="mb-12">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          Starting lineup
+        </h2>
+        {lineup === null ? (
+          <p className="text-sm text-neutral-500">
+            No depth chart available for this season.
+          </p>
+        ) : (
+          <LineupDiagram lineup={lineup} />
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          Full roster
+        </h2>
+        {activeSeason === null ? (
+          <p className="text-sm text-neutral-500">
+            No roster data available for {team.name}.
+          </p>
+        ) : (
+          <RosterTable entries={roster} />
+        )}
+      </section>
     </main>
   );
 }

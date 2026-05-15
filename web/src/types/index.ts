@@ -292,6 +292,92 @@ export type PlayerMeta = {
   current_team_abbr: string | null;
 };
 
+/**
+ * One slot on the team lineup diagram. May be empty (null name) when
+ * the depth chart didn't list a player for that canonical spot —
+ * common for SLOT WR / nickel CB on teams that don't use those labels.
+ */
+export type LineupSlot = {
+  /** Canonical position label rendered on the card (e.g. "WR1", "FS"). */
+  slot: string;
+  /** Underlying depth chart label (e.g. "WR", "FS", "LCB"). Diagnostic only. */
+  raw_position: string | null;
+  /** Depth order within the raw position (1 = starter). */
+  depth_order: number | null;
+  player_id: number | null;
+  full_name: string | null;
+  composite_grade: number | null;
+  qualified: boolean | null;
+  /** Grading position the grade was computed at — may differ from the
+   * depth chart label (e.g. depth chart "SAF", grading "S"). */
+  grading_position: string | null;
+};
+
+/**
+ * Structured lineup for one (team, season). Slots are pre-mapped from
+ * the raw depth chart so the rendering component doesn't have to know
+ * about nflverse position-label inconsistencies (e.g. SAF vs S vs FS).
+ *
+ * OL is represented by a single team grade (ADR-0025) plus the list of
+ * five starters from the depth chart — the leaderboard card collapses
+ * them into one wide cell.
+ */
+export type TeamLineup = {
+  // Offense
+  qb: LineupSlot | null;
+  rb: LineupSlot | null;
+  wr1: LineupSlot | null;
+  wr2: LineupSlot | null;
+  slot_wr: LineupSlot | null;
+  te: LineupSlot | null;
+  /** Up to 5 OL starters from the depth chart (LT, LG, C, RG, RT). */
+  ol_starters: LineupSlot[];
+  /** Team-level OL grade for the season (ADR-0025); null if not graded. */
+  ol_team_grade: number | null;
+  ol_team_qualified: boolean | null;
+  // Defense — front
+  dl: LineupSlot[]; // up to 4, ordered left → right (best-effort)
+  lb: LineupSlot[]; // up to 3
+  // Defense — secondary
+  cb1: LineupSlot | null;
+  cb2: LineupSlot | null;
+  slot_cb: LineupSlot | null;
+  fs: LineupSlot | null;
+  ss: LineupSlot | null;
+  // Special teams
+  k: LineupSlot | null;
+  p: LineupSlot | null;
+};
+
+/**
+ * One row on a team's roster for a given season. Joins player_seasons
+ * with the player's season grade (if any). For traded players, the
+ * grade is the full-season grade (we don't split it by team).
+ */
+export type TeamRosterEntry = {
+  player_id: number;
+  full_name: string;
+  /** Position as listed on the team's roster (e.g. "QB", "WR", "SAF"). */
+  position_played: string;
+  games: number;
+  games_started: number;
+  snaps_offense: number;
+  snaps_defense: number;
+  snaps_special: number;
+  total_snaps: number;
+  /** Grade fields are null when the player has no season_grades row (rare
+   * positions like fullback, long snapper) or didn't qualify at any
+   * graded position. */
+  composite_grade: number | null;
+  percentile: number | null;
+  qualified: boolean | null;
+  /** Position the grade was computed at (may differ from position_played
+   * — e.g. nflverse lists "SAF", our grading position is "S"). */
+  grading_position: string | null;
+  /** True if the player has player_seasons rows for >1 team this season. */
+  traded_in_season: boolean;
+};
+
 /** What /players/[id] renders. */
 export type PlayerDetail = {
   player: PlayerMeta;

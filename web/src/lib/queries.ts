@@ -15,12 +15,18 @@ import { unstable_cache } from "next/cache";
 
 import { sql } from "./db";
 import type {
+  Conference,
+  Division,
   LeaderboardEntry,
+  LineupSlot,
   PlayerDetail,
   PlayerMeta,
   SeasonGradeDetail,
   StatComponentDetail,
+  Team,
   TeamContext,
+  TeamLineup,
+  TeamRosterEntry,
   TopQb,
 } from "@/types";
 
@@ -36,6 +42,545 @@ export async function getGradedSeasons(): Promise<number[]> {
   `;
   return rows.map((r) => Number(r.season));
 }
+
+/**
+ * All 32 teams, ordered by conference → division → name. Used by the
+ * /teams index page to render the grouped logo grid.
+ */
+export async function getAllTeams(): Promise<Team[]> {
+  const rows = await sql<Team[]>`
+    SELECT team_id, abbr, name, conference, division,
+           primary_color, secondary_color
+    FROM teams
+    ORDER BY conference, division, name
+  `;
+  return rows.map((r) => ({
+    ...r,
+    team_id: Number(r.team_id),
+    conference: r.conference as Conference,
+    division: r.division as Division,
+  }));
+}
+
+/**
+ * Seasons we have any player_seasons rows for this team — used to
+ * populate the year selector on the team page. Ordered newest first.
+ */
+export async function getTeamSeasons(teamAbbr: string): Promise<number[]> {
+  const rows = await sql<{ season: number }[]>`
+    SELECT DISTINCT ps.season
+    FROM player_seasons ps
+    JOIN teams t ON t.team_id = ps.team_id
+    WHERE t.abbr = ${teamAbbr}
+    ORDER BY ps.season DESC
+  `;
+  return rows.map((r) => Number(r.season));
+}
+
+/**
+ * Minimal team metadata for the header on /teams/[abbr]. Returns null
+ * when no team matches the abbr (e.g. typo in URL).
+ */
+export async function getTeamByAbbr(teamAbbr: string): Promise<Team | null> {
+  const rows = await sql<Team[]>`
+    SELECT team_id, abbr, name, conference, division,
+           primary_color, secondary_color
+    FROM teams
+    WHERE abbr = ${teamAbbr}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    team_id: Number(row.team_id),
+    conference: row.conference as Conference,
+    division: row.division as Division,
+  };
+}
+
+/**
+ * Every player who appears in player_seasons for (teamAbbr, season),
+ * left-joined with their best-graded season_grades row for that season
+ * (highest composite_grade wins if a player has multiple grading
+ * positions — rare in practice).
+ *
+ * Ordering: qualified players first by grade desc, then everyone else
+ * by total snaps desc. Gives a sensible default view without forcing
+ * sort-on-load on the client.
+ */
+async function _getTeamRoster(
+  teamAbbr: string,
+  season: number,
+): Promise<TeamRosterEntry[]> {
+  const rows = await sql<TeamRosterEntry[]>`
+    SELECT
+      p.player_id,
+      p.full_name,
+      ps.position_played,
+      ps.games,
+      ps.games_started,
+      ps.snaps_offense,
+      ps.snaps_defense,
+      ps.snaps_special,
+      (ps.snaps_offense + ps.snaps_defense + ps.snaps_special) AS total_snaps,
+      sg.composite_grade,
+      sg.percentile,
+      sg.qualified,
+      sg.position                                              AS grading_position,
+      EXISTS(
+        SELECT 1 FROM player_seasons ps2
+        WHERE ps2.player_id = p.player_id
+          AND ps2.season    = ps.season
+          AND ps2.team_id  != ps.team_id
+      )                                                        AS traded_in_season
+    FROM player_seasons ps
+    JOIN teams   t ON t.team_id   = ps.team_id
+    JOIN players p ON p.player_id = ps.player_id
+    LEFT JOIN LATERAL (
+      SELECT composite_grade, percentile, qualified, position
+      FROM season_grades sg2
+      WHERE sg2.player_id = p.player_id
+        AND sg2.season    = ps.season
+      ORDER BY sg2.composite_grade DESC
+      LIMIT 1
+    ) sg ON TRUE
+    WHERE t.abbr   = ${teamAbbr}
+      AND ps.season = ${season}
+    ORDER BY
+      (sg.qualified IS TRUE) DESC,
+      sg.composite_grade DESC NULLS LAST,
+      (ps.snaps_offense + ps.snaps_defense + ps.snaps_special) DESC NULLS LAST
+  `;
+  return rows.map((r) => ({
+    player_id: Number(r.player_id),
+    full_name: r.full_name,
+    position_played: r.position_played,
+    games: Number(r.games),
+    games_started: Number(r.games_started),
+    snaps_offense: Number(r.snaps_offense),
+    snaps_defense: Number(r.snaps_defense),
+    snaps_special: Number(r.snaps_special),
+    total_snaps: Number(r.total_snaps),
+    composite_grade:
+      r.composite_grade === null ? null : Number(r.composite_grade),
+    percentile: r.percentile === null ? null : Number(r.percentile),
+    qualified: r.qualified,
+    grading_position: r.grading_position,
+    traded_in_season: r.traded_in_season,
+  }));
+}
+
+export const getTeamRoster = unstable_cache(_getTeamRoster, ["team-roster"], {
+  revalidate: 3600,
+});
+
+// ---------------------------------------------------------------------------
+// Team lineup (depth-chart starters mapped onto a canonical formation).
+// ---------------------------------------------------------------------------
+
+type RawLineupRow = {
+  position: string;
+  depth_order: number;
+  player_id: number;
+  full_name: string;
+  composite_grade: number | null;
+  qualified: boolean | null;
+  grading_position: string | null;
+};
+
+/**
+ * nflverse depth chart labels are inconsistent — teams variously use
+ * "DE"/"LDE"/"RDE"/"EDGE", "S"/"FS"/"SS", etc. These maps collapse the
+ * variations onto canonical groups so the lineup builder can pick the
+ * right player for each formation slot regardless of which label the
+ * team used.
+ */
+// nflverse depth-chart labels split differently between 4-3 and 3-4 fronts.
+// In a 4-3, edges are DEs and OLBs are linebackers. In a 3-4, edges are the
+// outside LBs (WLB/SLB/OLB) and the DE labels are 5-technique interior
+// players. Bills 2025 are the canonical 3-4 case (LDE=Oliver, NT=Walker,
+// WLB=Rousseau, SLB=Chubb). We pick the right pool at runtime based on
+// whether the depth chart looks 3-4-shaped.
+const EDGE_LABELS_4_3 = ["DE", "LDE", "RDE", "EDGE", "RUSH"];
+const EDGE_LABELS_3_4 = ["WLB", "SLB", "OLB", "LOLB", "ROLB"];
+const IDL_LABELS_4_3 = new Set(["DT", "LDT", "RDT", "NT", "DL"]);
+// In 3-4, the LDE/RDE players are interior 5-techs — include them as iDL.
+const IDL_LABELS_3_4 = new Set([
+  "NT", "DT", "LDT", "RDT", "DL", "LDE", "RDE", "DE",
+]);
+const LB_LABELS_4_3 = new Set([
+  "LB", "ILB", "MLB",
+  "LILB", "RILB",
+  "WLB", "SLB", "WILL", "MIKE", "SAM",
+  // OLB still eligible — if not taken as edge, it's a coverage backer.
+  "OLB", "LOLB", "ROLB",
+]);
+// In 3-4, the outside LBs are edges — exclude them from the LB pool.
+const LB_LABELS_3_4 = new Set([
+  "LB", "ILB", "MLB", "MIKE",
+  "LILB", "RILB",
+]);
+const SLOT_CB_LABELS = new Set(["NCB", "NB", "NKL", "DB"]);
+const SAFETY_LABELS = new Set(["S", "FS", "SS", "SAF"]);
+
+async function _getTeamLineup(
+  teamAbbr: string,
+  season: number,
+): Promise<TeamLineup> {
+  // One query: depth chart rows (week=99 end-of-season snapshot) joined
+  // with each player's best-graded season_grades row.
+  const rows = await sql<RawLineupRow[]>`
+    SELECT
+      dc.position,
+      dc.depth_order,
+      p.player_id,
+      p.full_name,
+      sg.composite_grade,
+      sg.qualified,
+      sg.position AS grading_position
+    FROM depth_charts dc
+    JOIN teams   t ON t.team_id   = dc.team_id
+    JOIN players p ON p.player_id = dc.player_id
+    LEFT JOIN LATERAL (
+      SELECT composite_grade, qualified, position
+      FROM season_grades sg2
+      WHERE sg2.player_id = p.player_id
+        AND sg2.season    = dc.season
+      ORDER BY sg2.composite_grade DESC
+      LIMIT 1
+    ) sg ON TRUE
+    WHERE t.abbr     = ${teamAbbr}
+      AND dc.season  = ${season}
+      AND dc.week    = 99
+    ORDER BY dc.position, dc.depth_order
+  `;
+
+  // Team OL grade is a separate table (team_ol_grades, ADR-0025). One row
+  // per (team, season). Missing pre-2018.
+  const olRows = await sql<{
+    composite_grade: number;
+    qualified: boolean;
+  }[]>`
+    SELECT g.composite_grade, g.qualified
+    FROM team_ol_grades g
+    JOIN teams t ON t.team_id = g.team_id
+    WHERE t.abbr = ${teamAbbr} AND g.season = ${season}
+    LIMIT 1
+  `;
+
+  const grouped = new Map<string, RawLineupRow[]>();
+  for (const r of rows) {
+    const list = grouped.get(r.position) ?? [];
+    list.push({ ...r, depth_order: Number(r.depth_order), player_id: Number(r.player_id) });
+    grouped.set(r.position, list);
+  }
+
+  // Helper: build a slot from one raw row, attaching the canonical label.
+  function toSlot(slot: string, r: RawLineupRow | undefined): LineupSlot | null {
+    if (!r) return null;
+    return {
+      slot,
+      raw_position: r.position,
+      depth_order: r.depth_order,
+      player_id: r.player_id,
+      full_name: r.full_name,
+      composite_grade:
+        r.composite_grade === null ? null : Number(r.composite_grade),
+      qualified: r.qualified,
+      grading_position: r.grading_position,
+    };
+  }
+
+  // Pick first depth row from any of the given labels (priority order
+  // matches the list). Used for DL/LB/secondary where labels vary by team.
+  function pickFirstFrom(
+    labels: string[],
+    excludeIds: Set<number> = new Set(),
+    depthOrder: number = 1,
+  ): RawLineupRow | undefined {
+    for (const label of labels) {
+      const list = grouped.get(label) ?? [];
+      const match = list.find(
+        (r) => r.depth_order === depthOrder && !excludeIds.has(r.player_id),
+      );
+      if (match) return match;
+    }
+    return undefined;
+  }
+
+  // Pick top N starters across a set of labels, by depth_order asc then
+  // by composite_grade desc (graded players bubble up). Excludes already-
+  // picked player_ids. Used for DL (4) and LB (3).
+  function pickTopNAcross(
+    labelSet: Set<string>,
+    n: number,
+    excludeIds: Set<number>,
+  ): RawLineupRow[] {
+    const all: RawLineupRow[] = [];
+    for (const [pos, list] of grouped.entries()) {
+      if (!labelSet.has(pos)) continue;
+      for (const r of list) all.push(r);
+    }
+    const picked: RawLineupRow[] = [];
+    const taken = new Set(excludeIds);
+    // Sort by depth (starters first), then by grade desc (so DE depth=1
+    // with grade 80 beats DT depth=1 with grade 50 when filling slots).
+    all.sort((a, b) => {
+      if (a.depth_order !== b.depth_order) return a.depth_order - b.depth_order;
+      const ag = a.composite_grade ?? -Infinity;
+      const bg = b.composite_grade ?? -Infinity;
+      return Number(bg) - Number(ag);
+    });
+    for (const r of all) {
+      if (taken.has(r.player_id)) continue;
+      picked.push(r);
+      taken.add(r.player_id);
+      if (picked.length === n) break;
+    }
+    return picked;
+  }
+
+  // --- Offense ---
+  const wrList = grouped.get("WR") ?? [];
+  const qb = toSlot("QB", (grouped.get("QB") ?? [])[0]);
+  const rb = toSlot(
+    "RB",
+    (grouped.get("RB") ?? [])[0] ?? (grouped.get("HB") ?? [])[0],
+  );
+  const wr1 = toSlot("WR1", wrList[0]);
+  const wr2 = toSlot("WR2", wrList[1]);
+  const slot_wr = toSlot("SLOT", wrList[2]);
+  const te = toSlot("TE", (grouped.get("TE") ?? [])[0]);
+
+  // OL — take depth=1 from each of LT/LG/C/RG/RT.
+  const ol_starters: LineupSlot[] = [];
+  for (const label of ["LT", "LG", "C", "RG", "RT"]) {
+    const r = (grouped.get(label) ?? []).find((x) => x.depth_order === 1);
+    if (r) ol_starters.push({
+      slot: label,
+      raw_position: r.position,
+      depth_order: r.depth_order,
+      player_id: r.player_id,
+      full_name: r.full_name,
+      composite_grade: null, // hidden — OL is a team grade, not per-player
+      qualified: null,
+      grading_position: null,
+    });
+  }
+  const ol_team_grade = olRows[0]?.composite_grade ?? null;
+  const ol_team_qualified = olRows[0]?.qualified ?? null;
+
+  // --- Defense ---
+  // Build the defensive 11 in this order so we can decide LB count based
+  // on whether a slot CB exists:
+  //   - 2 CBs, 1 optional slot CB
+  //   - 2 safeties
+  //   - 4 DL
+  //   - LBs: 2 if slot CB present (modern nickel), 3 otherwise (base)
+  // Total: always 11. Tracks picked player_ids to avoid double-placing
+  // a player whose depth-chart position appears in multiple buckets.
+  const taken = new Set<number>();
+
+  // CBs: prefer LCB/RCB labels, otherwise CB depth 1+2.
+  const cb1Raw =
+    pickFirstFrom(["LCB"], taken, 1) ??
+    pickFirstFrom(["CB"], taken, 1);
+  if (cb1Raw) taken.add(cb1Raw.player_id);
+  const cb2Raw =
+    pickFirstFrom(["RCB"], taken, 1) ??
+    pickFirstFrom(["CB"], taken, 2) ??
+    pickFirstFrom(["CB"], taken, 1);
+  if (cb2Raw) taken.add(cb2Raw.player_id);
+  const cb1 = toSlot("LCB", cb1Raw);
+  const cb2 = toSlot("RCB", cb2Raw);
+
+  // Slot CB: optional — only if depth chart explicitly has one.
+  const slotCbRaw = pickFirstFrom(
+    Array.from(SLOT_CB_LABELS),
+    taken,
+    1,
+  );
+  if (slotCbRaw) taken.add(slotCbRaw.player_id);
+  const slot_cb = toSlot("SLOT CB", slotCbRaw);
+
+  // Safeties: prefer FS/SS labels, otherwise S depth 1+2.
+  const fsRaw =
+    pickFirstFrom(["FS"], taken, 1) ??
+    pickFirstFrom(["S", "SAF"], taken, 1);
+  if (fsRaw) taken.add(fsRaw.player_id);
+  const ssRaw =
+    pickFirstFrom(["SS"], taken, 1) ??
+    pickFirstFrom(["S", "SAF"], taken, 2) ??
+    pickFirstFrom(["S", "SAF"], taken, 1);
+  if (ssRaw) taken.add(ssRaw.player_id);
+  const fs = toSlot("FS", fsRaw);
+  const ss = toSlot("SS", ssRaw);
+
+  // Detect 3-4 front: depth chart has NT and no DT-equivalent. Bills 2025
+  // hits this branch (LDE/RDE/NT, no DT/LDT/RDT). Routes WLB/SLB to EDGE
+  // and LDE/RDE to iDL — matches how those players actually align.
+  const has34Front =
+    (grouped.get("NT") ?? []).length > 0 &&
+    (grouped.get("DT") ?? []).length === 0 &&
+    (grouped.get("LDT") ?? []).length === 0 &&
+    (grouped.get("RDT") ?? []).length === 0;
+
+  const edgeLabelsPreferred = has34Front ? EDGE_LABELS_3_4 : EDGE_LABELS_4_3;
+  const edgeLabelsFallback = has34Front ? EDGE_LABELS_4_3 : EDGE_LABELS_3_4;
+  const idlPool = has34Front ? IDL_LABELS_3_4 : IDL_LABELS_4_3;
+  const lbPool = has34Front ? LB_LABELS_3_4 : LB_LABELS_4_3;
+
+  // D-line — pick 2 EDGE then 2 iDL, ordered EDGE / iDL / iDL / EDGE
+  // (left → right).
+  const edgePicks = pickTopNAcross(
+    new Set(edgeLabelsPreferred),
+    2,
+    taken,
+  );
+  for (const p of edgePicks) taken.add(p.player_id);
+  // Fall back to the other front's edge labels if we couldn't fill 2 from
+  // the preferred pool (e.g. a 4-3 team that only listed one DE depth=1).
+  if (edgePicks.length < 2) {
+    const more = pickTopNAcross(
+      new Set(edgeLabelsFallback),
+      2 - edgePicks.length,
+      taken,
+    );
+    for (const p of more) taken.add(p.player_id);
+    edgePicks.push(...more);
+  }
+  const idlPicks = pickTopNAcross(idlPool, 2, taken);
+  for (const p of idlPicks) taken.add(p.player_id);
+
+  const dlOrdered: { row: RawLineupRow; kind: "EDGE" | "iDL" }[] = [];
+  if (edgePicks[0]) dlOrdered.push({ row: edgePicks[0], kind: "EDGE" });
+  if (idlPicks[0]) dlOrdered.push({ row: idlPicks[0], kind: "iDL" });
+  if (idlPicks[1]) dlOrdered.push({ row: idlPicks[1], kind: "iDL" });
+  if (edgePicks[1]) dlOrdered.push({ row: edgePicks[1], kind: "EDGE" });
+  const dl: LineupSlot[] = dlOrdered.map(({ row: r, kind }) => ({
+    slot: kind,
+    raw_position: r.position,
+    depth_order: r.depth_order,
+    player_id: r.player_id,
+    full_name: r.full_name,
+    composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
+    qualified: r.qualified,
+    grading_position: r.grading_position,
+  }));
+
+  // LBs — 2 if we already have a slot CB on the field (nickel = 5 DBs +
+  // 6 front), otherwise 3 (base defense = 4 DBs + 7 front). Either way
+  // total defense = 11.
+  const lbCount = slot_cb ? 2 : 3;
+  const lbPicks = pickTopNAcross(lbPool, lbCount, taken);
+  for (const p of lbPicks) taken.add(p.player_id);
+  const lb: LineupSlot[] = lbPicks.map((r) => ({
+    slot: "LB",
+    raw_position: r.position,
+    depth_order: r.depth_order,
+    player_id: r.player_id,
+    full_name: r.full_name,
+    composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
+    qualified: r.qualified,
+    grading_position: r.grading_position,
+  }));
+
+  // --- Special teams ---
+  // nflverse depth charts sometimes omit K/P entirely for certain
+  // team-seasons (BAL/CAR/MIN/SF in 2025 are missing P, for example).
+  // Fall back to player_seasons + the player's listed position so the
+  // lineup still shows a specialist.
+  let k = toSlot(
+    "K",
+    (grouped.get("K") ?? [])[0] ?? (grouped.get("PK") ?? [])[0],
+  );
+  let p = toSlot("P", (grouped.get("P") ?? [])[0]);
+
+  if (!k || !p) {
+    const fallbacks = await sql<{
+      position: string;
+      player_id: number;
+      full_name: string;
+      composite_grade: number | null;
+      qualified: boolean | null;
+    }[]>`
+      (
+        SELECT 'K' AS position, p.player_id, p.full_name,
+               sg.composite_grade, sg.qualified
+        FROM player_seasons ps
+        JOIN teams t   ON t.team_id   = ps.team_id
+        JOIN players p ON p.player_id = ps.player_id
+        LEFT JOIN season_grades sg
+          ON sg.player_id = p.player_id
+         AND sg.season    = ps.season
+         AND sg.position  = 'K'
+        WHERE t.abbr = ${teamAbbr}
+          AND ps.season = ${season}
+          AND p.position = 'K'
+        ORDER BY ps.snaps_special DESC NULLS LAST
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT 'P' AS position, p.player_id, p.full_name,
+               sg.composite_grade, sg.qualified
+        FROM player_seasons ps
+        JOIN teams t   ON t.team_id   = ps.team_id
+        JOIN players p ON p.player_id = ps.player_id
+        LEFT JOIN season_grades sg
+          ON sg.player_id = p.player_id
+         AND sg.season    = ps.season
+         AND sg.position  = 'P'
+        WHERE t.abbr = ${teamAbbr}
+          AND ps.season = ${season}
+          AND p.position = 'P'
+        ORDER BY ps.snaps_special DESC NULLS LAST
+        LIMIT 1
+      )
+    `;
+    for (const r of fallbacks) {
+      const slot: LineupSlot = {
+        slot: r.position,
+        raw_position: null,
+        depth_order: null,
+        player_id: Number(r.player_id),
+        full_name: r.full_name,
+        composite_grade:
+          r.composite_grade === null ? null : Number(r.composite_grade),
+        qualified: r.qualified,
+        grading_position: r.position,
+      };
+      if (r.position === "K" && !k) k = slot;
+      if (r.position === "P" && !p) p = slot;
+    }
+  }
+
+  return {
+    qb,
+    rb,
+    wr1,
+    wr2,
+    slot_wr,
+    te,
+    ol_starters,
+    ol_team_grade: ol_team_grade === null ? null : Number(ol_team_grade),
+    ol_team_qualified,
+    dl,
+    lb,
+    cb1,
+    cb2,
+    slot_cb,
+    fs,
+    ss,
+    k,
+    p,
+  };
+}
+
+export const getTeamLineup = unstable_cache(_getTeamLineup, ["team-lineup"], {
+  revalidate: 3600,
+});
 
 /**
  * Positions with graded rows for at least one season. Used by the UI to
