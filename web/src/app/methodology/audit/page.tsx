@@ -9,7 +9,6 @@ import {
   LESSONS,
   REJECTION_HIGHLIGHTS,
   VALIDITY_SCOREBOARD,
-  VERDICT_META,
   WR_AUDIT,
   type AuditCandidate,
 } from "@/lib/audit-data";
@@ -17,7 +16,7 @@ import {
 export const metadata = {
   title: "Research — How every weight was decided",
   description:
-    "190+ candidates evaluated across 12 positions. 52 in production formulas. The audit framework, the case studies, and the full rejection log.",
+    "190+ metrics evaluated across 12 positions. 52 in production formulas. The audit framework, the case studies, and the full rejection log.",
 };
 
 export default function AuditPage() {
@@ -57,7 +56,7 @@ function Hero() {
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
         <BigStat
           number={`${FUNNEL_TOTALS.totalCandidates}+`}
-          label="candidates evaluated"
+          label="metrics evaluated"
           sublabel={`across ${FUNNEL_TOTALS.positions} positions`}
         />
         <BigStat
@@ -104,7 +103,7 @@ function FrameworkSection() {
     <section className="mb-24">
       <SectionHeading
         eyebrow="The framework"
-        title="Four criteria a candidate must survive"
+        title="Four criteria a metric must survive"
       />
       <p className="mb-8 max-w-3xl text-neutral-300">
         For every plausible statistical metric in nflverse data, we score it
@@ -124,24 +123,231 @@ function FrameworkSection() {
         eyebrow="A worked example"
         title="What the audit looks like for WR"
       />
-      <p className="mb-6 max-w-3xl text-neutral-300">
-        Wide receiver got the largest candidate set of any position &mdash;
-        22 statistics tested. Six survived. The grid below shows every
-        candidate&rsquo;s scores on the four criteria. Hover any row for
-        the verdict reasoning.
+      <p className="mb-8 max-w-3xl text-neutral-300">
+        Wide receiver got the largest metric set of any position &mdash;
+        22 statistics tested. Six survived. Below, all 22 grouped by what
+        the audit decided for each.
       </p>
 
-      <AuditGrid candidates={WR_AUDIT} position="WR" />
-
-      <p className="mt-6 max-w-3xl text-sm text-neutral-400">
-        The shipped components <span className="font-mono text-emerald-400">·</span>{" "}
-        sit at the top because they passed every criterion. Below them,
-        the rejected candidates are colour-coded by reason: subsumed by an
-        existing formula component, redundant with a chosen one, or below
-        the noise threshold for year-over-year reliability.
-      </p>
+      <WRAuditGrouped />
     </section>
   );
+}
+
+// ===========================================================================
+// WR AUDIT — grouped by verdict (Shipped / Overlapped / Failed)
+// ===========================================================================
+
+function WRAuditGrouped() {
+  const shipped = WR_AUDIT.filter((c) => c.verdict === "shipped").sort(
+    (a, b) => Math.abs(b.weight ?? 0) - Math.abs(a.weight ?? 0),
+  );
+  const overlapped = WR_AUDIT.filter(
+    (c) => c.verdict === "subsumed" || c.verdict === "redundant",
+  ).sort((a, b) => Math.abs(b.maxR ?? 0) - Math.abs(a.maxR ?? 0));
+  const failed = WR_AUDIT.filter(
+    (c) =>
+      c.verdict === "noise" ||
+      c.verdict === "small-sample" ||
+      c.verdict === "anti-skill",
+  ).sort((a, b) => (b.yoyR ?? 0) - (a.yoyR ?? 0));
+
+  return (
+    <div className="space-y-6">
+      <ShippedBlock items={shipped} />
+      <OverlappedBlock items={overlapped} />
+      <FailedBlock items={failed} />
+    </div>
+  );
+}
+
+function GroupHeader({
+  count,
+  label,
+  blurb,
+  tone,
+}: {
+  count: number;
+  label: string;
+  blurb: string;
+  tone: "shipped" | "overlapped" | "failed";
+}) {
+  const colors = {
+    shipped: {
+      bar: "bg-emerald-500",
+      badge: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    },
+    overlapped: {
+      bar: "bg-amber-500",
+      badge: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    },
+    failed: {
+      bar: "bg-red-500",
+      badge: "border-red-500/40 bg-red-500/10 text-red-300",
+    },
+  }[tone];
+  return (
+    <div className="mb-3 flex items-baseline gap-3">
+      <div className={"h-3 w-1 rounded-full " + colors.bar} />
+      <h4 className="text-base font-semibold uppercase tracking-wider text-neutral-100">
+        {label}
+      </h4>
+      <span
+        className={"rounded border px-2 py-0.5 font-mono text-xs " + colors.badge}
+      >
+        {count}
+      </span>
+      <span className="text-sm text-neutral-400">— {blurb}</span>
+    </div>
+  );
+}
+
+function ShippedBlock({ items }: { items: AuditCandidate[] }) {
+  return (
+    <div>
+      <GroupHeader
+        count={items.length}
+        label="Shipped in the formula"
+        blurb="Passed all four criteria"
+        tone="shipped"
+      />
+      <div className="overflow-hidden rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03]">
+        <table className="w-full text-sm">
+          <thead className="bg-emerald-500/5 text-[11px] uppercase tracking-wider text-emerald-300/70">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium">Metric</th>
+              <th className="px-2 py-2 text-right font-medium">Weight</th>
+              <th className="px-2 py-2 text-right font-medium">YoY</th>
+              <th className="px-2 py-2 text-right font-medium">x-sec</th>
+              <th className="px-2 py-2 text-right font-medium">max |r|</th>
+              <th className="px-2 py-2 text-right font-medium">Validity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((c) => (
+              <tr
+                key={c.name}
+                className="border-t border-emerald-500/10"
+                title={c.rationale}
+              >
+                <td className="px-4 py-2.5">
+                  <div className="font-medium text-neutral-100">{c.displayName}</div>
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-xs text-emerald-300">
+                    {(c.weight ?? 0) > 0 ? "+" : ""}
+                    {(c.weight ?? 0).toFixed(2)}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <Heatcell value={c.yoyR} kind="yoy" />
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <Heatcell value={c.xsectStd} kind="xsect" />
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <Heatcell value={c.maxR} kind="independence" />
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <Heatcell value={c.validityR} kind="validity" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OverlappedBlock({ items }: { items: AuditCandidate[] }) {
+  return (
+    <div>
+      <GroupHeader
+        count={items.length}
+        label="Overlapped a chosen metric"
+        blurb="Either mathematically inside, or correlated > 0.5"
+        tone="overlapped"
+      />
+      <div className="overflow-hidden rounded-lg border border-amber-500/20 bg-amber-500/[0.03]">
+        <table className="w-full text-sm">
+          <thead className="bg-amber-500/5 text-[11px] uppercase tracking-wider text-amber-300/70">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium">Metric</th>
+              <th className="px-3 py-2 text-right font-medium">max |r|</th>
+              <th className="px-4 py-2 text-left font-medium">Overlaps with</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((c) => (
+              <tr
+                key={c.name}
+                className="border-t border-amber-500/10"
+                title={c.rationale}
+              >
+                <td className="px-4 py-2 text-neutral-200">{c.displayName}</td>
+                <td className="px-3 py-2 text-right font-mono text-xs text-amber-200">
+                  {(c.maxR ?? 0).toFixed(3)}
+                </td>
+                <td className="px-4 py-2 text-sm text-neutral-400">
+                  {prettyComponent(c.maxRPartner)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function FailedBlock({ items }: { items: AuditCandidate[] }) {
+  return (
+    <div>
+      <GroupHeader
+        count={items.length}
+        label="Failed audit"
+        blurb="Below noise floor, anti-skill, or too rare to grade"
+        tone="failed"
+      />
+      <div className="overflow-hidden rounded-lg border border-red-500/20 bg-red-500/[0.03]">
+        <table className="w-full text-sm">
+          <thead className="bg-red-500/5 text-[11px] uppercase tracking-wider text-red-300/70">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium">Metric</th>
+              <th className="px-3 py-2 text-right font-medium">YoY</th>
+              <th className="px-4 py-2 text-left font-medium">Why excluded</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((c) => (
+              <tr
+                key={c.name}
+                className="border-t border-red-500/10"
+                title={c.rationale}
+              >
+                <td className="px-4 py-2 text-neutral-200">{c.displayName}</td>
+                <td className="px-3 py-2 text-right font-mono text-xs text-red-200">
+                  {c.yoyR != null
+                    ? (c.yoyR > 0 ? "+" : "") + c.yoyR.toFixed(3)
+                    : "n/a"}
+                </td>
+                <td className="px-4 py-2 text-sm text-neutral-400">
+                  {c.rationale}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Strip the "wr_" prefix and tidy underscores for display. */
+function prettyComponent(name: string | null): string {
+  if (!name) return "—";
+  return name.replace(/^[a-z]+_/, "").replace(/_/g, " ");
 }
 
 function CriterionCard({
@@ -174,122 +380,8 @@ function CriterionCard({
 }
 
 // ===========================================================================
-// AUDIT GRID — heatmap-style table
+// HEATCELL — colored numeric cell, used by the Shipped block above
 // ===========================================================================
-
-function AuditGrid({
-  candidates,
-  position,
-}: {
-  candidates: AuditCandidate[];
-  position: string;
-}) {
-  // Order shipped components first (by weight desc), then everything else
-  // by verdict tone (good > neutral > warn > bad).
-  const ordered = [...candidates].sort((a, b) => {
-    if (a.verdict === "shipped" && b.verdict !== "shipped") return -1;
-    if (a.verdict !== "shipped" && b.verdict === "shipped") return 1;
-    if (a.verdict === "shipped" && b.verdict === "shipped") {
-      return Math.abs(b.weight ?? 0) - Math.abs(a.weight ?? 0);
-    }
-    return 0;
-  });
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-800">
-      <table className="w-full min-w-[860px] text-sm">
-        <thead className="bg-neutral-900/60 text-xs uppercase tracking-wider text-neutral-500">
-          <tr>
-            <th className="px-4 py-3 text-left font-medium">Candidate</th>
-            <th className="px-3 py-3 text-right font-medium">YoY r</th>
-            <th className="px-3 py-3 text-right font-medium">x-sec std</th>
-            <th className="px-3 py-3 text-right font-medium">max |r|</th>
-            <th className="px-3 py-3 text-right font-medium">Validity r</th>
-            <th className="px-4 py-3 text-left font-medium">Verdict</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map((c) => (
-            <AuditGridRow key={c.name} candidate={c} />
-          ))}
-        </tbody>
-      </table>
-      <div className="border-t border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-500">
-        {position} cohort · {candidates.length} candidates · scores from
-        the 2026-05-14 audit. Cell colour reflects signal strength on each
-        criterion (green = passes, amber = marginal, red = fails).
-      </div>
-    </div>
-  );
-}
-
-function AuditGridRow({ candidate: c }: { candidate: AuditCandidate }) {
-  const meta = VERDICT_META[c.verdict];
-  const verdictTone =
-    meta.tone === "good"
-      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-      : meta.tone === "warn"
-        ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-        : meta.tone === "neutral"
-          ? "bg-neutral-700/20 text-neutral-300 border-neutral-700/40"
-          : "bg-red-500/10 text-red-300 border-red-500/30";
-
-  const isShipped = c.verdict === "shipped";
-
-  return (
-    <tr
-      className={
-        "group border-t border-neutral-800/60 hover:bg-neutral-900/40 " +
-        (isShipped ? "bg-emerald-950/10" : "")
-      }
-      title={c.rationale}
-    >
-      <td className="px-4 py-3 align-top">
-        <div className="font-medium text-neutral-100">{c.displayName}</div>
-        <div className="font-mono text-[10px] text-neutral-500">{c.name}</div>
-        {isShipped && c.weight != null && (
-          <div className="mt-1 inline-block rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
-            weight {c.weight > 0 ? "+" : ""}
-            {c.weight.toFixed(2)}
-          </div>
-        )}
-      </td>
-      <td className="px-3 py-3 text-right align-top">
-        <Heatcell value={c.yoyR} kind="yoy" />
-      </td>
-      <td className="px-3 py-3 text-right align-top">
-        <Heatcell value={c.xsectStd} kind="xsect" />
-      </td>
-      <td className="px-3 py-3 text-right align-top">
-        <Heatcell value={c.maxR} kind="independence" />
-        {c.maxRPartner && (
-          <div className="mt-0.5 truncate text-[10px] text-neutral-500" style={{ maxWidth: "120px" }}>
-            vs {c.maxRPartner.replace(/^[a-z]+_/, "")}
-          </div>
-        )}
-      </td>
-      <td className="px-3 py-3 text-right align-top">
-        <Heatcell value={c.validityR} kind="validity" />
-      </td>
-      <td className="px-4 py-3 align-top">
-        <span
-          className={
-            "inline-block rounded border px-2 py-1 text-[11px] font-medium " +
-            verdictTone
-          }
-        >
-          {meta.label}
-        </span>
-        <div
-          className="mt-1.5 text-xs text-neutral-400"
-          style={{ maxWidth: "260px" }}
-        >
-          {c.rationale}
-        </div>
-      </td>
-    </tr>
-  );
-}
 
 function Heatcell({
   value,
@@ -646,7 +738,7 @@ function AuditLogSection() {
       <p className="mb-8 max-w-3xl text-neutral-300">
         The articles in the analytics community usually show you the formula
         and tell you it&rsquo;s good. Here&rsquo;s what we did before
-        landing on the formula. The funnel below shows how many candidates
+        landing on the formula. The funnel below shows how many metrics
         each position evaluated and how many made it into the live grade.
       </p>
 
@@ -666,7 +758,7 @@ function AuditLogSection() {
           <span className="text-emerald-300">
             {FUNNEL_TOTALS.totalCandidates}
           </span>{" "}
-          candidates evaluated &middot; {" "}
+          metrics evaluated &middot; {" "}
           <span className="text-emerald-300">{FUNNEL_TOTALS.inFormula}</span>{" "}
           in production &middot;{" "}
           <span className="text-neutral-500">
@@ -680,7 +772,7 @@ function AuditLogSection() {
         title="Selected rejections, by pattern"
       />
       <p className="mb-6 max-w-3xl text-neutral-300">
-        Every rejected candidate has a documented reason. These are the most
+        Every rejected metric has a documented reason. These are the most
         instructive ones &mdash; they show the patterns that recurred across
         positions. Filter by pattern or position; click a row for the full
         explanation.

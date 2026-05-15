@@ -122,7 +122,7 @@ export function RejectionTable({ rows }: { rows: Row[] }) {
       </div>
 
       <div className="border-t border-neutral-800 px-4 py-3 text-xs text-neutral-500">
-        Showing {filtered.length} of {rows.length} featured rejections.
+        Showing {filtered.length} of {rows.length} featured metric rejections.
         Click a row for the full explanation.
       </div>
     </div>
