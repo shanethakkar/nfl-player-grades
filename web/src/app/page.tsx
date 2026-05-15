@@ -238,20 +238,10 @@ export default async function HomePage({ searchParams }: Props) {
       </div>
 
       {activePosition === "OL" && (
-        <aside className="mt-6 rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wider text-emerald-400/80">
-            <span aria-hidden>ⓘ</span>
-            <span>Why teams, not players?</span>
-          </div>
-          <p className="text-neutral-300">
-            Public play-by-play data doesn&rsquo;t attribute pressures, sacks,
-            or run-blocking lanes to specific offensive linemen. Without
-            paid film grades, per-player OL scoring would be inventing
-            attribution we don&rsquo;t actually have. We grade the unit as
-            a team-season instead &mdash; which is how analysts and coaches
-            typically discuss OL play anyway.
-          </p>
-        </aside>
+        <p className="mt-3 text-xs text-neutral-500">
+          OL is graded as a team unit. Public play-by-play data
+          doesn&rsquo;t attribute individual blocks to specific linemen.
+        </p>
       )}
 
       <section className="mt-6 -mr-6 sm:mr-0">
