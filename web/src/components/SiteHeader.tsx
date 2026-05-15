@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Logo } from "./Logo";
 import { PlayerSearch } from "./PlayerSearch";
 
 /**
@@ -13,8 +14,9 @@ export function SiteHeader() {
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-4">
         <Link
           href="/"
-          className="text-sm font-semibold tracking-tight text-neutral-100 hover:text-white"
+          className="flex items-center gap-2 text-sm font-semibold tracking-tight text-neutral-100 hover:text-white"
         >
+          <Logo size={30} />
           NFL Player Grades
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2 text-sm text-neutral-300">
