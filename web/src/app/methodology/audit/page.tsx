@@ -5,11 +5,11 @@ import {
   CRITERIA,
   FUNNEL,
   FUNNEL_TOTALS,
-  IDL_BEFORE_AFTER,
   LESSONS,
   REJECTION_HIGHLIGHTS,
   VALIDITY_SCOREBOARD,
   WR_AUDIT,
+  WR_BEFORE_AFTER,
   type AuditCandidate,
 } from "@/lib/audit-data";
 
@@ -438,11 +438,11 @@ function Heatcell({
 // ===========================================================================
 
 function CaseStudySection() {
-  const v1Total = IDL_BEFORE_AFTER.v1Weights.reduce(
+  const v1Total = WR_BEFORE_AFTER.v1Weights.reduce(
     (s, w) => s + Math.abs(w.weight),
     0,
   );
-  const v12Total = IDL_BEFORE_AFTER.v12Weights.reduce(
+  const v13Total = WR_BEFORE_AFTER.v13Weights.reduce(
     (s, w) => s + Math.abs(w.weight),
     0,
   );
@@ -451,24 +451,28 @@ function CaseStudySection() {
     <section className="mb-24">
       <SectionHeading
         eyebrow="When the framework caught a flaw"
-        title="iDL: the audit said pressure, not run-stop"
+        title="WR: the most validity-driven signal was underweighted"
       />
       <p className="mb-8 max-w-3xl text-neutral-300">
         Methodology only earns trust by showing it changes when the data
-        says it should. Here&rsquo;s the cleanest example: interior
-        defensive line was originally designed around &ldquo;run stopping is
-        what iDL does.&rdquo; The audit caught that this didn&rsquo;t match
-        either the data or how Pro Bowl voters actually evaluate iDL.
+        says it should. Most audit-driven changes are small &mdash; that&rsquo;s
+        what makes them honest. Here&rsquo;s a representative one: WR v1
+        weighted Receiving EPA most heavily because EPA is the comprehensive
+        value number. The audit caught two more subtle things going on
+        underneath that intuition.
       </p>
 
       <div className="mb-8 rounded-lg border border-amber-500/20 bg-amber-500/5 p-6">
         <div className="mb-2 text-xs uppercase tracking-wider text-amber-300/80">
           The problem v1 had
         </div>
-        <p className="text-neutral-200">{IDL_BEFORE_AFTER.problem}</p>
+        <p className="text-neutral-200">{WR_BEFORE_AFTER.problem}</p>
       </div>
 
-      <SubHeading eyebrow="The audit data" title="Pressure was both more reliable AND more validated" />
+      <SubHeading
+        eyebrow="The audit data"
+        title="Target earn rate was the highest-validity WR metric"
+      />
       <div className="mb-8 overflow-x-auto rounded-lg border border-neutral-800">
         <table className="w-full min-w-[600px] text-sm">
           <thead className="bg-neutral-900/60 text-xs uppercase tracking-wider text-neutral-500">
@@ -480,11 +484,11 @@ function CaseStudySection() {
               <th className="px-4 py-3 text-right font-medium">
                 Year-over-year r
               </th>
-              <th className="px-4 py-3 text-right font-medium">Weight (v1 → v1.2)</th>
+              <th className="px-4 py-3 text-right font-medium">Weight (v1 → v1.3)</th>
             </tr>
           </thead>
           <tbody>
-            {IDL_BEFORE_AFTER.finding.map((row) => (
+            {WR_BEFORE_AFTER.finding.map((row) => (
               <tr key={row.metric} className="border-t border-neutral-800/60">
                 <td className="px-4 py-3 font-medium text-neutral-200">
                   {row.metric}
@@ -505,34 +509,41 @@ function CaseStudySection() {
       </div>
 
       <p className="mb-10 max-w-3xl text-neutral-300">
-        {IDL_BEFORE_AFTER.conclusion}
+        {WR_BEFORE_AFTER.conclusion}
       </p>
 
-      <SubHeading eyebrow="The fix" title="Formula rebalance, side-by-side" />
+      <SubHeading eyebrow="The fix" title="Two weight changes, side-by-side" />
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
         <FormulaCard
-          title="iDL v1"
-          subtitle="Original — designed around run-stop"
-          weights={IDL_BEFORE_AFTER.v1Weights}
+          title="WR v1"
+          subtitle="Original — EPA-centric, target_earn as usage marker"
+          weights={WR_BEFORE_AFTER.v1Weights}
           total={v1Total}
           tone="muted"
         />
         <FormulaCard
-          title="iDL v1.2"
-          subtitle="After audit — pressure-primary"
-          weights={IDL_BEFORE_AFTER.v12Weights}
-          total={v12Total}
+          title="WR v1.3"
+          subtitle="After audit — target_earn elevated, success_rate trimmed"
+          weights={WR_BEFORE_AFTER.v13Weights}
+          total={v13Total}
           tone="active"
         />
       </div>
 
-      <div className="mb-8 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-6">
+      <div className="mb-6 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-6">
         <div className="mb-2 text-xs uppercase tracking-wider text-emerald-300/80">
           The result
         </div>
         <p className="text-neutral-200">
-          {IDL_BEFORE_AFTER.rebalanceImpact}
+          {WR_BEFORE_AFTER.rebalanceImpact}
         </p>
+      </div>
+
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6">
+        <div className="mb-2 text-xs uppercase tracking-wider text-neutral-500">
+          The takeaway
+        </div>
+        <p className="text-neutral-300">{WR_BEFORE_AFTER.takeaway}</p>
       </div>
     </section>
   );

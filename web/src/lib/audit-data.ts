@@ -260,41 +260,49 @@ export const WR_AUDIT: AuditCandidate[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// iDL before/after — the "framework caught a real problem" case study
-// Source: docs/grading/audits/2026-05-14-exhaustive-idl.md
-//         docs/adr/0021-idl-v1-grading-formula.md
+// WR v1.3 before/after — "framework caught a real problem" case study
+// Source: docs/grading/audits/2026-05-14-exhaustive-wr.md
+//         docs/adr/0015-wr-v1-grading-formula.md
+//
+// We chose WR for the case study (over the more dramatic iDL rebalance)
+// because: (a) WR is more universally recognizable across both casual and
+// recruiter audiences, (b) WR's smaller-magnitude rebalance is more
+// representative of what audits typically catch (most produce small,
+// justified tweaks — not architectural rewrites). The iDL story still
+// gets a one-line cameo in the Lessons section as an example of the
+// framework catching a structural flaw.
 // ---------------------------------------------------------------------------
 
-export const IDL_BEFORE_AFTER = {
+export const WR_BEFORE_AFTER = {
   v1Weights: [
-    { name: "idl_tfl_rate", display: "TFL rate", weight: 0.35 },
-    { name: "idl_pressure_rate", display: "Pressure rate", weight: 0.30 },
-    { name: "idl_sack_rate", display: "Sack rate", weight: 0.15 },
-    { name: "idl_missed_tackle_rate", display: "Missed tackle rate", weight: -0.05 },
+    { name: "wr_rec_epa_per_target", display: "Receiving EPA / target", weight: 0.35 },
+    { name: "wr_yac_over_expected_per_rec", display: "YAC over expected", weight: 0.27 },
+    { name: "wr_separation", display: "Separation (NGS)", weight: 0.10 },
+    { name: "wr_target_earn_rate", display: "Target earn rate", weight: 0.10 },
+    { name: "wr_success_rate_per_target", display: "Success rate", weight: 0.08 },
+    { name: "wr_drop_rate", display: "Drop rate (FTN)", weight: -0.05 },
   ],
-  v12Weights: [
-    { name: "idl_pressure_rate", display: "Pressure rate", weight: 0.35 },
-    { name: "idl_tfl_rate", display: "TFL rate", weight: 0.25 },
-    { name: "idl_sack_rate", display: "Sack rate", weight: 0.20 },
-    { name: "idl_tackles_per_snap", display: "Tackles per snap (NEW)", weight: 0.05 },
-    { name: "idl_missed_tackle_rate", display: "Missed tackle rate", weight: -0.05 },
+  v13Weights: [
+    { name: "wr_rec_epa_per_target", display: "Receiving EPA / target", weight: 0.35 },
+    { name: "wr_yac_over_expected_per_rec", display: "YAC over expected", weight: 0.27 },
+    { name: "wr_target_earn_rate", display: "Target earn rate", weight: 0.15 },
+    { name: "wr_separation", display: "Separation (NGS)", weight: 0.10 },
+    { name: "wr_success_rate_per_target", display: "Success rate", weight: 0.05 },
+    { name: "wr_drop_rate", display: "Drop rate (FTN)", weight: -0.05 },
   ],
   problem:
-    "v1 was designed around \"iDL = primarily a run-stopper.\" TFL was the heaviest weight at 35%. The exhaustive audit revealed this didn't match either the data or how voters evaluate iDL.",
+    "v1 weighted Receiving EPA most heavily (0.35) because EPA is the comprehensive value number. Target earn rate sat at 0.10 — treated as a usage marker rather than a skill signal. Success rate was at 0.08 as a secondary consistency metric.",
   finding: [
-    { metric: "Pressure rate", validity: 0.460, yoy: 0.689, weight: "0.30 → 0.35" },
-    { metric: "Sack rate",     validity: 0.394, yoy: 0.450, weight: "0.15 → 0.20" },
-    { metric: "TFL rate",      validity: 0.260, yoy: 0.371, weight: "0.35 → 0.25" },
+    { metric: "Target earn rate",        validity: 0.282, yoy: 0.612, weight: "0.10 → 0.15" },
+    { metric: "Receiving EPA / target",  validity: 0.244, yoy: 0.310, weight: "0.35 (unchanged)" },
+    { metric: "Success rate",            validity: 0.205, yoy: 0.272, weight: "0.08 → 0.05" },
   ],
   conclusion:
-    "Pressure rate has BOTH the highest Pro Bowl validity AND the highest year-over-year reliability — it should be the primary iDL signal. The original \"run-stop\" assumption was an older positional archetype; modern voting rewards interior pass-rush (Aaron Donald → Chris Jones → Quinnen Williams → Dexter Lawrence lineage).",
+    "Two findings the audit surfaced that weren't obvious from intuition: (1) Target earn rate had the highest Pro Bowl validity of any WR metric (+0.282) — the WRs who get targeted most aren't just being used heavily, they're being trusted by QBs because they earn it. The metric was meaningfully underweighted. (2) Success rate had a 0.760 correlation with EPA — mathematically, success rate is the share of targets that produce positive EPA, so the two metrics are partly redundant. Including both at full strength was double-counting.",
   rebalanceImpact:
-    "Validity moved +0.457 → +0.475 (largest defensive gain of any audit). Top-8 in 2024 are all consensus elite iDL: L. Williams, D. Lawrence (1st-Team All-Pro), C. Jones, Fiske (DROY runner-up), Buckner, Heyward, Vea, Q. Williams.",
-  topMovers2024: [
-    { player: "Cameron Heyward", v1Rank: 12, v12Rank: 6, change: "↑ 6", note: "Strong pressure year; was undervalued by v1's TFL focus" },
-    { player: "Chris Jones", v1Rank: 5, v12Rank: 3, change: "↑ 2", note: "Already elite, formula now matches reputation" },
-    { player: "Quinnen Williams", v1Rank: 11, v12Rank: 8, change: "↑ 3", note: "Rebalance helped pressure-first interior players" },
-  ],
+    "Validity moved +0.280 → +0.300 (a ~7% relative gain). Top-5 in 2024 unchanged — Justin Jefferson, Ja'Marr Chase, CeeDee Lamb, Mike Evans, Brandon Aiyuk all stayed put. The change is in the mid-pack ordering: high-volume target earners (e.g. Drake London, Cooper Kupp) moved up modestly; lower-volume efficient WRs moved down modestly.",
+  takeaway:
+    "Most audit-driven changes are small. The WRs at the top were already the right WRs. But the methodology demands consistency: when the audit shows a signal is underweighted or two signals are redundant, you fix it — even if the visible top-of-leaderboard effect is modest. The framework's value isn't always producing dramatic changes; it's making sure the formula's weight distribution matches the data's signal distribution.",
 };
 
 // ---------------------------------------------------------------------------
@@ -448,8 +456,8 @@ export const LESSONS = [
     title: "Methodology has to self-correct",
     one_liner: "When the audit catches a flaw, fix the formula.",
     body:
-      "K v1 used raw FG% — which actively punished kickers for attempting long FGs. After feedback, K v1.1 replaced the entire formula with FG over expected within hours. P v1 included blocked_rate at small weight on \"punter conceptually owns the play\" grounds; P v1.1 removed it when the audit signal was too weak. iDL v1.2 swapped pressure and TFL after the audit revealed pressure was both more reliable and more validated. The framework only earns trust by showing it changes when the data says it should.",
-    examples: ["K v1 → v1.1 (FGOE)", "P v1 → v1.1 (drop blocked_rate)", "iDL v1.2 (rebalance)"],
+      "The WR rebalance above is one example of the framework correcting a small underweighting. There are bigger ones: iDL v1.2 swapped its primary signal entirely — TFL was 35% of the formula and got cut to 25% when the audit revealed pressure was both more reliable AND more Pro Bowl-validated. K v1 used raw FG%, which actively punished kickers for attempting long FGs; v1.1 replaced the entire formula with FG over expected within hours. P v1 included blocked_rate at small weight on \"punter conceptually owns the play\" grounds; v1.1 removed it when the audit signal was too weak. The framework only earns trust by showing it changes when the data says it should — at any magnitude, even when the change is unflattering to the original design.",
+    examples: ["WR v1.3 (rebalance)", "iDL v1.2 (primary-signal swap)", "K v1 → v1.1 (FGOE)", "P v1 → v1.1 (drop blocked_rate)"],
   },
 ];
 
