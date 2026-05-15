@@ -74,6 +74,11 @@ export type DepthChartEntry = DepthChartsRow;
  *        (kickers have no snap count — FG attempts are the qualifying sample)
  *   P   → p_net_avg, p_inside_20_rate, p_blocked_rate (formula);
  *        p_gross_avg, p_long_punt, p_touchback_rate (context); n_punts
+ *   OL  → TEAM-LEVEL grading (ADR-0025). player_id reused as team_id for
+ *        React keys; full_name = team name; team_abbr from teams.abbr.
+ *        Formula: ol_yards_before_contact_per_carry, ol_pressure_proxy_per_dropback.
+ *        Context: ol_rush_yards_per_carry, ol_sack_rate, ol_sacks_allowed,
+ *        ol_penalty_rate. Sample: n_plays (rushes), n_dropbacks_ol.
  *
  * Unused fields are `null` by construction (they come from LEFT JOINs
  * that didn't match because the component doesn't exist for that
@@ -170,6 +175,15 @@ export type LeaderboardEntry = {
   p_gross_avg: number | null;
   p_long_punt: number | null;
   p_touchback_rate: number | null;
+  // --- OL columns (TEAM-LEVEL — see JSDoc above) ---
+  n_plays: number | null;            // rushes (sample for YBC/carry)
+  n_dropbacks_ol: number | null;     // dropbacks (sample for pressure_proxy)
+  ol_yards_before_contact_per_carry: number | null;
+  ol_pressure_proxy_per_dropback: number | null;
+  ol_rush_yards_per_carry: number | null;
+  ol_sack_rate: number | null;
+  ol_sacks_allowed: number | null;
+  ol_penalty_rate: number | null;
 };
 
 /** One stat_components row rehydrated for a player detail page. */

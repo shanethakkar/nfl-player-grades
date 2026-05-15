@@ -40,14 +40,26 @@ export async function getGradedSeasons(): Promise<number[]> {
 /**
  * Positions with graded rows for at least one season. Used by the UI to
  * decide what position filters to show.
+ *
+ * Includes "OL" if team_ol_grades has any rows (OL is team-level, lives
+ * in a separate table — see ADR-0025).
  */
 export async function getGradedPositions(): Promise<string[]> {
-  const rows = await sql<{ position: string }[]>`
-    SELECT DISTINCT position
-    FROM season_grades
-    ORDER BY position
-  `;
-  return rows.map((r) => r.position);
+  const [playerRows, teamOlRows] = await Promise.all([
+    sql<{ position: string }[]>`
+      SELECT DISTINCT position
+      FROM season_grades
+      ORDER BY position
+    `,
+    sql<{ has_rows: boolean }[]>`
+      SELECT EXISTS(SELECT 1 FROM team_ol_grades) AS has_rows
+    `,
+  ]);
+  const positions = playerRows.map((r) => r.position);
+  if (teamOlRows[0]?.has_rows) {
+    positions.push("OL");
+  }
+  return positions;
 }
 
 /**
@@ -68,6 +80,56 @@ async function _getLeaderboard(
   season: number,
   position: string,
 ): Promise<LeaderboardEntry[]> {
+  // OL is team-level (ADR-0025). Branch to the team-OL leaderboard path
+  // before any of the player-grade queries — different tables entirely
+  // (team_ol_grades / team_ol_components, not season_grades / stat_components).
+  if (position === "OL") {
+    const rows = await sql<LeaderboardEntry[]>`
+      SELECT
+        g.team_id                              AS player_id,        -- React key reuse
+        t.name                                 AS full_name,        -- "Baltimore Ravens"
+        'OL'                                   AS position,
+        g.season,
+        g.composite_grade,
+        g.composite_z,
+        g.percentile,
+        g.qualified,
+        g.confidence,
+        g.data_tier,
+        NULL                                   AS role,
+        t.abbr                                 AS team_abbr,
+        ts.rushes                              AS n_plays,          -- sample-size column
+        ts.dropbacks                           AS n_dropbacks_ol,
+        c_ybc.raw_value                        AS ol_yards_before_contact_per_carry,
+        c_pp.raw_value                         AS ol_pressure_proxy_per_dropback,
+        -- CONTEXT columns (not in formula)
+        CASE WHEN COALESCE(ts.rushes, 0) > 0
+             THEN ts.rush_yards::float / ts.rushes
+             ELSE NULL END                     AS ol_rush_yards_per_carry,
+        CASE WHEN COALESCE(ts.dropbacks, 0) > 0
+             THEN ts.sacks_allowed::float / ts.dropbacks
+             ELSE NULL END                     AS ol_sack_rate,
+        ts.sacks_allowed                       AS ol_sacks_allowed,
+        CASE WHEN COALESCE(ts.rushes, 0) + COALESCE(ts.dropbacks, 0) > 0
+             THEN (COALESCE(ts.false_starts, 0) + COALESCE(ts.holdings, 0))::float
+                  / (COALESCE(ts.rushes, 0) + COALESCE(ts.dropbacks, 0))
+             ELSE NULL END                     AS ol_penalty_rate
+      FROM team_ol_grades g
+      JOIN teams t ON t.team_id = g.team_id
+      LEFT JOIN team_ol_stats ts
+        ON ts.team_id = g.team_id AND ts.season = g.season
+      LEFT JOIN team_ol_components c_ybc
+        ON c_ybc.team_id = g.team_id AND c_ybc.season = g.season
+       AND c_ybc.component_name = 'ol_yards_before_contact_per_carry'
+      LEFT JOIN team_ol_components c_pp
+        ON c_pp.team_id = g.team_id AND c_pp.season = g.season
+       AND c_pp.component_name = 'ol_pressure_proxy_per_dropback'
+      WHERE g.season = ${season}
+      ORDER BY g.composite_grade DESC
+    `;
+    return rows.map(coerceLeaderboardEntry);
+  }
+
   // The base SELECT + team_lookup LATERAL is identical across positions.
   // The `postgres` library lets us interpolate a `sql` fragment, but
   // fragments can't be conditionally composed either — so we just pick
@@ -1207,5 +1269,14 @@ function coerceLeaderboardEntry(row: LeaderboardEntry): LeaderboardEntry {
     p_gross_avg: coerceNullableNumber(row.p_gross_avg),
     p_long_punt: coerceNullableNumber(row.p_long_punt),
     p_touchback_rate: coerceNullableNumber(row.p_touchback_rate),
+    // OL-only (team-level, ADR-0025)
+    n_plays: coerceNullableInt(row.n_plays),
+    n_dropbacks_ol: coerceNullableInt(row.n_dropbacks_ol),
+    ol_yards_before_contact_per_carry: coerceNullableNumber(row.ol_yards_before_contact_per_carry),
+    ol_pressure_proxy_per_dropback: coerceNullableNumber(row.ol_pressure_proxy_per_dropback),
+    ol_rush_yards_per_carry: coerceNullableNumber(row.ol_rush_yards_per_carry),
+    ol_sack_rate: coerceNullableNumber(row.ol_sack_rate),
+    ol_sacks_allowed: coerceNullableInt(row.ol_sacks_allowed),
+    ol_penalty_rate: coerceNullableNumber(row.ol_penalty_rate),
   };
 }

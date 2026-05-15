@@ -79,6 +79,7 @@ def _load_weights():
             IDL_V1_WEIGHTS,
             K_V1_WEIGHTS,
             LB_V1_WEIGHTS,
+            OL_V1_WEIGHTS,
             P_V1_WEIGHTS,
             QB_V1_WEIGHTS,
             RB_V1_WEIGHTS,
@@ -96,7 +97,7 @@ def _load_weights():
     for d in (
         QB_V1_WEIGHTS, RB_V1_WEIGHTS, WR_V1_WEIGHTS, TE_V1_WEIGHTS,
         CB_V1_WEIGHTS, S_V1_WEIGHTS, EDGE_V1_WEIGHTS, IDL_V1_WEIGHTS,
-        LB_V1_WEIGHTS, K_V1_WEIGHTS, P_V1_WEIGHTS,
+        LB_V1_WEIGHTS, K_V1_WEIGHTS, P_V1_WEIGHTS, OL_V1_WEIGHTS,
     ):
         flat.update(d)
     return flat, dict(TE_V1_BLOCKING_WEIGHTS)

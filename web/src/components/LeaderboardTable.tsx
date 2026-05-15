@@ -824,6 +824,72 @@ const P_COLUMNS: SortableColumn[] = [
   },
 ];
 
+const OL_COLUMNS: SortableColumn[] = [
+  {
+    key: "n_plays",
+    header: "Rushes",
+    hoverLabel: "Total rushing attempts (sample size for run-block component)",
+    defaultDir: "desc",
+    sortValue: (e) => e.n_plays,
+    render: (e) => fmtInt(e.n_plays),
+  },
+  {
+    key: "ol_yards_before_contact_per_carry",
+    header: "YBC / carry",
+    hoverLabel: "Yards Before Contact per carry. Isolates OL run-blocking from RB after-contact value. Primary run-block signal — best YoY of any candidate in the audit (+0.42).",
+    defaultDir: "desc",
+    sortValue: (e) => e.ol_yards_before_contact_per_carry,
+    render: (e) => (e.ol_yards_before_contact_per_carry == null ? "—" : e.ol_yards_before_contact_per_carry.toFixed(2)),
+    group: "formula",
+  },
+  {
+    key: "ol_pressure_proxy_per_dropback",
+    header: "Press%",
+    hoverLabel: "(Sacks + QB hits) per dropback. Lower is better. Primary pass-block signal. Comprehensive — sacks-only and hits-only are subsumed by this combined metric.",
+    defaultDir: "asc",
+    sortValue: (e) => e.ol_pressure_proxy_per_dropback,
+    render: (e) => fmtPct(e.ol_pressure_proxy_per_dropback, 1),
+    group: "formula",
+  },
+  // Context columns (not in formula but useful)
+  {
+    key: "ol_sack_rate",
+    header: "Sack%",
+    hoverLabel: "Sack rate allowed. CONTEXT ONLY — subsumed by Press% in the formula (sacks are inside the pressure proxy).",
+    defaultDir: "asc",
+    sortValue: (e) => e.ol_sack_rate,
+    render: (e) => fmtPct(e.ol_sack_rate, 1),
+    group: "context",
+  },
+  {
+    key: "ol_sacks_allowed",
+    header: "Sacks",
+    hoverLabel: "Total sacks allowed. CONTEXT ONLY — raw count for reader recognition.",
+    defaultDir: "asc",
+    sortValue: (e) => e.ol_sacks_allowed,
+    render: (e) => fmtInt(e.ol_sacks_allowed),
+    group: "context",
+  },
+  {
+    key: "ol_rush_yards_per_carry",
+    header: "Yds/carry",
+    hoverLabel: "Total rushing yards per carry. CONTEXT ONLY — mixes OL with RB after-contact ability (formula uses YBC/carry which strips RB skill).",
+    defaultDir: "desc",
+    sortValue: (e) => e.ol_rush_yards_per_carry,
+    render: (e) => (e.ol_rush_yards_per_carry == null ? "—" : e.ol_rush_yards_per_carry.toFixed(2)),
+    group: "context",
+  },
+  {
+    key: "ol_penalty_rate",
+    header: "Pen%",
+    hoverLabel: "OL-attributable penalty rate (false start + offensive holding per play). CONTEXT ONLY — failed audit YoY (+0.17, below noise threshold) so excluded from formula despite real OL responsibility.",
+    defaultDir: "asc",
+    sortValue: (e) => e.ol_penalty_rate,
+    render: (e) => fmtPct(e.ol_penalty_rate, 2),
+    group: "context",
+  },
+];
+
 const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   QB:   QB_COLUMNS,
   RB:   RB_COLUMNS,
@@ -836,6 +902,7 @@ const COLUMN_SPECS: Record<string, SortableColumn[]> = {
   LB:   LB_COLUMNS,
   K:    K_COLUMNS,
   P:    P_COLUMNS,
+  OL:   OL_COLUMNS,
 };
 
 function Row({
@@ -864,16 +931,23 @@ function Row({
     position === "TE" ? teRoleLabel(e.role) :
     position === "CB" ? cbRoleLabel(e.role) :
     null;
+  // OL is team-level (ADR-0025). The "Player" column shows the team name
+  // and there's no player profile to link to — render as plain text.
+  const isTeamRow = position === "OL";
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
       <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
-        <Link
-          href={{ pathname: `/players/${e.player_id}` }}
-          className="font-medium text-neutral-100 hover:text-white hover:underline"
-        >
-          {e.full_name}
-        </Link>
+        {isTeamRow ? (
+          <span className="font-medium text-neutral-100">{e.full_name}</span>
+        ) : (
+          <Link
+            href={{ pathname: `/players/${e.player_id}` }}
+            className="font-medium text-neutral-100 hover:text-white hover:underline"
+          >
+            {e.full_name}
+          </Link>
+        )}
         {roleText && (
           <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-400">
             {roleText}

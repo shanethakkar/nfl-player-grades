@@ -173,6 +173,37 @@ export async function getCurrentTopAtPosition(
   position: string,
   limit = 3,
 ): Promise<{ season: number | null; entries: CurrentTopEntry[] }> {
+  // OL is team-level (ADR-0025) and lives in team_ol_grades, not season_grades.
+  if (position === "OL") {
+    const seasonRows = await sql<{ season: number | null }[]>`
+      SELECT MAX(season) AS season FROM team_ol_grades WHERE qualified = TRUE
+    `;
+    const season = seasonRows[0]?.season ?? null;
+    if (season === null) return { season: null, entries: [] };
+
+    const rows = await sql<
+      { player_id: number; full_name: string; composite_grade: number }[]
+    >`
+      SELECT
+        g.team_id     AS player_id,   -- reuse field name for consistent shape
+        t.name        AS full_name,
+        g.composite_grade
+      FROM team_ol_grades g
+      JOIN teams t ON t.team_id = g.team_id
+      WHERE g.season = ${season} AND g.qualified = TRUE
+      ORDER BY g.composite_grade DESC
+      LIMIT ${limit}
+    `;
+    return {
+      season: Number(season),
+      entries: rows.map((r) => ({
+        player_id: Number(r.player_id),
+        full_name: r.full_name,
+        composite_grade: Number(r.composite_grade),
+      })),
+    };
+  }
+
   const seasonRows = await sql<{ season: number | null }[]>`
     SELECT MAX(season) AS season
     FROM season_grades

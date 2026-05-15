@@ -1022,3 +1022,70 @@ P_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
 P_V1_MIN_PUNTS_TO_GRADE: int = 25         # rookie / mid-season callup floor
 P_V1_QUALIFIED_MIN_PUNTS: int = 40        # main leaderboard threshold
 P_V1_CONFIDENCE_FULL_PUNTS: int = 60      # full confidence (career-year starter)
+
+
+# ---------------------------------------------------------------------------
+# OL v1 (ADR-0025, 2026-05-14, audit-first design — TEAM-LEVEL grading).
+# ---------------------------------------------------------------------------
+# Offensive line is graded as a UNIT per (team_id, season), not per-player.
+# nflverse data does not attribute pressures, sacks, or run-blocking lanes to
+# specific OL players. Without paid PFF data, individual OL grading is not
+# computable. Instead we grade the OL UNIT — which is how analysts and
+# coaches actually discuss OL ("Eagles OL was elite in 2024").
+#
+# Storage: dedicated team_ol_stats / team_ol_components / team_ol_grades
+# tables (migration 0018). Player-grading tables are not touched.
+#
+# Audit findings (2026-05-14, see audits/2026-05-14-exhaustive-ol.md):
+# 13 candidates scored. Two clear winners with both YoY ≈ +0.42 and clean
+# audit verdicts:
+#   - yards_before_contact_per_carry: isolates OL run-blocking from RB
+#       after-contact value. Best pure-OL run signal.
+#   - pressure_proxy_per_dropback: (sacks + qb_hits) / dropbacks.
+#       Comprehensive pass-block signal; sacks-only and hits-only are
+#       subsumed (max_r ≈ 0.86–0.96 with this).
+#
+# Rejected: rush_yards/EPA/success/explosive (all mix OL with RB/scheme),
+# stuff_rate (independent but YoY +0.219), false_start/holding/penalty rate
+# (all YoY < 0.20 — noise). Penalties are real OL responsibility but the
+# YoY signal isn't there at the team-season grain (likely roster turnover).
+#
+# Validity gate intentionally skipped per the locked plan — there is no
+# "All-Pro OL unit" award and the per-team Pro Bowl OL count proxy is too
+# noisy to use as a hard gate. See ADR-0025 for the rationale.
+#
+# Weight breakdown (sum |abs| = 0.90, 50/50 run/pass split):
+#   ol_yards_before_contact_per_carry (50%): primary run-block signal
+#   ol_pressure_proxy_per_dropback (-50%): primary pass-block signal
+# ---------------------------------------------------------------------------
+
+OL_COMPONENT_YBC_PER_CARRY: str = "ol_yards_before_contact_per_carry"
+OL_COMPONENT_PRESSURE_PROXY: str = "ol_pressure_proxy_per_dropback"
+
+OL_V1_WEIGHTS: dict[str, float] = {
+    OL_COMPONENT_YBC_PER_CARRY:    0.45,
+    OL_COMPONENT_PRESSURE_PROXY:  -0.45,
+}
+
+OL_V1_SHRINKAGE_K: dict[str, float] = {
+    # Light shrinkage — every team has 400-550 rushes / 500-700 dropbacks
+    # per season, so the per-play rate stabilizes quickly. We just want to
+    # bound noise from a low-volume team-season.
+    OL_COMPONENT_YBC_PER_CARRY:   30.0,   # in carries
+    OL_COMPONENT_PRESSURE_PROXY:  40.0,   # in dropbacks
+}
+
+OL_V1_RAW_VALUE_COLS: dict[str, str] = {
+    OL_COMPONENT_YBC_PER_CARRY:    "ybc_per_carry",
+    OL_COMPONENT_PRESSURE_PROXY:   "pressure_proxy_per_dropback",
+}
+
+OL_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
+    OL_COMPONENT_YBC_PER_CARRY:    "rushes",
+    OL_COMPONENT_PRESSURE_PROXY:   "dropbacks",
+}
+
+# Qualification: every team that played a season counts (32/season).
+# We don't use a "min plays" gate the way per-player positions do because
+# all teams have full-season volume.
+OL_V1_QUALIFIED: bool = True

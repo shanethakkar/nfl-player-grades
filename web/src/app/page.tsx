@@ -50,7 +50,7 @@ export async function generateMetadata({
 }
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first.
-const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "CB", "S", "EDGE", "iDL", "LB", "K", "P"];
+const POSITION_ORDER: readonly string[] = ["QB", "RB", "WR", "TE", "OL", "CB", "S", "EDGE", "iDL", "LB", "K", "P"];
 const DEFAULT_POSITION = "QB";
 
 /** Short phrase following "{N} qualified starters · composite of ..." */
@@ -59,6 +59,7 @@ const COMPOSITE_BLURB: Record<string, string> = {
   RB: "composite of rushing efficiency (RYOE / EPA / success / yards-after-contact), receiving value, and ball security (yards-after-contact data 2018+)",
   WR: "composite of EPA/target, YAC-over-expected, separation, target earn rate, success rate, and drop rate (2022+; pre-2022 uses v1 formula)",
   TE: "composite of EPA/target, YAC-over-expected, separation, earn rate, and ball security (earn rate dropped for pure blockers — ADR-0016)",
+  OL: "TEAM-LEVEL grade: composite of yards-before-contact per carry (run-block) and (sacks + QB hits) per dropback (pass-block). 50/50 split. Data 2018+",
   CB:   "composite of passer rating allowed, YAC/rec allowed, target rate, and PBU rate (data 2018+)",
   S:    "composite of coverage quality (passer rating allowed, target rate, PBU rate) and tackling (tackles/snap, missed tackle rate, backfield disruption) (data 2018+)",
   EDGE: "composite of pressure rate, sack rate, run-stop TFL rate, and missed tackle rate (data 2018+)",
@@ -89,6 +90,14 @@ const LOW_VOLUME_COPY: Record<string, { heading: string; threshold: string }> = 
     heading: "Low-volume tight ends",
     threshold:
       "Fewer than 40 targets. Grades still computed on the same 0-100 scale but treat them as noisy. Pure blocking TEs (<15 targets) are not graded at all.",
+  },
+  OL: {
+    // OL is team-level — every team that played a season is graded. No
+    // "low-volume" cohort. The collapsed section never renders for OL
+    // because no rows fail qualification.
+    heading: "Low-volume offensive lines",
+    threshold:
+      "All 32 teams are graded each season — no qualification threshold for the OL unit.",
   },
   CB: {
     heading: "Low-volume corners",
@@ -133,6 +142,7 @@ const QUALIFIED_NOUN: Record<string, { singular: string; plural: string }> = {
   RB: { singular: "qualified back", plural: "qualified backs" },
   WR: { singular: "qualified receiver", plural: "qualified receivers" },
   TE: { singular: "qualified tight end", plural: "qualified tight ends" },
+  OL: { singular: "graded OL unit", plural: "graded OL units" },
   CB:   { singular: "qualified corner",       plural: "qualified corners" },
   S:    { singular: "qualified safety",       plural: "qualified safeties" },
   EDGE: { singular: "qualified edge rusher",  plural: "qualified edge rushers" },

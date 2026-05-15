@@ -254,6 +254,17 @@ def ingest_punter_stats(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="team-ol")
+@click.option("--season", type=int, required=True)
+@click.option("--refresh", is_flag=True)
+def ingest_team_ol(season: int, refresh: bool) -> None:
+    """Aggregate team-level OL stats from pbp + pfr_advstats_rush (2018+)."""
+    from .ingest import team_ol
+
+    result = team_ol.run(season, refresh=refresh)
+    click.echo(f"season={result.season} teams_written={result.teams_written}")
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -273,6 +284,7 @@ def ingest_all(season: int, refresh: bool) -> None:
         ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_passrush, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_lb, season=season, refresh=refresh)
+        ctx.invoke(ingest_team_ol, season=season, refresh=refresh)
     if season >= 2022:
         ctx.invoke(ingest_ftn_receiving, season=season, refresh=refresh)
 
@@ -283,7 +295,7 @@ def ingest_all(season: int, refresh: bool) -> None:
     "--position",
     type=str,
     default=None,
-    help="Limit to a single position (QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K, P). Omit to grade all.",
+    help="Limit to a single position (QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K, P, OL). Omit to grade all.",
 )
 def grade(season: int, position: str | None) -> None:
     """Compute season grades (QB/RB/WR/TE/CB/S/EDGE/iDL/LB v1)."""
@@ -296,13 +308,13 @@ def grade(season: int, position: str | None) -> None:
         _TOTAL_ATTRS = (
             "n_qbs_total", "n_rbs_total", "n_wrs_total", "n_tes_total",
             "n_cbs_total", "n_safeties_total", "n_edges_total", "n_idls_total",
-            "n_lbs_total", "n_kickers_total", "n_punters_total",
+            "n_lbs_total", "n_kickers_total", "n_punters_total", "n_teams_total",
         )
         _QUAL_ATTRS = (
             "n_qbs_qualified", "n_rbs_qualified", "n_wrs_qualified",
             "n_tes_qualified", "n_cbs_qualified", "n_safeties_qualified",
             "n_edges_qualified", "n_idls_qualified", "n_lbs_qualified",
-            "n_kickers_qualified", "n_punters_qualified",
+            "n_kickers_qualified", "n_punters_qualified", "n_teams_qualified",
         )
         total_attr = next((a for a in _TOTAL_ATTRS if hasattr(result, a)), None)
         qualified_attr = next((a for a in _QUAL_ATTRS if hasattr(result, a)), None)
