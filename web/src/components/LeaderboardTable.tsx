@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { SparklinePopover } from "@/components/SparklinePopover";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Tooltip } from "@/components/Tooltip";
-import { cbRoleLabel, gradeColor, teRoleLabel } from "@/lib/grades";
+import { cbRoleLabel, gradeColor } from "@/lib/grades";
 import type { LeaderboardEntry } from "@/types";
 
 type Props = {
@@ -51,6 +51,15 @@ export function LeaderboardTable({ entries, position }: Props) {
     () => [...FIXED_COLUMNS, ...columns],
     [columns],
   );
+
+  // Sum of |weight| across this position's FORMULA columns. The pipeline
+  // doesn't force weights to sum to 1 (combiner normalizes), so each
+  // column's share = |weight| / totalFormulaWeight.
+  const totalFormulaWeight = useMemo(() => {
+    return columns
+      .filter((c) => c.group === "formula" && c.weight != null)
+      .reduce((s, c) => s + Math.abs(c.weight as number), 0);
+  }, [columns]);
 
   const [sort, setSort] = useState<SortState>({
     key: "grade",
@@ -164,6 +173,7 @@ export function LeaderboardTable({ entries, position }: Props) {
                 sort={sort}
                 col={c}
                 onSort={onSort}
+                totalFormulaWeight={totalFormulaWeight}
               />
             ))}
           </tr>
@@ -342,6 +352,14 @@ type SortableColumn = {
    * the table renders a flat single-row header.
    */
   group?: ColumnGroup;
+  /**
+   * Raw weight from the pipeline's weights.py — only set on FORMULA columns.
+   * Magnitudes (not signs) are used to compute the column's share of the
+   * composite, which is rendered as a small bar + % under the column header.
+   * Mirrors the values in `pipeline/src/nfl_grades/grading/weights.py` —
+   * keep the two in sync when versions bump.
+   */
+  weight?: number;
 };
 
 const FIXED_COLUMNS: SortableColumn[] = [
@@ -419,6 +437,7 @@ const QB_COLUMNS: SortableColumn[] = [
     sortValue: (e) => e.epa_per_dropback,
     render: (e) => fmtSigned(e.epa_per_dropback, 3),
     group: "formula",
+    weight: 0.50, // QB v1.1
   },
   {
     key: "cpoe",
@@ -428,6 +447,7 @@ const QB_COLUMNS: SortableColumn[] = [
     sortValue: (e) => e.cpoe,
     render: (e) => fmtSigned(e.cpoe, 2),
     group: "formula",
+    weight: 0.25,
   },
   {
     key: "success_rate",
@@ -437,6 +457,7 @@ const QB_COLUMNS: SortableColumn[] = [
     sortValue: (e) => e.success_rate,
     render: (e) => fmtPct(e.success_rate, 1),
     group: "formula",
+    weight: 0.10,
   },
   // CONTEXT — box-score volume from qb_season_stats (NOT in formula).
   {
@@ -1368,8 +1389,10 @@ function Row({
   const stickyBg = isEven
     ? "bg-[#111111] group-hover:bg-[#181818]"
     : "bg-neutral-950 group-hover:bg-[#111111]";
+  // TE role badge (receiving / balanced / blocking) is intentionally
+  // omitted on the leaderboard — surfaced on the player profile only,
+  // since it doesn't change a player's grade and crowds the row.
   const roleText =
-    position === "TE" ? teRoleLabel(e.role) :
     position === "CB" ? cbRoleLabel(e.role) :
     null;
   // OL is team-level (ADR-0025). The "Player" column shows the team name
@@ -1403,7 +1426,10 @@ function Row({
             )}
           </div>
           {e.gradeTrend.length > 0 && (
-            <SparklinePopover points={e.gradeTrend} />
+            <SparklinePopover
+              points={e.gradeTrend}
+              header={position === "OL" ? "Team OL grade" : "Career grade"}
+            />
           )}
         </div>
       </Td>
@@ -1446,6 +1472,7 @@ function SortHeader({
   col,
   onSort,
   className = "",
+  totalFormulaWeight,
 }: {
   label: string;
   hover?: string;
@@ -1454,6 +1481,12 @@ function SortHeader({
   col: SortableColumn;
   onSort: (c: SortableColumn) => void;
   className?: string;
+  /**
+   * Sum of |weight| across the position's FORMULA columns. When set and
+   * the column has a weight, a small share% indicator renders below the
+   * header. Passed from the table once per render — see LeaderboardTable.
+   */
+  totalFormulaWeight?: number;
 }) {
   const active = sort.key === col.key;
   const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
@@ -1473,8 +1506,30 @@ function SortHeader({
       {arrow || "▾"}
     </span>
   );
-  const labelNode = hover ? (
-    <Tooltip content={hover}><span>{label}</span></Tooltip>
+  // For FORMULA columns with a weight, append the share % to the hover
+  // text — keeps the table flow clean while still surfacing the weighting
+  // when a reader hovers to learn what a column measures.
+  const showWeight =
+    col.group === "formula" &&
+    col.weight != null &&
+    totalFormulaWeight !== undefined &&
+    totalFormulaWeight > 0;
+  const weightPct = showWeight
+    ? Math.round(
+        (Math.abs(col.weight as number) / (totalFormulaWeight as number)) * 100,
+      )
+    : null;
+  const effectiveHover = (() => {
+    if (!hover) {
+      return weightPct != null ? `Weight: ${weightPct}% of the grade.` : undefined;
+    }
+    if (weightPct != null) {
+      return `${hover}\n\nWeight: ${weightPct}% of the grade.`;
+    }
+    return hover;
+  })();
+  const labelNode = effectiveHover ? (
+    <Tooltip content={effectiveHover}><span>{label}</span></Tooltip>
   ) : (
     <span>{label}</span>
   );

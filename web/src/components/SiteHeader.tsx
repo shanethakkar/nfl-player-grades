@@ -11,7 +11,7 @@ import { PlayerSearch } from "./PlayerSearch";
 export function SiteHeader() {
   return (
     <header className="border-b border-neutral-800 bg-neutral-950">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-4">
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-6 py-4">
         <Link
           href="/"
           className="flex items-center gap-2 text-sm font-semibold tracking-tight text-neutral-100 hover:text-white"

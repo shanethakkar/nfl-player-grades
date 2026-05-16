@@ -10,6 +10,8 @@ type Point = { season: number; grade: number };
 
 type Props = {
   points: Point[];
+  /** Header shown above the detail chart. Defaults to "Career grade". */
+  header?: string;
 };
 
 // Approximate height of the popover content (chart + padding + label).
@@ -40,7 +42,7 @@ type Pos = {
  *    (popover is purely informational)
  *  - Flips above ↔ below based on viewport space at open time
  */
-export function SparklinePopover({ points }: Props) {
+export function SparklinePopover({ points, header = "Career grade" }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<Pos>({ top: 0, left: 0, placeBelow: false });
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -129,7 +131,7 @@ export function SparklinePopover({ points }: Props) {
           }}
         >
           <div className="rounded-lg border border-neutral-700 bg-neutral-950/95 p-3 shadow-xl shadow-black/60 backdrop-blur">
-            <SparklineDetail points={points} />
+            <SparklineDetail points={points} header={header} />
           </div>
         </div>
       )}
@@ -144,7 +146,13 @@ export function SparklinePopover({ points }: Props) {
 // available height regardless of how clustered the values are.
 // ---------------------------------------------------------------------------
 
-function SparklineDetail({ points }: { points: Point[] }) {
+function SparklineDetail({
+  points,
+  header,
+}: {
+  points: Point[];
+  header: string;
+}) {
   const W = 216;
   const H = 96;
   const PAD_X = 16;
@@ -175,7 +183,7 @@ function SparklineDetail({ points }: { points: Point[] }) {
   return (
     <div>
       <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
-        Career grade
+        {header}
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}

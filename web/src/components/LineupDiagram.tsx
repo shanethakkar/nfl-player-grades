@@ -14,11 +14,17 @@ import type { LineupSlot, TeamLineup } from "@/types";
  * Mobile (<md): the diagram doesn't fit gracefully at narrow widths,
  * so we render a compact stacked list grouped by side of ball.
  */
-export function LineupDiagram({ lineup }: { lineup: TeamLineup }) {
+export function LineupDiagram({
+  lineup,
+  season,
+}: {
+  lineup: TeamLineup;
+  season: number;
+}) {
   return (
     <div>
-      <FormationDiagram lineup={lineup} />
-      <MobileLineupList lineup={lineup} />
+      <FormationDiagram lineup={lineup} season={season} />
+      <MobileLineupList lineup={lineup} season={season} />
     </div>
   );
 }
@@ -27,20 +33,58 @@ export function LineupDiagram({ lineup }: { lineup: TeamLineup }) {
 // Desktop: absolutely-positioned cards on a field-shaped container.
 // ---------------------------------------------------------------------------
 
-function FormationDiagram({ lineup }: { lineup: TeamLineup }) {
+function FormationDiagram({
+  lineup,
+  season,
+}: {
+  lineup: TeamLineup;
+  season: number;
+}) {
+  // Formation label: derived from what we placed on the field. Slot CB
+  // means we drew nickel personnel (5 DBs, 2 LBs); otherwise it's base
+  // (4 DBs, 3 LBs). DL is always 4 in this diagram.
+  const formationLabel = lineup.slot_cb ? "4-2-5 Nickel" : "4-3 Base";
+
   return (
     <div className="hidden md:block">
       <div className="relative aspect-[5/2] w-full overflow-hidden rounded-lg border border-neutral-800 bg-gradient-to-b from-[#0e1714] via-[#0b110f] to-[#0e1714]">
-        {/* Faint center line — line of scrimmage. */}
+        {/* Faint yard-line hairlines — 10/30/70/90% with the line of
+            scrimmage at 50%. Very low opacity so they read as "this is a
+            field" without imitating a literal football graphic. */}
+        <div
+          aria-hidden
+          className="absolute left-0 right-0 top-[10%] h-px bg-neutral-700/15"
+        />
+        <div
+          aria-hidden
+          className="absolute left-0 right-0 top-[30%] h-px bg-neutral-700/15"
+        />
+        {/* Line of scrimmage — slightly stronger. */}
         <div
           aria-hidden
           className="absolute left-0 right-0 top-1/2 h-px bg-neutral-700/40"
         />
+        <div
+          aria-hidden
+          className="absolute left-0 right-0 top-[70%] h-px bg-neutral-700/15"
+        />
+        <div
+          aria-hidden
+          className="absolute left-0 right-0 top-[90%] h-px bg-neutral-700/15"
+        />
+
+        {/* Formation type — corner annotation, low contrast on purpose. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-3 top-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-neutral-600"
+        >
+          {formationLabel}
+        </div>
 
         {/* Defense (top half) ----------------------------------------- */}
         {/* Safeties — deep zone. */}
-        <Card slot={lineup.fs} x={38} y={9} />
-        <Card slot={lineup.ss} x={62} y={9} />
+        <Card slot={lineup.fs} x={38} y={9} season={season} />
+        <Card slot={lineup.ss} x={62} y={9} season={season} />
 
         {/* Linebackers — second level; 2 in nickel, 3 in base. */}
         {lineup.lb.map((s, i) => {
@@ -50,16 +94,19 @@ function FormationDiagram({ lineup }: { lineup: TeamLineup }) {
               : lineup.lb.length === 2
                 ? [40, 60]
                 : [50];
-          return <Card key={`lb-${i}`} slot={s} x={xs[i] ?? 50} y={29} />;
+          return (
+            <Card key={`lb-${i}`} slot={s} x={xs[i] ?? 50} y={29} season={season} />
+          );
         })}
 
-        {/* Slot CB — between LB level and the line, when present. */}
-        <Card slot={lineup.slot_cb} x={26} y={36} />
+        {/* Slot CB — lined up over the slot WR (x≈20), between LB level
+            and the line of scrimmage. */}
+        <Card slot={lineup.slot_cb} x={20} y={36} season={season} />
 
         {/* D-line + outside corners on the line of scrimmage. CBs sit
             at the same depth as the DL but wide (where the WRs across
             from them line up). DL is 4 across in the middle. */}
-        <Card slot={lineup.cb1} x={8} y={44} />
+        <Card slot={lineup.cb1} x={8} y={44} season={season} />
         {lineup.dl.map((s, i) => {
           const xs =
             lineup.dl.length === 4
@@ -67,24 +114,27 @@ function FormationDiagram({ lineup }: { lineup: TeamLineup }) {
               : lineup.dl.length === 3
                 ? [35, 50, 65]
                 : [50];
-          return <Card key={`dl-${i}`} slot={s} x={xs[i] ?? 50} y={44} />;
+          return (
+            <Card key={`dl-${i}`} slot={s} x={xs[i] ?? 50} y={44} season={season} />
+          );
         })}
-        <Card slot={lineup.cb2} x={92} y={44} />
+        <Card slot={lineup.cb2} x={92} y={44} season={season} />
 
         {/* Offense (bottom half) -------------------------------------- */}
         {/* WR / Slot / TE / WR flanks — outside flanks pushed wider so
             the OL wide card fits cleanly between Slot and TE. */}
-        <Card slot={lineup.wr1} x={7} y={62} />
-        <Card slot={lineup.slot_wr} x={20} y={64} />
-        <Card slot={lineup.te} x={80} y={62} />
-        <Card slot={lineup.wr2} x={93} y={62} />
+        <Card slot={lineup.wr1} x={7} y={62} season={season} />
+        <Card slot={lineup.slot_wr} x={20} y={64} season={season} />
+        <Card slot={lineup.te} x={80} y={62} season={season} />
+        <Card slot={lineup.wr2} x={93} y={62} season={season} />
 
         {/* OL — single wide card between the receivers. */}
         <OLCard lineup={lineup} />
 
-        {/* QB + RB stacked behind center. */}
-        <Card slot={lineup.qb} x={50} y={82} />
-        <Card slot={lineup.rb} x={50} y={93} />
+        {/* QB + RB stacked behind center. QB nudged up so it doesn't
+            butt against the RB card directly below. */}
+        <Card slot={lineup.qb} x={50} y={78} season={season} />
+        <Card slot={lineup.rb} x={50} y={93} season={season} />
       </div>
 
       {/* Special teams strip below the field. */}
@@ -93,8 +143,8 @@ function FormationDiagram({ lineup }: { lineup: TeamLineup }) {
           <span className="self-center text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
             Special teams
           </span>
-          {lineup.k && <InlineCard slot={lineup.k} />}
-          {lineup.p && <InlineCard slot={lineup.p} />}
+          {lineup.k && <InlineCard slot={lineup.k} season={season} />}
+          {lineup.p && <InlineCard slot={lineup.p} season={season} />}
         </div>
       )}
     </div>
@@ -112,10 +162,12 @@ function Card({
   slot,
   x,
   y,
+  season,
 }: {
   slot: LineupSlot | null;
   x: number;
   y: number;
+  season: number;
 }) {
   if (!slot) return null;
   return (
@@ -130,7 +182,7 @@ function Card({
         transform: "translate(-50%, -50%)",
       }}
     >
-      <PlayerCardInner slot={slot} />
+      <PlayerCardInner slot={slot} season={season} />
     </div>
   );
 }
@@ -154,7 +206,14 @@ function OLCard({ lineup }: { lineup: TeamLineup }) {
         transform: "translate(-50%, -50%)",
       }}
     >
-      <div className="flex items-stretch gap-2 rounded-md border border-neutral-700 bg-neutral-900/80 px-2 py-1.5 shadow-md backdrop-blur-sm">
+      <div
+        className={
+          "flex items-stretch gap-2 rounded-md border border-neutral-700 bg-neutral-900/85 px-2 py-1.5 backdrop-blur-sm " +
+          "shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] " +
+          "transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 " +
+          "hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.08)]"
+        }
+      >
         {/* Grade column */}
         <div className="flex flex-shrink-0 flex-col items-center justify-center border-r border-neutral-800 pr-2.5">
           <span className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">
@@ -191,17 +250,43 @@ function OLCard({ lineup }: { lineup: TeamLineup }) {
   );
 }
 
-function PlayerCardInner({ slot }: { slot: LineupSlot }) {
+function PlayerCardInner({
+  slot,
+  season,
+}: {
+  slot: LineupSlot;
+  season: number;
+}) {
   const dim = slot.qualified === false;
+  // Grade from a prior season: player didn't have a current-season grade
+  // (rookie this year, mid-season callup, in-progress season). We still
+  // show the prior grade — fades to "*" with a hover tooltip so the
+  // reader knows it's stale.
+  const isPriorGrade =
+    slot.composite_grade !== null &&
+    slot.grade_season !== null &&
+    slot.grade_season !== season;
   return (
-    <div className="rounded-md border border-neutral-700 bg-neutral-900/80 px-1.5 py-1 text-center shadow-md backdrop-blur-sm">
+    <div
+      className={
+        "group/card rounded-md border border-neutral-700 bg-neutral-900/85 px-1.5 py-1 text-center backdrop-blur-sm " +
+        // Depth: drop shadow + inset top highlight (the 1px white-ish line
+        // at the top of the card simulates a light edge — gives an object
+        // feel without going skeuomorphic).
+        "shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] " +
+        // Hover lift: card raises 2px, shadow deepens, border brightens.
+        // Subtle but tactile — clearly responds to the cursor.
+        "transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 " +
+        "hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.08)]"
+      }
+    >
       <div className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">
         {slot.slot}
       </div>
       {slot.player_id ? (
         <Link
           href={{ pathname: `/players/${slot.player_id}` }}
-          className="block truncate text-[11px] font-medium text-neutral-100 hover:text-white hover:underline"
+          className="block truncate text-[11px] font-medium text-neutral-100 group-hover/card:text-white"
         >
           {slot.full_name}
         </Link>
@@ -214,8 +299,18 @@ function PlayerCardInner({ slot }: { slot: LineupSlot }) {
         ) : (
           <span
             className={`font-mono text-sm font-semibold ${gradeColor(slot.composite_grade)} ${dim ? "opacity-60" : ""}`}
+            title={
+              isPriorGrade
+                ? `${slot.grade_season} grade — not graded yet in ${season}`
+                : undefined
+            }
           >
             {slot.composite_grade.toFixed(1)}
+            {isPriorGrade && (
+              <span className="text-neutral-500" aria-hidden>
+                *
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -223,10 +318,10 @@ function PlayerCardInner({ slot }: { slot: LineupSlot }) {
   );
 }
 
-function InlineCard({ slot }: { slot: LineupSlot }) {
+function InlineCard({ slot, season }: { slot: LineupSlot; season: number }) {
   return (
     <div className="w-24">
-      <PlayerCardInner slot={slot} />
+      <PlayerCardInner slot={slot} season={season} />
     </div>
   );
 }
@@ -235,7 +330,13 @@ function InlineCard({ slot }: { slot: LineupSlot }) {
 // Mobile: stacked compact list grouped by side of ball.
 // ---------------------------------------------------------------------------
 
-function MobileLineupList({ lineup }: { lineup: TeamLineup }) {
+function MobileLineupList({
+  lineup,
+  season,
+}: {
+  lineup: TeamLineup;
+  season: number;
+}) {
   const offenseRows: { slot: string; data: LineupSlot | null }[] = [
     { slot: "QB", data: lineup.qb },
     { slot: "RB", data: lineup.rb },
@@ -260,13 +361,13 @@ function MobileLineupList({ lineup }: { lineup: TeamLineup }) {
 
   return (
     <div className="md:hidden">
-      <MobileSection title="Offense" rows={offenseRows} />
+      <MobileSection title="Offense" rows={offenseRows} season={season} />
 
       {/* OL row — single bar on mobile too */}
       <MobileOLRow lineup={lineup} />
 
-      <MobileSection title="Defense" rows={defenseRows} />
-      <MobileSection title="Special teams" rows={stRows} />
+      <MobileSection title="Defense" rows={defenseRows} season={season} />
+      <MobileSection title="Special teams" rows={stRows} season={season} />
     </div>
   );
 }
@@ -274,9 +375,11 @@ function MobileLineupList({ lineup }: { lineup: TeamLineup }) {
 function MobileSection({
   title,
   rows,
+  season,
 }: {
   title: string;
   rows: { slot: string; data: LineupSlot | null }[];
+  season: number;
 }) {
   const filtered = rows.filter((r) => r.data !== null);
   if (filtered.length === 0) return null;
@@ -291,6 +394,7 @@ function MobileSection({
             key={`${r.slot}-${r.data!.player_id ?? i}`}
             slot={r.slot}
             data={r.data!}
+            season={season}
           />
         ))}
       </div>
@@ -298,8 +402,20 @@ function MobileSection({
   );
 }
 
-function MobileRow({ slot, data }: { slot: string; data: LineupSlot }) {
+function MobileRow({
+  slot,
+  data,
+  season,
+}: {
+  slot: string;
+  data: LineupSlot;
+  season: number;
+}) {
   const dim = data.qualified === false;
+  const isPriorGrade =
+    data.composite_grade !== null &&
+    data.grade_season !== null &&
+    data.grade_season !== season;
   return (
     <div className="flex items-center gap-3 px-3 py-2">
       <span className="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
@@ -322,8 +438,18 @@ function MobileRow({ slot, data }: { slot: string; data: LineupSlot }) {
       ) : (
         <span
           className={`font-mono text-sm font-semibold ${gradeColor(data.composite_grade)} ${dim ? "opacity-60" : ""}`}
+          title={
+            isPriorGrade
+              ? `${data.grade_season} grade — not graded yet in ${season}`
+              : undefined
+          }
         >
           {data.composite_grade.toFixed(1)}
+          {isPriorGrade && (
+            <span className="text-neutral-500" aria-hidden>
+              *
+            </span>
+          )}
         </span>
       )}
     </div>

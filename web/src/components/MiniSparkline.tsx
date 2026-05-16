@@ -42,8 +42,20 @@ export function MiniSparkline({
   const innerW = width - padX * 2;
   const innerH = height - padY * 2;
 
-  // Y scale: fixed 0-100 range so different players are visually comparable.
-  const yOf = (g: number) => padY + innerH * (1 - g / 100);
+  // Y scale: auto-fit to the player's data with a minimum window so
+  // typical season-to-season swings (5-15 points) actually show as
+  // meaningful slope instead of being squashed by the full 0-100 range.
+  // Minimum visible window = ~14 points (7 above + 7 below data center);
+  // wider data spans expand the window with 3-point padding each side.
+  const grades = points.map((p) => p.grade);
+  const dataMin = Math.min(...grades);
+  const dataMax = Math.max(...grades);
+  const center = (dataMin + dataMax) / 2;
+  const halfWindow = Math.max(7, (dataMax - dataMin) / 2 + 3);
+  const yMin = Math.max(0, center - halfWindow);
+  const yMax = Math.min(100, center + halfWindow);
+  const yRange = Math.max(1, yMax - yMin);
+  const yOf = (g: number) => padY + innerH * (1 - (g - yMin) / yRange);
 
   // X scale: evenly spaced across the available width.
   const xOf = (i: number) =>
@@ -61,9 +73,6 @@ export function MiniSparkline({
   const lastY = yOf(last.grade);
   const lastColor = gradeHex(last.grade);
 
-  // Reference line at grade=50 (league average) — very subtle.
-  const midY = yOf(50);
-
   return (
     <svg
       width={width}
@@ -72,16 +81,6 @@ export function MiniSparkline({
       className="inline-block align-middle"
       aria-label={`Grade trend: ${points.map((p) => `${p.season} ${p.grade.toFixed(0)}`).join(", ")}`}
     >
-      {/* league-average reference */}
-      <line
-        x1={padX}
-        y1={midY}
-        x2={width - padX}
-        y2={midY}
-        stroke="#262626"
-        strokeWidth={1}
-        strokeDasharray="1,2"
-      />
       {/* trend line */}
       <path
         d={pathData}

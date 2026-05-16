@@ -187,6 +187,7 @@ type RawLineupRow = {
   composite_grade: number | null;
   qualified: boolean | null;
   grading_position: string | null;
+  grade_season: number | null;
 };
 
 /**
@@ -230,6 +231,11 @@ async function _getTeamLineup(
 ): Promise<TeamLineup> {
   // One query: depth chart rows (week=99 end-of-season snapshot) joined
   // with each player's best-graded season_grades row.
+  // Grade lookup prefers the current-season row but falls back to the
+  // player's most recent prior-season grade when there isn't one yet
+  // (rookies, mid-season callups, in-progress seasons). The render layer
+  // shows an asterisk + tooltip when grade_season != dc.season so the
+  // reader knows it's stale.
   const rows = await sql<RawLineupRow[]>`
     SELECT
       dc.position,
@@ -238,16 +244,20 @@ async function _getTeamLineup(
       p.full_name,
       sg.composite_grade,
       sg.qualified,
-      sg.position AS grading_position
+      sg.position AS grading_position,
+      sg.season   AS grade_season
     FROM depth_charts dc
     JOIN teams   t ON t.team_id   = dc.team_id
     JOIN players p ON p.player_id = dc.player_id
     LEFT JOIN LATERAL (
-      SELECT composite_grade, qualified, position
+      SELECT composite_grade, qualified, position, season
       FROM season_grades sg2
       WHERE sg2.player_id = p.player_id
-        AND sg2.season    = dc.season
-      ORDER BY sg2.composite_grade DESC
+        AND sg2.season   <= dc.season
+      ORDER BY
+        (CASE WHEN sg2.season = dc.season THEN 0 ELSE 1 END) ASC,
+        sg2.season DESC,
+        sg2.composite_grade DESC
       LIMIT 1
     ) sg ON TRUE
     WHERE t.abbr     = ${teamAbbr}
@@ -289,6 +299,7 @@ async function _getTeamLineup(
         r.composite_grade === null ? null : Number(r.composite_grade),
       qualified: r.qualified,
       grading_position: r.grading_position,
+      grade_season: r.grade_season === null ? null : Number(r.grade_season),
     };
   }
 
@@ -366,6 +377,7 @@ async function _getTeamLineup(
       composite_grade: null, // hidden — OL is a team grade, not per-player
       qualified: null,
       grading_position: null,
+      grade_season: null,
     });
   }
   const ol_team_grade = olRows[0]?.composite_grade ?? null;
@@ -467,6 +479,7 @@ async function _getTeamLineup(
     composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
     qualified: r.qualified,
     grading_position: r.grading_position,
+    grade_season: r.grade_season === null ? null : Number(r.grade_season),
   }));
 
   // LBs — 2 if we already have a slot CB on the field (nickel = 5 DBs +
@@ -484,6 +497,7 @@ async function _getTeamLineup(
     composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
     qualified: r.qualified,
     grading_position: r.grading_position,
+    grade_season: r.grade_season === null ? null : Number(r.grade_season),
   }));
 
   // --- Special teams ---
@@ -504,17 +518,25 @@ async function _getTeamLineup(
       full_name: string;
       composite_grade: number | null;
       qualified: boolean | null;
+      grade_season: number | null;
     }[]>`
       (
         SELECT 'K' AS position, p.player_id, p.full_name,
-               sg.composite_grade, sg.qualified
+               sg.composite_grade, sg.qualified, sg.season AS grade_season
         FROM player_seasons ps
         JOIN teams t   ON t.team_id   = ps.team_id
         JOIN players p ON p.player_id = ps.player_id
-        LEFT JOIN season_grades sg
-          ON sg.player_id = p.player_id
-         AND sg.season    = ps.season
-         AND sg.position  = 'K'
+        LEFT JOIN LATERAL (
+          SELECT composite_grade, qualified, season
+          FROM season_grades sg2
+          WHERE sg2.player_id = p.player_id
+            AND sg2.season   <= ps.season
+            AND sg2.position  = 'K'
+          ORDER BY
+            (CASE WHEN sg2.season = ps.season THEN 0 ELSE 1 END) ASC,
+            sg2.season DESC
+          LIMIT 1
+        ) sg ON TRUE
         WHERE t.abbr = ${teamAbbr}
           AND ps.season = ${season}
           AND p.position = 'K'
@@ -524,14 +546,21 @@ async function _getTeamLineup(
       UNION ALL
       (
         SELECT 'P' AS position, p.player_id, p.full_name,
-               sg.composite_grade, sg.qualified
+               sg.composite_grade, sg.qualified, sg.season AS grade_season
         FROM player_seasons ps
         JOIN teams t   ON t.team_id   = ps.team_id
         JOIN players p ON p.player_id = ps.player_id
-        LEFT JOIN season_grades sg
-          ON sg.player_id = p.player_id
-         AND sg.season    = ps.season
-         AND sg.position  = 'P'
+        LEFT JOIN LATERAL (
+          SELECT composite_grade, qualified, season
+          FROM season_grades sg2
+          WHERE sg2.player_id = p.player_id
+            AND sg2.season   <= ps.season
+            AND sg2.position  = 'P'
+          ORDER BY
+            (CASE WHEN sg2.season = ps.season THEN 0 ELSE 1 END) ASC,
+            sg2.season DESC
+          LIMIT 1
+        ) sg ON TRUE
         WHERE t.abbr = ${teamAbbr}
           AND ps.season = ${season}
           AND p.position = 'P'
@@ -550,6 +579,7 @@ async function _getTeamLineup(
           r.composite_grade === null ? null : Number(r.composite_grade),
         qualified: r.qualified,
         grading_position: r.position,
+        grade_season: r.grade_season === null ? null : Number(r.grade_season),
       };
       if (r.position === "K" && !k) k = slot;
       if (r.position === "P" && !p) p = slot;
@@ -650,6 +680,46 @@ async function _attachGradeTrend(
 }
 
 /**
+ * OL counterpart to {@link _attachGradeTrend}. OL is team-graded so the
+ * source table is `team_ol_grades` (keyed by team_id, not player_id),
+ * and the LeaderboardEntry's `player_id` field already holds team_id
+ * per ADR-0025 — that's how the rest of the table machinery treats OL
+ * rows as if they were players.
+ */
+async function _attachTeamOlGradeTrend(
+  entries: LeaderboardEntry[],
+  currentSeason: number,
+  span: number = 5,
+): Promise<LeaderboardEntry[]> {
+  const teamIds = entries.map((e) => e.player_id);
+  if (teamIds.length === 0) return entries;
+
+  const minSeason = currentSeason - (span - 1);
+
+  const rows = await sql<
+    { team_id: number; season: number; composite_grade: number }[]
+  >`
+    SELECT team_id, season, composite_grade
+    FROM team_ol_grades
+    WHERE team_id = ANY(${teamIds})
+      AND season BETWEEN ${minSeason} AND ${currentSeason}
+    ORDER BY team_id, season ASC
+  `;
+
+  const trendByTeam = new Map<number, { season: number; grade: number }[]>();
+  for (const r of rows) {
+    const list = trendByTeam.get(r.team_id) ?? [];
+    list.push({ season: Number(r.season), grade: Number(r.composite_grade) });
+    trendByTeam.set(r.team_id, list);
+  }
+
+  return entries.map((e) => ({
+    ...e,
+    gradeTrend: trendByTeam.get(e.player_id) ?? [],
+  }));
+}
+
+/**
  * Full leaderboard for one (season, position).
  *
  * Returns all rows — qualified first (sorted by grade desc), then
@@ -714,7 +784,8 @@ async function _getLeaderboard(
       WHERE g.season = ${season}
       ORDER BY g.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachTeamOlGradeTrend(entries, season);
   }
 
   // The base SELECT + team_lookup LATERAL is identical across positions.
@@ -920,7 +991,8 @@ async function _getLeaderboard(
         AND sg.position = ${position}
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, position, season);
   }
 
   if (position === "CB") {
@@ -978,7 +1050,8 @@ async function _getLeaderboard(
         AND sg.position = 'CB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "CB", season);
   }
 
   if (position === "S") {
@@ -1046,7 +1119,8 @@ async function _getLeaderboard(
         AND sg.position = 'S'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "S", season);
   }
 
   if (position === "EDGE") {
@@ -1110,7 +1184,8 @@ async function _getLeaderboard(
         AND sg.position = 'EDGE'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "EDGE", season);
   }
 
   if (position === "LB") {
@@ -1179,7 +1254,8 @@ async function _getLeaderboard(
         AND sg.position = 'LB'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "LB", season);
   }
 
   if (position === "iDL") {
@@ -1243,7 +1319,8 @@ async function _getLeaderboard(
         AND sg.position = 'iDL'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "iDL", season);
   }
 
   if (position === "K") {
@@ -1294,7 +1371,8 @@ async function _getLeaderboard(
         AND sg.position = 'K'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "K", season);
   }
 
   if (position === "P") {
@@ -1350,7 +1428,8 @@ async function _getLeaderboard(
         AND sg.position = 'P'
       ORDER BY sg.qualified DESC, sg.composite_grade DESC
     `;
-    return rows.map(coerceLeaderboardEntry);
+    const entries = rows.map(coerceLeaderboardEntry);
+    return await _attachGradeTrend(entries, "P", season);
   }
 
   // Any other position — return the minimum shape.
@@ -1375,7 +1454,8 @@ async function _getLeaderboard(
       AND sg.position = ${position}
     ORDER BY sg.qualified DESC, sg.composite_grade DESC
   `;
-  return rows.map(coerceLeaderboardEntry);
+  const entries = rows.map(coerceLeaderboardEntry);
+  return await _attachGradeTrend(entries, position, season);
 }
 
 /**

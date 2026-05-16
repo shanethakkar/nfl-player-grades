@@ -119,7 +119,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
             No depth chart available for this season.
           </p>
         ) : (
-          <LineupDiagram lineup={lineup} />
+          <LineupDiagram lineup={lineup} season={activeSeason} />
         )}
       </section>
 

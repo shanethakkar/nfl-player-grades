@@ -44,6 +44,10 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    # Replicate API token. Optional — only used by pixel_headshots ingest.
+    # Set in .env: REPLICATE_API_TOKEN=r8_...
+    replicate_api_token: str = Field(default="", alias="REPLICATE_API_TOKEN")
+
     @field_validator("seasons", mode="before")
     @classmethod
     def _parse_seasons(cls, v: object) -> list[int]:

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
 import { CareerGradeChart } from "@/components/CareerGradeChart";
 import { CareerSummary } from "@/components/CareerSummary";
+import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SeasonGradesSection } from "@/components/SeasonGradesSection";
 import { TeamLogo } from "@/components/TeamLogo";
 import { getPlayerDetail } from "@/lib/queries";
@@ -50,17 +51,20 @@ export default async function PlayerPage({ params }: PageProps) {
       <BackLink />
 
       <header className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{player.full_name}</h1>
-          <div className="mt-1 flex items-center gap-2 text-sm text-neutral-400">
-            <span>{player.position}</span>
-            {player.current_team_abbr && (
-              <>
-                <span className="text-neutral-600">·</span>
-                <TeamLogo abbr={player.current_team_abbr} size={22} />
-                <span className="text-neutral-300">{player.current_team_abbr}</span>
-              </>
-            )}
+        <div className="flex items-center gap-5">
+          <PlayerHeadshot playerId={player.player_id} size={96} />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{player.full_name}</h1>
+            <div className="mt-1 flex items-center gap-2 text-sm text-neutral-400">
+              <span>{player.position}</span>
+              {player.current_team_abbr && (
+                <>
+                  <span className="text-neutral-600">·</span>
+                  <TeamLogo abbr={player.current_team_abbr} size={22} />
+                  <span className="text-neutral-300">{player.current_team_abbr}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>

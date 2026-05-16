@@ -39,14 +39,18 @@ export default function AuditPage() {
 
 function Hero() {
   return (
-    <section className="mb-12 border-b border-neutral-800 pb-10">
-      <div className="mb-3 text-xs uppercase tracking-[0.2em] text-emerald-400/80">
+    <section className="mb-16 border-b border-neutral-800/60 pb-14">
+      <div className="mb-4 inline-flex items-center gap-2 font-mono text-[11px] uppercase leading-none tracking-[0.15em] text-emerald-400/80">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"
+        />
         Research
       </div>
-      <h1 className="mb-6 text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
+      <h1 className="mb-8 text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
         How every weight was decided.
       </h1>
-      <p className="mb-8 max-w-2xl text-lg leading-relaxed text-neutral-300">
+      <p className="mb-10 max-w-2xl text-lg leading-[1.75] text-neutral-300">
         Each player grade is a weighted composite of 2&ndash;7 statistical
         components. Picking those components &mdash; and choosing what to
         leave out &mdash; was the hard part. This is what we did, what we
@@ -100,12 +104,12 @@ function BigStat({
 
 function FrameworkSection() {
   return (
-    <section className="mb-16">
+    <section className="mb-24">
       <SectionHeading
         eyebrow="The framework"
         title="Four criteria a metric must survive"
       />
-      <p className="mb-8 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         For every plausible statistical metric in nflverse data, we score it
         against four criteria. A metric only enters a player&rsquo;s grade if
         all four are convincing. The criteria together rule out random noise,
@@ -123,7 +127,7 @@ function FrameworkSection() {
         eyebrow="A worked example"
         title="What the audit looks like for WR"
       />
-      <p className="mb-8 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         Wide receiver got the largest metric set of any position &mdash;
         22 statistics tested. Six survived. Below, all 22 grouped by what
         the audit decided for each.
@@ -448,12 +452,12 @@ function CaseStudySection() {
   );
 
   return (
-    <section className="mb-16">
+    <section className="mb-24">
       <SectionHeading
         eyebrow="When the framework caught a flaw"
         title="WR: the most validity-driven signal was underweighted"
       />
-      <p className="mb-8 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         Methodology only earns trust by showing it changes when the data
         says it should. Most audit-driven changes are small &mdash; that&rsquo;s
         what makes them honest. Here&rsquo;s a representative one: WR v1
@@ -508,7 +512,7 @@ function CaseStudySection() {
         </table>
       </div>
 
-      <p className="mb-10 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         {WR_BEFORE_AFTER.conclusion}
       </p>
 
@@ -634,12 +638,12 @@ function ScoreboardSection() {
   );
 
   return (
-    <section className="mb-16">
+    <section className="mb-24">
       <SectionHeading
         eyebrow="The result, position by position"
         title="How well does each formula predict Pro Bowl voting?"
       />
-      <p className="mb-8 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         After every weight is set, we test the composite grade against
         next-year Pro Bowl selection. It&rsquo;s an imperfect ground truth
         &mdash; voters have their biases &mdash; but it&rsquo;s the best
@@ -741,12 +745,12 @@ function AuditLogSection() {
   const maxCandidates = Math.max(...FUNNEL.map((r) => r.totalCandidates));
 
   return (
-    <section className="mb-16">
+    <section className="mb-24">
       <SectionHeading
         eyebrow="The full audit log"
         title="What we considered, what we shipped, what we rejected"
       />
-      <p className="mb-8 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         The articles in the analytics community usually show you the formula
         and tell you it&rsquo;s good. Here&rsquo;s what we did before
         landing on the formula. The funnel below shows how many metrics
@@ -782,7 +786,7 @@ function AuditLogSection() {
         eyebrow="The rejection log"
         title="Selected rejections, by pattern"
       />
-      <p className="mb-6 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         Every rejected metric has a documented reason. These are the most
         instructive ones &mdash; they show the patterns that recurred across
         positions. Filter by pattern or position; click a row for the full
@@ -837,12 +841,12 @@ function FunnelRow({
 
 function LessonsSection() {
   return (
-    <section className="mb-16">
+    <section className="mb-24">
       <SectionHeading
         eyebrow="What we learned"
         title="Patterns that compounded across positions"
       />
-      <p className="mb-10 max-w-3xl text-neutral-300">
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
         Twelve audits surfaced four recurring lessons. They generalize beyond
         football grading &mdash; any composite-metric system runs into them.
       </p>
@@ -897,7 +901,7 @@ function LessonCard({
 
 function Footer() {
   return (
-    <section className="mt-12 border-t border-neutral-800 pt-10">
+    <section className="mt-16 border-t border-neutral-800/60 pt-14">
       <div className="text-sm text-neutral-400">
         <p className="mb-3">
           Each position&rsquo;s full audit doc lives in the repo under{" "}
@@ -939,8 +943,8 @@ function SectionHeading({
   title: string;
 }) {
   return (
-    <div className="mb-6">
-      <div className="mb-1 text-xs uppercase tracking-[0.18em] text-emerald-400/70">
+    <div className="mb-10">
+      <div className="mb-2.5 text-xs uppercase tracking-[0.22em] text-emerald-400/70">
         {eyebrow}
       </div>
       <h2 className="text-2xl font-semibold tracking-tight text-neutral-100 sm:text-3xl">

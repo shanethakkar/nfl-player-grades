@@ -311,6 +311,13 @@ export type LineupSlot = {
   /** Grading position the grade was computed at — may differ from the
    * depth chart label (e.g. depth chart "SAF", grading "S"). */
   grading_position: string | null;
+  /**
+   * Season the grade came from. Usually matches the lineup's season, but
+   * for rookies / mid-season callups who lack a current-season grade we
+   * fall back to their most recent prior season. The card renders an
+   * asterisk + tooltip when this differs from the lineup's season.
+   */
+  grade_season: number | null;
 };
 
 /**

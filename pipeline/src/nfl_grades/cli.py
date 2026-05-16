@@ -286,6 +286,45 @@ def ingest_defensive_stats(season: int, refresh: bool) -> None:
     )
 
 
+@ingest.command(name="pixel-headshots")
+@click.option("--position", type=str, default=None,
+              help="Filter to a single position (QB/RB/WR/...). Omit to include all.")
+@click.option("--season", type=int, default=2025, show_default=True)
+@click.option("--qualified-only", is_flag=True, default=False,
+              help="Skip players who didn't qualify (recommended).")
+@click.option("--player-id", type=int, default=None,
+              help="Single player by player_id. Overrides other filters.")
+@click.option("--force", is_flag=True, default=False,
+              help="Regenerate even if PNG already exists.")
+def ingest_pixel_headshots(
+    position: str | None,
+    season: int,
+    qualified_only: bool,
+    player_id: int | None,
+    force: bool,
+) -> None:
+    """Generate pixel-art headshots via Replicate (face-to-many + bg removal).
+
+    Saves to web/public/headshots/{player_id}.png + manifest.json.
+    Throttled to 6 req/min (Replicate free-tier rate limit).
+    """
+    from .ingest import pixel_headshots
+
+    result = pixel_headshots.run(
+        position=position,
+        season=season,
+        qualified_only=qualified_only,
+        player_id=player_id,
+        force=force,
+    )
+    click.echo(
+        f"targeted={result.targeted} "
+        f"generated={result.generated} "
+        f"skipped_existing={result.skipped_existing} "
+        f"failed={result.failed}"
+    )
+
+
 @ingest.command(name="punter-stats")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)

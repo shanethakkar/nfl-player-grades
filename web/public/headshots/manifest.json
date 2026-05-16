@@ -1,0 +1,362 @@
+{
+  "1125": {
+    "full_name": "Justin Herbert",
+    "generated_at": "2026-05-16T20:47:01.712960+00:00",
+    "gsis_id": "00-0036355",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "justin-herbert",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/s1oelyaroiaalgilbeqk",
+    "team_abbr": "LAC"
+  },
+  "1236": {
+    "full_name": "Jalen Hurts",
+    "generated_at": "2026-05-16T20:42:01.804600+00:00",
+    "gsis_id": "00-0036389",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "jalen-hurts",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/c47i9v6gmokkun9cat9s",
+    "team_abbr": "PHI"
+  },
+  "1285": {
+    "full_name": "Lamar Jackson",
+    "generated_at": "2026-05-16T20:48:13.527860+00:00",
+    "gsis_id": "00-0034796",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "lamar-jackson",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/cruqs6qpbykh7a2whd7p",
+    "team_abbr": "BAL"
+  },
+  "1411": {
+    "full_name": "Daniel Jones",
+    "generated_at": "2026-05-16T20:39:40.651270+00:00",
+    "gsis_id": "00-0035710",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "daniel-jones",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/nhuiypfjzpkisxllinyv",
+    "team_abbr": "IND"
+  },
+  "1434": {
+    "full_name": "Mac Jones",
+    "generated_at": "2026-05-16T20:48:49.038686+00:00",
+    "gsis_id": "00-0036972",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "mac-jones",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/v5sg1z9qvdpjeapblndz",
+    "team_abbr": "SF"
+  },
+  "1562": {
+    "full_name": "Trevor Lawrence",
+    "generated_at": "2026-05-16T20:53:33.691537+00:00",
+    "gsis_id": "00-0036971",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "trevor-lawrence",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/d75srntioly7fq0z8vip",
+    "team_abbr": "JAX"
+  },
+  "1616": {
+    "full_name": "Jordan Love",
+    "generated_at": "2026-05-16T20:45:08.642161+00:00",
+    "gsis_id": "00-0036264",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "jordan-love",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/uneiwen9drvci9ahuebp",
+    "team_abbr": "GB"
+  },
+  "1648": {
+    "full_name": "Patrick Mahomes",
+    "generated_at": "2026-05-16T20:51:09.965898+00:00",
+    "gsis_id": "00-0033873",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "patrick-mahomes",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/iireqbn32cpg9fn4sfy7",
+    "team_abbr": "KC"
+  },
+  "1662": {
+    "full_name": "Marcus Mariota",
+    "generated_at": "2026-05-16T20:49:24.557151+00:00",
+    "gsis_id": "00-0032268",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "marcus-mariota",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/b9ribxqudeehvmjlw0va",
+    "team_abbr": "WAS"
+  },
+  "1695": {
+    "full_name": "Drake Maye",
+    "generated_at": "2026-05-16T20:33:18.022885+00:00",
+    "gsis_id": "00-0039851",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "drake-maye",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/oyap81gtzcvnfmripis1",
+    "team_abbr": "NE"
+  },
+  "1698": {
+    "full_name": "Baker Mayfield",
+    "generated_at": "2026-05-16T20:34:43.627373+00:00",
+    "gsis_id": "00-0034855",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "baker-mayfield",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/i2uufyghiphx4oihgucm",
+    "team_abbr": "TB"
+  },
+  "1712": {
+    "full_name": "J.J. McCarthy",
+    "generated_at": "2026-05-16T20:40:50.984026+00:00",
+    "gsis_id": "00-0039923",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "j-j-mccarthy",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/omybnfokapjw6jwb5dd3",
+    "team_abbr": "MIN"
+  },
+  "1952": {
+    "full_name": "Bo Nix",
+    "generated_at": "2026-05-16T20:35:20.910268+00:00",
+    "gsis_id": "00-0039732",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "bo-nix",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/igirshmrr6lqtxcpxsea",
+    "team_abbr": "DEN"
+  },
+  "2086": {
+    "full_name": "Michael Penix Jr.",
+    "generated_at": "2026-05-16T20:50:35.206909+00:00",
+    "gsis_id": "00-0039917",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "michael-penix-jr",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/azvyjzp2sa8cnljbp3i7",
+    "team_abbr": "ATL"
+  },
+  "2161": {
+    "full_name": "Dak Prescott",
+    "generated_at": "2026-05-16T20:39:05.684107+00:00",
+    "gsis_id": "00-0033077",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "dak-prescott",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/blixemm3s9sa4gmqk5yn",
+    "team_abbr": "DAL"
+  },
+  "2178": {
+    "full_name": "Brock Purdy",
+    "generated_at": "2026-05-16T20:35:56.461666+00:00",
+    "gsis_id": "00-0037834",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "brock-purdy",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/xykdxnvxpf9pobxvkjfj",
+    "team_abbr": "SF"
+  },
+  "2195": {
+    "full_name": "Spencer Rattler",
+    "generated_at": "2026-05-16T20:52:55.862750+00:00",
+    "gsis_id": "00-0039376",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "spencer-rattler",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/uridusydmg6brwrmpmq6",
+    "team_abbr": "NO"
+  },
+  "2283": {
+    "full_name": "Aaron Rodgers",
+    "generated_at": "2026-05-16T20:34:09.446132+00:00",
+    "gsis_id": "00-0023459",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "aaron-rodgers",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/dypvakakxhccxs67tb0y",
+    "team_abbr": "PIT"
+  },
+  "2454": {
+    "full_name": "Geno Smith",
+    "generated_at": "2026-05-16T20:40:15.749816+00:00",
+    "gsis_id": "00-0030565",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "geno-smith",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/tqy0933vz5yogwlefb1s",
+    "team_abbr": "LV"
+  },
+  "2506": {
+    "full_name": "Matthew Stafford",
+    "generated_at": "2026-05-16T20:50:00.120030+00:00",
+    "gsis_id": "00-0026498",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "matthew-stafford",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/svxl2pk2cuqf26zrhii4",
+    "team_abbr": "LA"
+  },
+  "2547": {
+    "full_name": "C.J. Stroud",
+    "generated_at": "2026-05-16T20:37:21.439440+00:00",
+    "gsis_id": "00-0039163",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "c-j-stroud",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/tt4zrtxlhifaljhj0rn7",
+    "team_abbr": "HOU"
+  },
+  "2573": {
+    "full_name": "Tua Tagovailoa",
+    "generated_at": "2026-05-16T20:54:45.459182+00:00",
+    "gsis_id": "00-0036212",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "tua-tagovailoa",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/ktqj3s5vofexl2dwrrp4",
+    "team_abbr": "MIA"
+  },
+  "2876": {
+    "full_name": "Caleb Williams",
+    "generated_at": "2026-05-16T20:37:56.685586+00:00",
+    "gsis_id": "00-0039918",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "caleb-williams",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/h4qs11kutwiw7whekmyt",
+    "team_abbr": "CHI"
+  },
+  "2997": {
+    "full_name": "Bryce Young",
+    "generated_at": "2026-05-16T20:36:47.339680+00:00",
+    "gsis_id": "00-0039150",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "bryce-young",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/qy1lfhlzhiacsyzzm1j7",
+    "team_abbr": "CAR"
+  },
+  "300": {
+    "full_name": "Jacoby Brissett",
+    "generated_at": "2026-05-16T20:41:26.897202+00:00",
+    "gsis_id": "00-0033119",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "jacoby-brissett",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/rdxowm5dvpbb8p3aazbc",
+    "team_abbr": "ARI"
+  },
+  "31645": {
+    "full_name": "Jaxson Dart",
+    "generated_at": "2026-05-16T20:43:22.072366+00:00",
+    "gsis_id": "00-0040691",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "jaxson-dart",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/n6uymxssgiicjmxkzxoc",
+    "team_abbr": "NYG"
+  },
+  "33373": {
+    "full_name": "Shedeur Sanders",
+    "generated_at": "2026-05-16T20:52:21.669514+00:00",
+    "gsis_id": "00-0040668",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "shedeur-sanders",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/joe08hz6to2madpko8zl",
+    "team_abbr": "CLE"
+  },
+  "33434": {
+    "full_name": "Tyler Shough",
+    "generated_at": "2026-05-16T20:55:33.655871+00:00",
+    "gsis_id": "00-0040743",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "tyler-shough",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/wsrkib8qgwtb2t2ugaru",
+    "team_abbr": "NO"
+  },
+  "33816": {
+    "full_name": "Cam Ward",
+    "generated_at": "2026-05-16T20:38:32.066631+00:00",
+    "gsis_id": "00-0040676",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "cam-ward",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/viadutkbvligsopnd2qn",
+    "team_abbr": "TEN"
+  },
+  "374": {
+    "full_name": "Joe Burrow",
+    "generated_at": "2026-05-16T20:43:57.356785+00:00",
+    "gsis_id": "00-0036442",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "joe-burrow",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/gnnvcgui1cijybukk2w7",
+    "team_abbr": "CIN"
+  },
+  "53": {
+    "full_name": "Josh Allen",
+    "generated_at": "2026-05-16T20:45:43.774716+00:00",
+    "gsis_id": "00-0034857",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "josh-allen",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/servs1fpsynfxep4rz2z",
+    "team_abbr": "BUF"
+  },
+  "538": {
+    "full_name": "Kirk Cousins",
+    "generated_at": "2026-05-16T20:47:36.715360+00:00",
+    "gsis_id": "00-0029604",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "kirk-cousins",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/hmdqr7gju0dciapvdjcv",
+    "team_abbr": "ATL"
+  },
+  "581": {
+    "full_name": "Sam Darnold",
+    "generated_at": "2026-05-16T20:51:45.499844+00:00",
+    "gsis_id": "00-0034869",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "sam-darnold",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/s5t8m6bhedjwwtfw3ild",
+    "team_abbr": "SEA"
+  },
+  "802": {
+    "full_name": "Justin Fields",
+    "generated_at": "2026-05-16T20:46:19.267428+00:00",
+    "gsis_id": "00-0036945",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "justin-fields",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/fbteankooq2c33yquq2j",
+    "team_abbr": "NYJ"
+  },
+  "813": {
+    "full_name": "Joe Flacco",
+    "generated_at": "2026-05-16T20:44:33.530793+00:00",
+    "gsis_id": "00-0026158",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "joe-flacco",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/vbqptn8emdlbeaz1kvmx",
+    "team_abbr": "CIN"
+  },
+  "939": {
+    "full_name": "Jared Goff",
+    "generated_at": "2026-05-16T20:42:42.025488+00:00",
+    "gsis_id": "00-0033106",
+    "position": "QB",
+    "prompt_version": "G",
+    "slug": "jared-goff",
+    "source_headshot_url": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/yggfwr4ak4po9byj0qor",
+    "team_abbr": "DET"
+  }
+}
