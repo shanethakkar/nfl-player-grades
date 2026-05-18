@@ -1426,10 +1426,12 @@ function Row({
             )}
           </div>
           {e.gradeTrend.length > 0 && (
-            <SparklinePopover
-              points={e.gradeTrend}
-              header={position === "OL" ? "Team OL grade" : "Career grade"}
-            />
+            <div className="hidden sm:block">
+              <SparklinePopover
+                points={e.gradeTrend}
+                header={position === "OL" ? "Team OL grade" : "Career grade"}
+              />
+            </div>
           )}
         </div>
       </Td>
