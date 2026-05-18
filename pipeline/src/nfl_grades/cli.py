@@ -296,12 +296,15 @@ def ingest_defensive_stats(season: int, refresh: bool) -> None:
               help="Single player by player_id. Overrides other filters.")
 @click.option("--force", is_flag=True, default=False,
               help="Regenerate even if PNG already exists.")
+@click.option("--seed", type=int, default=99, show_default=True,
+              help="face-to-many seed. Change to re-roll a player whose initial generation had artifacts.")
 def ingest_pixel_headshots(
     position: str | None,
     season: int,
     qualified_only: bool,
     player_id: int | None,
     force: bool,
+    seed: int,
 ) -> None:
     """Generate pixel-art headshots via Replicate (face-to-many + bg removal).
 
@@ -316,6 +319,7 @@ def ingest_pixel_headshots(
         qualified_only=qualified_only,
         player_id=player_id,
         force=force,
+        seed=seed,
     )
     click.echo(
         f"targeted={result.targeted} "

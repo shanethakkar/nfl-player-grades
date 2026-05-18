@@ -266,15 +266,25 @@ def _to_url(replicate_output: object) -> str:
 # --- Replicate calls -------------------------------------------------------
 
 
+DEFAULT_SEED = 99
+
+
 def _stylize_and_remove_bg(
     replicate_client,
     source_url: str,
     position: str,
     team_abbr: str | None,
+    seed: int = DEFAULT_SEED,
 ) -> Image.Image:
     """One full Variant G generation: face-to-many → bg removal. Returns
     a square-cropped PIL Image at ~736x736 RGBA. Throttles before each
-    API call to stay under Replicate's free-tier rate limit."""
+    API call to stay under Replicate's free-tier rate limit.
+
+    `seed` is exposed because the model is stochastic — when a player's
+    initial generation has artifacts (bad bg removal, weird eyes), the
+    standard fix is to re-roll with a different seed before changing
+    the recipe.
+    """
     team_for_prompt = team_abbr or "NE"  # arbitrary fallback if team unknown
     prompt = _build_prompt(position, team_for_prompt)
 
@@ -290,7 +300,7 @@ def _stylize_and_remove_bg(
             "denoising_strength": 0.65,
             "instant_id_strength": 0.85,
             "control_depth_strength": 0.6,
-            "seed": 99,
+            "seed": seed,
         },
     )
     stylized_url = _to_url(stylized)
@@ -355,6 +365,7 @@ def run(
     qualified_only: bool = True,
     player_id: int | None = None,
     force: bool = False,
+    seed: int = DEFAULT_SEED,
 ) -> RunResult:
     """Generate pixel headshots for the targeted players. See module docstring."""
     import replicate  # imported here so the module is cheap to load even
@@ -413,7 +424,7 @@ def run(
             first_call = False
 
             try:
-                img = _stylize_and_remove_bg(replicate_client, t.source_url, t.position, t.team_abbr)
+                img = _stylize_and_remove_bg(replicate_client, t.source_url, t.position, t.team_abbr, seed=seed)
                 img.save(out_path)
                 _update_manifest_entry(manifest, t)
                 _save_manifest(manifest)
