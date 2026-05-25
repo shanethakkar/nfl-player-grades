@@ -72,3 +72,6 @@ Thumbs.db
 # --- Misc ---
 *.log
 tmp/
+
+# --- Local-only personal docs (not for repo) ---
+nfl_grades_resume_context.txt
