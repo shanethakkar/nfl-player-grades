@@ -74,7 +74,7 @@ export function MobileNav() {
             </div>
             <nav className="flex flex-col gap-1 text-sm text-neutral-200">
               <Link href="/" className="rounded px-2 py-2 hover:bg-neutral-900" onClick={() => setOpen(false)}>
-                Leaderboard
+                Grades
               </Link>
               <Link href="/teams" className="rounded px-2 py-2 hover:bg-neutral-900" onClick={() => setOpen(false)}>
                 Teams

@@ -22,7 +22,7 @@ type Props = { searchParams: SearchParams };
  * that bookmarks, history, and pinned tabs are self-describing. When the
  * URL omits one or both params we resolve the same defaults the page
  * itself uses (latest season, QB) so the bare landing page still gets
- * a descriptive title rather than "Leaderboard".
+ * a descriptive title rather than just "Grades".
  */
 export async function generateMetadata({
   searchParams,
@@ -45,9 +45,9 @@ export async function generateMetadata({
     : DEFAULT_POSITION;
 
   if (season !== null) {
-    return { title: `${position} Leaderboard \u2014 ${season}` };
+    return { title: `${position} Grades \u2014 ${season}` };
   }
-  return { title: `${position} Leaderboard` };
+  return { title: `${position} Grades` };
 }
 
 // Tabs render in this canonical order (not alphabetical) so QB appears first.
@@ -212,12 +212,14 @@ export default async function HomePage({ searchParams }: Props) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              {activePosition} Leaderboard
+              {activePosition} Grades
             </h1>
             {/* Mobile-only: tuck the description behind an (i) so the
-                header stays compact. Desktop renders the full <p> below. */}
+                header stays compact. Sits AFTER the title so it doesn't
+                visually crowd the dropdowns on the right. Desktop renders
+                the full <p> below. */}
             <span className="sm:hidden">
-              <InfoDisclosure label="About this leaderboard">
+              <InfoDisclosure label="About these grades">
                 {qualified.length}{" "}
                 {qualified.length === 1 ? noun.singular : noun.plural}
                 {" \u00B7 "}
@@ -263,7 +265,8 @@ export default async function HomePage({ searchParams }: Props) {
 
       <section
         className={
-          (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") + " -mr-6 sm:mr-0"
+          (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") +
+          " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
         }
       >
         <LeaderboardTable entries={qualified} position={activePosition} />

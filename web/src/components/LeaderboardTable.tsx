@@ -112,8 +112,17 @@ export function LeaderboardTable({ entries, position }: Props) {
         <thead className="sticky top-0 z-10 bg-neutral-950 text-xs uppercase text-neutral-400">
           {columns.some((c) => c.group) && (
             <tr className="border-b border-neutral-800/60">
-              {/* Empty cells over Rank, Player, Team, Grade, Pct */}
-              <th colSpan={5} />
+              {/* Empty cells over Rank, Player, Team, Grade, Pct.
+                  The Player cell mirrors the column header below it
+                  (sticky + opaque bg + right border) so that when the
+                  user scrolls horizontally, the FORMULA/CONTEXT banners
+                  in this same row slide UNDER the sticky Player cell
+                  instead of drifting visually on top of it. */}
+              <th />
+              <th className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800" />
+              <th />
+              <th />
+              <th />
               {computeHeaderGroups(columns).map((g, i) => (
                 <th
                   key={i}
@@ -1494,12 +1503,6 @@ function SortHeader({
   const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
   const alignCls =
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
-  const buttonAlignCls =
-    align === "right"
-      ? "ml-auto"
-      : align === "center"
-        ? "mx-auto"
-        : "";
   const sortIndicator = (
     <span
       aria-hidden
@@ -1535,14 +1538,24 @@ function SortHeader({
   ) : (
     <span>{label}</span>
   );
+  // Tint FORMULA column headers a subtle emerald so the formula vs.
+  // context grouping reads at a glance, reinforcing the vertical
+  // separator lines. Active (sorted) state keeps a brighter emerald
+  // so the sort target is still obvious.
+  const isFormula = col.group === "formula";
+  const colorCls = isFormula
+    ? active
+      ? "text-emerald-200"
+      : "text-emerald-300/70 hover:text-emerald-200"
+    : active
+      ? "text-neutral-200"
+      : "text-neutral-500 hover:text-neutral-300";
   return (
-    <th className={`px-3 py-2 ${alignCls} ${className}`}>
+    <th className={`px-2 py-2 sm:px-3 ${alignCls} ${className}`}>
       <button
         type="button"
         onClick={() => onSort(col)}
-        className={`flex items-center gap-1 ${buttonAlignCls} ${
-          active ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"
-        }`}
+        className={`inline-flex items-center gap-1 ${colorCls}`}
       >
         {align === "right" ? <>{sortIndicator}{labelNode}</> : <>{labelNode}{sortIndicator}</>}
       </button>
@@ -1560,7 +1573,7 @@ function Th({
   title?: string;
 }) {
   return (
-    <th className={`px-3 py-2 text-left ${className}`} title={title}>
+    <th className={`px-2 py-2 text-left sm:px-3 ${className}`} title={title}>
       {children}
     </th>
   );
@@ -1573,5 +1586,5 @@ function Td({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+  return <td className={`px-2 py-2 sm:px-3 ${className}`}>{children}</td>;
 }

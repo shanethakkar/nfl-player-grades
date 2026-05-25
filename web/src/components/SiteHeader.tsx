@@ -27,7 +27,7 @@ export function SiteHeader() {
         <div className="hidden md:flex flex-wrap items-center justify-end gap-x-5 gap-y-2 text-sm text-neutral-300">
           <nav className="flex items-center gap-5">
             <Link href="/" className="hover:text-white">
-              Leaderboard
+              Grades
             </Link>
             <Link href="/teams" className="hover:text-white">
               Teams
