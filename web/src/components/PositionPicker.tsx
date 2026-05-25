@@ -49,18 +49,30 @@ export function PositionPicker({
 
   return (
     <>
-      {/* Mobile: compact select — avoids page-level overflow from 12 pills */}
-      <select
-        value={activePosition}
-        onChange={onChange}
-        className="md:hidden rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
-      >
-        {positions.map((p) => (
-          <option key={p} value={p}>
-            {p}
-          </option>
-        ))}
-      </select>
+      {/* Mobile: compact select — avoids page-level overflow from 12 pills.
+          `appearance-none` strips the OS dropdown arrow (which sits at
+          the far right edge regardless of how short the value is); we
+          render a custom chevron right after the text so the button
+          reads as one tight unit. */}
+      <div className="relative inline-flex items-center md:hidden">
+        <select
+          value={activePosition}
+          onChange={onChange}
+          className="appearance-none rounded-lg border border-neutral-800 bg-neutral-950 py-2 pl-3 pr-7 text-sm text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+        >
+          {positions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+        <span
+          aria-hidden
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm text-neutral-400"
+        >
+          {"▾"}
+        </span>
+      </div>
 
       {/* Desktop: tab-style pills */}
       <div className="hidden md:inline-flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950 p-1">

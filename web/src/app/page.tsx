@@ -208,17 +208,19 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-[1600px] px-6 py-4 sm:py-10">
-      <div className="flex items-start justify-between gap-3 md:flex-wrap md:items-end md:gap-4">
+      <div className="flex items-center justify-between gap-3 md:flex-wrap md:items-end md:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              {activePosition} Grades
+            {/* Below md the position name lives in the dropdown to the
+                right, so the H1 carries only "Grades" \u2014 no redundant
+                "QB" both in the title and the picker. md+ restores the
+                "QB Grades" form since the pill picker doesn't repeat the
+                title. */}
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+              <span className="hidden md:inline">{activePosition} </span>
+              Grades
             </h1>
-            {/* Mobile-only: tuck the description behind an (i) so the
-                header stays compact. Sits AFTER the title so it doesn't
-                visually crowd the dropdowns on the right. Desktop renders
-                the full <p> below. */}
-            <span className="sm:hidden">
+            <span className="md:hidden">
               <InfoDisclosure label="About these grades">
                 {qualified.length}{" "}
                 {qualified.length === 1 ? noun.singular : noun.plural}
@@ -231,7 +233,7 @@ export default async function HomePage({ searchParams }: Props) {
               </InfoDisclosure>
             </span>
           </div>
-          <p className="mt-1 hidden text-sm text-neutral-400 sm:block">
+          <p className="mt-1 hidden text-sm text-neutral-400 md:block">
             {qualified.length}{" "}
             {qualified.length === 1 ? noun.singular : noun.plural}
             {" \u00B7 "}

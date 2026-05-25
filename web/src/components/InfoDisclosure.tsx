@@ -45,9 +45,21 @@ export function InfoDisclosure({ label = "More info", children }: Props) {
         aria-label={label}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-neutral-700 text-[11px] font-semibold leading-none text-neutral-400 hover:border-neutral-500 hover:text-neutral-100"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100"
       >
-        i
+        {/* Hand-drawn "i" so the glyph is perfectly centered in the
+            circle. The letter "i" rendered in a small sans-serif font
+            sits slightly off-center because of dot/stem asymmetry. */}
+        <svg
+          width="8"
+          height="8"
+          viewBox="0 0 8 8"
+          fill="currentColor"
+          aria-hidden
+        >
+          <circle cx="4" cy="1.25" r="1" />
+          <rect x="3.25" y="3" width="1.5" height="4" rx="0.4" />
+        </svg>
       </button>
       {open && (
         <span className="absolute left-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs leading-relaxed text-neutral-300 shadow-lg">
