@@ -7,11 +7,16 @@ import {
   componentSharePercent,
   gradeColor,
   positionComponents,
+  TEAM_PHASE_WEIGHTS,
+  teamPhaseWeights,
+  type TeamPhase,
 } from "@/lib/grades";
 import {
   getCurrentTopAtPosition,
+  getCurrentTopTeamsByPhase,
   getGradeTierExamples,
   type CurrentTopEntry,
+  type CurrentTopTeam,
   type GradeTierId,
   type TierBucket,
   type TierExample,
@@ -53,7 +58,7 @@ const Z_GRADE_EXAMPLES = [-2, -1, 0, 1, 2].map((z) => ({
  * what the limitations are. Technical rationale lives at /about/decisions.
  */
 export default async function MethodologyPage() {
-  const [tiers, qbTop, rbTop, wrTop, teTop, olTop, cbTop, sTop, edgeTop, idlTop, lbTop, kTop, pTop] = await Promise.all([
+  const [tiers, qbTop, rbTop, wrTop, teTop, olTop, cbTop, sTop, edgeTop, idlTop, lbTop, kTop, pTop, offTop, defTop, stTop] = await Promise.all([
     getGradeTierExamples(),
     getCurrentTopAtPosition("QB"),
     getCurrentTopAtPosition("RB"),
@@ -67,7 +72,16 @@ export default async function MethodologyPage() {
     getCurrentTopAtPosition("LB"),
     getCurrentTopAtPosition("K"),
     getCurrentTopAtPosition("P"),
+    getCurrentTopTeamsByPhase("offense"),
+    getCurrentTopTeamsByPhase("defense"),
+    getCurrentTopTeamsByPhase("st"),
   ]);
+
+  const teamPhaseCards: TeamPhaseCardData[] = [
+    { phase: "offense", headline: "Offense",        top: offTop },
+    { phase: "defense", headline: "Defense",        top: defTop },
+    { phase: "st",      headline: "Special teams",  top: stTop },
+  ];
 
   const positions: PositionCardData[] = [
     {
@@ -150,6 +164,7 @@ export default async function MethodologyPage() {
       <GradeScale tiers={tiers} />
       <PositionGrid positions={positions} />
       <HowItsBuilt />
+      <TeamGradesSection cards={teamPhaseCards} />
       <Limitations />
       <DataSource />
       <Footer />
@@ -399,6 +414,228 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
 }
 
 // ---------------------------------------------------------------------------
+// Team grades — rolls individual player grades up into Off / Def / ST / Overall.
+//
+// Matches the visual language used elsewhere on the page: phase-split bar
+// (mirrors the gradient bar in GradeScale), a mini "two-stage" strip
+// (mirrors ShrinkageStrip / WinProbFilter), and a card grid of the three
+// phases (mirrors PositionGrid).
+// ---------------------------------------------------------------------------
+
+type TeamPhaseCardData = {
+  phase: TeamPhase;
+  headline: string;
+  top: { season: number | null; entries: CurrentTopTeam[] };
+};
+
+const PHASE_ACCENT: Record<TeamPhase, { bar: string; chip: string; text: string }> = {
+  offense: { bar: "bg-emerald-500/70", chip: "border-emerald-700/60 bg-emerald-950/30", text: "text-emerald-300" },
+  defense: { bar: "bg-sky-500/70",     chip: "border-sky-700/60 bg-sky-950/30",         text: "text-sky-300" },
+  st:      { bar: "bg-amber-500/70",   chip: "border-amber-700/60 bg-amber-950/30",     text: "text-amber-300" },
+};
+
+function TeamGradesSection({ cards }: { cards: TeamPhaseCardData[] }) {
+  return (
+    <section className="mb-16">
+      <SectionHeading
+        eyebrow="Team grades"
+        title="Rolling positions up to teams"
+      />
+
+      {/* Phase-split bar — the headline visual: 55 / 40 / 5 split with
+          phase-colored bands. Matches the gradient bar at the top of
+          GradeScale in shape. */}
+      <PhaseSplitBar />
+
+      {/* Two-stage aggregation strip — concrete example of how a team
+          Overall is computed from the player grades below. */}
+      <TwoStageStrip />
+
+      {/* Three phase cards — one per phase, with weight chips for the
+          positions in that phase and the top-3 teams this season. */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        {cards.map((c) => (
+          <TeamPhaseCard key={c.phase} data={c} />
+        ))}
+      </div>
+
+      <p className="mt-4 text-xs text-neutral-500">
+        Phase weights and per-position weights are both empirically
+        derived — ridge regression of team success against the
+        per-position grades, cross-checked with NFL salary-cap
+        allocation. See{" "}
+        <Link
+          href="/methodology/audit#team-weights"
+          className="text-emerald-400 hover:underline"
+        >
+          Research
+        </Link>{" "}
+        for the audit tables, headline findings, and the per-snap-quality
+        limitation.
+      </p>
+    </section>
+  );
+}
+
+function PhaseSplitBar() {
+  const phases: TeamPhase[] = ["offense", "defense", "st"];
+  return (
+    <div className="mb-6">
+      <div className="flex h-2 overflow-hidden rounded-full">
+        {phases.map((p) => (
+          <div
+            key={p}
+            className={PHASE_ACCENT[p].bar}
+            style={{ width: `${TEAM_PHASE_WEIGHTS[p] * 100}%` }}
+            aria-hidden
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex text-[11px] font-medium uppercase tracking-wider">
+        {phases.map((p) => (
+          <div
+            key={p}
+            style={{ width: `${TEAM_PHASE_WEIGHTS[p] * 100}%` }}
+            className={`${PHASE_ACCENT[p].text}`}
+          >
+            <span>
+              {p === "st" ? "S.T." : p === "offense" ? "Offense" : "Defense"}
+            </span>{" "}
+            <span className="font-mono text-neutral-500">
+              {Math.round(TEAM_PHASE_WEIGHTS[p] * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TwoStageStrip() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950/40">
+      <div className="grid grid-cols-1 divide-y divide-neutral-800 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <StageCell
+          step="Stage 1"
+          title="Snap-weighted within a position"
+          body="Each position's team grade is the snap-weighted average of every player who logged snaps there. A starter at 95% of snaps dominates; a backup at 20% barely shifts the number."
+          example="QB grade ≈ starter × 0.92 + backup × 0.08"
+        />
+        <StageCell
+          step="Stage 2"
+          title="Position-weighted within a phase"
+          body="Position grades combine into Offense / Defense / ST scores using empirically-derived weights. QB carries 45% of Offense; iDL carries 10% of Defense."
+          example="Offense ≈ 0.45·QB + 0.25·OL + 0.13·WR + 0.09·RB + 0.08·TE"
+        />
+      </div>
+    </div>
+  );
+}
+
+function StageCell({
+  step,
+  title,
+  body,
+  example,
+}: {
+  step: string;
+  title: string;
+  body: string;
+  example: string;
+}) {
+  return (
+    <div className="p-5">
+      <div className="mb-2 font-mono text-xs uppercase tracking-wider text-neutral-500">
+        {step}
+      </div>
+      <h3 className="mb-2 text-base font-semibold text-neutral-100">{title}</h3>
+      <p className="text-sm leading-relaxed text-neutral-300">{body}</p>
+      <p className="mt-3 rounded bg-neutral-900 px-2.5 py-1.5 font-mono text-[11px] text-neutral-400">
+        {example}
+      </p>
+    </div>
+  );
+}
+
+function TeamPhaseCard({ data }: { data: TeamPhaseCardData }) {
+  const accent = PHASE_ACCENT[data.phase];
+  const weights = teamPhaseWeights(data.phase);
+  const entries = Object.entries(weights);
+
+  return (
+    <article className="flex flex-col rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
+      <div className="mb-3">
+        <div
+          className={`mb-0.5 font-mono text-xs uppercase tracking-wider ${accent.text}`}
+        >
+          {data.headline}
+        </div>
+        <h3 className="text-lg font-semibold text-neutral-100">
+          {Math.round(TEAM_PHASE_WEIGHTS[data.phase] * 100)}% of Overall
+        </h3>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {entries.map(([pos, w]) => (
+          <span
+            key={pos}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${accent.chip} text-neutral-200`}
+          >
+            <span className="font-medium">{pos}</span>
+            <span className={`font-mono ${accent.text}`}>
+              {Math.round(w * 100)}%
+            </span>
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 border-t border-neutral-900 pt-4">
+        <TopTeamsBlock data={data} />
+      </div>
+    </article>
+  );
+}
+
+function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
+  if (data.top.season === null || data.top.entries.length === 0) {
+    return (
+      <p className="text-xs text-neutral-500">
+        No team grades for this phase yet.
+      </p>
+    );
+  }
+  return (
+    <div className="text-xs text-neutral-400">
+      <div className="mb-2 uppercase tracking-wider text-neutral-500">
+        Top {data.top.entries.length} this season ({data.top.season})
+      </div>
+      <ol className="space-y-1">
+        {data.top.entries.map((e, i) => (
+          <li key={e.team_id} className="flex items-center gap-2">
+            <span className="w-4 text-neutral-600">{i + 1}.</span>
+            <Link
+              href={{ pathname: `/teams/${e.abbr}`, query: { season: data.top.season } }}
+              className="text-neutral-200 hover:text-neutral-100 hover:underline"
+            >
+              {e.name}
+            </Link>
+            <span className={`ml-auto font-mono ${gradeColor(e.phase_grade)}`}>
+              {e.phase_grade.toFixed(1)}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <Link
+        href={{ pathname: "/teams", query: { season: data.top.season } }}
+        className="mt-3 inline-block text-neutral-400 hover:text-neutral-100 hover:underline"
+      >
+        See full team leaderboard →
+      </Link>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // How a grade is built — trimmed step cards + z→grade visual on step 3.
 // ---------------------------------------------------------------------------
 
@@ -542,6 +779,10 @@ function Limitations() {
     {
       title: "Career trajectory smoothing",
       body: "Each season is graded standalone — no carry-over from prior years and no aging curve baked in.",
+    },
+    {
+      title: "Per-snap quality vs. wins for team grades",
+      body: "Team grades measure how the roster performed per snap, not its record. Clutch close-game winners grade below their record; injury-thinned rosters grade above, since snaps from healthy stars still count fully.",
     },
   ];
 

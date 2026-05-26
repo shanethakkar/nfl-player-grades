@@ -474,3 +474,116 @@ export const VERDICT_META: Record<Verdict, { label: string; tone: "good" | "neut
   "context-only": { label: "Context only",   tone: "neutral" },
   "anti-skill":   { label: "Anti-skill",     tone: "bad"     },
 };
+
+
+// ===========================================================================
+// Team-weights audit (ADR-0026, 2026-05-25)
+// ===========================================================================
+//
+// Source: docs/grading/audits/2026-05-25-team-weights.md (the raw report)
+// and pipeline/scripts/audit_team_weights.py (the script that produced it).
+//
+// Methodology: same 4-criterion logic as the per-position audits, applied
+// one level up. For each team-season, compute snap-weighted per-position
+// grades, then ridge-regress team success against them. The resulting
+// normalized coefficients are the "regression weights" below. Salary-cap
+// allocation is the second anchor — Spotrac / OTC league-average %s.
+// Final shipped weights reconcile both anchors with sample-size humility.
+
+export type TeamPhaseWeightRow = {
+  label: string;
+  prior: number;
+  cap: number;
+  regressionPD: number;
+  regressionSpread: number;
+  shipped: number;
+};
+
+export type TeamPositionWeightRow = TeamPhaseWeightRow & {
+  /** Univariate Pearson r between this position's team grade and team point diff.
+   *  Surfaces the bivariate signal independent of multicollinearity. */
+  univariate: number;
+};
+
+export const TEAM_PHASE_AUDIT: {
+  rSquaredPD: number;
+  rSquaredSpread: number;
+  rows: TeamPhaseWeightRow[];
+} = {
+  rSquaredPD: 0.79,
+  rSquaredSpread: 0.69,
+  rows: [
+    { label: "Offense",  prior: 0.45, cap: 0.49, regressionPD: 0.58, regressionSpread: 0.64, shipped: 0.55 },
+    { label: "Defense",  prior: 0.45, cap: 0.49, regressionPD: 0.36, regressionSpread: 0.34, shipped: 0.40 },
+    { label: "S. teams", prior: 0.10, cap: 0.02, regressionPD: 0.06, regressionSpread: 0.02, shipped: 0.05 },
+  ],
+};
+
+export const TEAM_POSITION_AUDIT: {
+  offense: { rSquaredPD: number; rSquaredSpread: number; rows: TeamPositionWeightRow[] };
+  defense: { rSquaredPD: number; rSquaredSpread: number; rows: TeamPositionWeightRow[] };
+  st:      { rSquaredPD: number; rSquaredSpread: number; rows: TeamPositionWeightRow[] };
+} = {
+  offense: {
+    rSquaredPD: 0.60,
+    rSquaredSpread: 0.56,
+    rows: [
+      { label: "QB", prior: 0.40, cap: 0.28, regressionPD: 0.61, regressionSpread: 0.57, univariate: 0.74, shipped: 0.45 },
+      { label: "OL", prior: 0.25, cap: 0.43, regressionPD: 0.21, regressionSpread: 0.25, univariate: 0.51, shipped: 0.25 },
+      { label: "WR", prior: 0.15, cap: 0.18, regressionPD: 0.01, regressionSpread: 0.07, univariate: 0.52, shipped: 0.13 },
+      { label: "RB", prior: 0.10, cap: 0.05, regressionPD: 0.09, regressionSpread: 0.11, univariate: 0.42, shipped: 0.09 },
+      { label: "TE", prior: 0.10, cap: 0.06, regressionPD: 0.08, regressionSpread: 0.01, univariate: 0.49, shipped: 0.08 },
+    ],
+  },
+  defense: {
+    rSquaredPD: 0.35,
+    rSquaredSpread: 0.25,
+    rows: [
+      { label: "EDGE", prior: 0.25, cap: 0.27, regressionPD: 0.23, regressionSpread: 0.27, univariate: 0.32, shipped: 0.24 },
+      { label: "CB",   prior: 0.25, cap: 0.24, regressionPD: 0.26, regressionSpread: 0.24, univariate: 0.39, shipped: 0.24 },
+      { label: "LB",   prior: 0.20, cap: 0.16, regressionPD: 0.25, regressionSpread: 0.24, univariate: 0.30, shipped: 0.22 },
+      { label: "S",    prior: 0.15, cap: 0.14, regressionPD: 0.25, regressionSpread: 0.20, univariate: 0.31, shipped: 0.20 },
+      { label: "iDL",  prior: 0.15, cap: 0.19, regressionPD: 0.01, regressionSpread: 0.05, univariate: 0.12, shipped: 0.10 },
+    ],
+  },
+  st: {
+    rSquaredPD: 0.04,
+    rSquaredSpread: 0.02,
+    rows: [
+      { label: "K", prior: 0.55, cap: 0.52, regressionPD: 0.51, regressionSpread: 0.51, univariate: 0.15, shipped: 0.52 },
+      { label: "P", prior: 0.45, cap: 0.48, regressionPD: 0.49, regressionSpread: 0.50, univariate: 0.15, shipped: 0.48 },
+    ],
+  },
+};
+
+export const TEAM_AUDIT_FINDINGS: Array<{
+  title: string;
+  body: string;
+  delta: string;
+  tone: "up" | "down" | "flat";
+}> = [
+  {
+    title: "QB is heavier than any gut-feel prior",
+    body: "Regression coefficient 0.61. Univariate Pro-Bowl r of 0.74 — highest of any position by a wide margin. The salary cap (0.28) undersells QB because cap allocation reflects supply scarcity (only 32 starting QBs), not on-field contribution.",
+    delta: "Prior 0.40 → v1.0 0.45",
+    tone: "up",
+  },
+  {
+    title: "iDL is the lightest position",
+    body: "Regression coefficient 0.01. Univariate r of 0.12 — lowest of any position. Trimmed from prior 0.15 to 0.10. (Kept non-zero because the iDL grade itself may under-capture interior pressure; the regression may be confirming a weak grade, not a weak position.)",
+    delta: "Prior 0.15 → v1.0 0.10",
+    tone: "down",
+  },
+  {
+    title: "Offense outweighs defense in modern NFL",
+    body: "Phase regression said 0.58 / 0.36 / 0.06. The prior 0.45 / 0.45 was symmetric on principle; the data says modern football is offense-tilted. Reconciled to 0.55 / 0.40 / 0.05 — substantial move toward regression without going all the way.",
+    delta: "Phase: 0.45 / 0.45 / 0.10 → 0.55 / 0.40 / 0.05",
+    tone: "up",
+  },
+  {
+    title: "WR collapses in multivariate but is real univariately",
+    body: "WR's multivariate weight is 0.01 — but univariate r is 0.52. The regression can't separate WR from QB because the two grades are correlated (good QBs make receivers look better). Held at 0.13 instead of dropping to 0, accepting some double-counting with QB rather than pretending WR doesn't matter.",
+    delta: "Prior 0.15 → v1.0 0.13",
+    tone: "flat",
+  },
+];

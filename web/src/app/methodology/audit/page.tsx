@@ -7,10 +7,15 @@ import {
   FUNNEL_TOTALS,
   LESSONS,
   REJECTION_HIGHLIGHTS,
+  TEAM_AUDIT_FINDINGS,
+  TEAM_PHASE_AUDIT,
+  TEAM_POSITION_AUDIT,
   VALIDITY_SCOREBOARD,
   WR_AUDIT,
   WR_BEFORE_AFTER,
   type AuditCandidate,
+  type TeamPhaseWeightRow,
+  type TeamPositionWeightRow,
 } from "@/lib/audit-data";
 
 export const metadata = {
@@ -28,6 +33,7 @@ export default function AuditPage() {
       <ScoreboardSection />
       <AuditLogSection />
       <LessonsSection />
+      <TeamWeightsSection />
       <Footer />
     </main>
   );
@@ -894,6 +900,273 @@ function LessonCard({
     </div>
   );
 }
+
+// ===========================================================================
+// SECTION 6 — TEAM WEIGHTS AUDIT (ADR-0026)
+//
+// Same 4-criterion framework, applied one level up. The "candidates" are
+// the per-position team grades (snap-weighted from the player grades
+// above), and the target is team success (point diff + closing spread).
+// Phase weights and per-position weights are both empirically derived.
+// ===========================================================================
+
+function TeamWeightsSection() {
+  return (
+    <section id="team-weights" className="mb-24">
+      <SectionHeading
+        eyebrow="Team weights"
+        title="The same framework, applied one level up"
+      />
+      <p className="mb-10 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
+        Player grades aggregate into team grades through a two-stage
+        formula: snap-weight within each position, then position-weight
+        within each phase. Both stages of weights were derived the same
+        way as the per-position formulas — empirically. Ridge regression
+        of team success against the per-position team grades produces
+        the regression coefficients below; salary-cap allocation is the
+        market-derived second anchor. Shipped weights reconcile both
+        anchors with sample-size humility.
+      </p>
+
+      <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <BigStat
+          number={`R²=${TEAM_PHASE_AUDIT.rSquaredPD.toFixed(2)}`}
+          label="phase model fit"
+          sublabel="point diff ~ off + def + st"
+        />
+        <BigStat
+          number="222"
+          label="team-seasons audited"
+          sublabel="32 teams × 7 seasons (2018-2024)"
+        />
+        <BigStat
+          number="2"
+          label="empirical anchors"
+          sublabel="ridge regression + cap allocation"
+        />
+      </div>
+
+      <SubHeading
+        eyebrow="Phase weights"
+        title="Offense outweighs defense; ST is the small slice"
+      />
+      <p className="mb-6 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
+        Regression on three phase grades fits at R² = 0.79 against point
+        differential — a strong signal. The original priors balanced
+        offense and defense 0.45 / 0.45 on principle; the data says
+        modern NFL is offense-tilted, and ST contributes closer to its
+        salary-cap allocation (~2%) than to a gut-feel 10%.
+      </p>
+      <WeightAuditTable rows={TEAM_PHASE_AUDIT.rows} kind="phase" />
+
+      <SubHeading
+        eyebrow="Position weights"
+        title="Per-position contribution to each phase"
+      />
+      <p className="mb-6 max-w-2xl text-[17px] leading-[1.75] text-neutral-300">
+        Within each phase, position weights determine which positions
+        carry the composite. QB dominates offense, EDGE and CB share top
+        billing on defense, and ST is essentially a 50/50 K/P split. The
+        univariate column (Pearson r against team point diff) helps spot
+        multicollinearity — WR collapses to ~0 multivariate but still
+        correlates strongly on its own.
+      </p>
+
+      <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <PhaseAuditCard
+          title="Offense"
+          eyebrow={`R² = ${TEAM_POSITION_AUDIT.offense.rSquaredPD.toFixed(2)}`}
+          rows={TEAM_POSITION_AUDIT.offense.rows}
+        />
+        <PhaseAuditCard
+          title="Defense"
+          eyebrow={`R² = ${TEAM_POSITION_AUDIT.defense.rSquaredPD.toFixed(2)}`}
+          rows={TEAM_POSITION_AUDIT.defense.rows}
+        />
+        <PhaseAuditCard
+          title="Special teams"
+          eyebrow={`R² = ${TEAM_POSITION_AUDIT.st.rSquaredPD.toFixed(2)}`}
+          rows={TEAM_POSITION_AUDIT.st.rows}
+        />
+      </div>
+
+      <SubHeading eyebrow="Headline findings" title="What moved from the gut-feel prior" />
+      <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-2">
+        {TEAM_AUDIT_FINDINGS.map((f) => (
+          <FindingCard key={f.title} finding={f} />
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-6">
+        <div className="mb-2 text-xs uppercase tracking-wider text-neutral-500">
+          The honest limitation
+        </div>
+        <p className="text-neutral-300">
+          Team grades measure per-snap player quality, snap-weighted across
+          a team&rsquo;s available roster. They do <em>not</em> measure win-loss
+          record. Teams that outperform their efficiency stats (clutch
+          close-game wins) tend to grade lower than their record suggests;
+          teams whose stars missed games to injury tend to grade higher
+          (snaps from healthy stars still count fully). We documented
+          this in ADR-0026 rather than tuning the formula to chase wins
+          — that&rsquo;s a v2 question.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function WeightAuditTable({
+  rows,
+  kind,
+}: {
+  rows: TeamPhaseWeightRow[] | TeamPositionWeightRow[];
+  kind: "phase" | "position";
+}) {
+  return (
+    <div className="mb-10 overflow-x-auto rounded-lg border border-neutral-800">
+      <table className="w-full min-w-[600px] text-sm">
+        <thead className="bg-neutral-900/60 text-xs uppercase tracking-wider text-neutral-500">
+          <tr>
+            <th className="px-4 py-3 text-left font-medium">
+              {kind === "phase" ? "Phase" : "Position"}
+            </th>
+            <th className="px-4 py-3 text-right font-medium">Prior</th>
+            <th className="px-4 py-3 text-right font-medium">Cap %</th>
+            <th className="px-4 py-3 text-right font-medium">Reg (PD)</th>
+            <th className="px-4 py-3 text-right font-medium">Reg (spread)</th>
+            {kind === "position" && (
+              <th className="px-4 py-3 text-right font-medium">Univariate r</th>
+            )}
+            <th className="px-4 py-3 text-right font-medium">v1.0 shipped</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label} className="border-t border-neutral-800/60">
+              <td className="px-4 py-3 font-medium text-neutral-200">{r.label}</td>
+              <td className="px-4 py-3 text-right font-mono text-neutral-400">
+                {r.prior.toFixed(2)}
+              </td>
+              <td className="px-4 py-3 text-right font-mono text-neutral-400">
+                {r.cap.toFixed(2)}
+              </td>
+              <td className="px-4 py-3 text-right font-mono text-neutral-300">
+                {r.regressionPD.toFixed(2)}
+              </td>
+              <td className="px-4 py-3 text-right font-mono text-neutral-300">
+                {r.regressionSpread.toFixed(2)}
+              </td>
+              {kind === "position" && "univariate" in r && (
+                <td className="px-4 py-3 text-right font-mono text-neutral-300">
+                  +{(r as TeamPositionWeightRow).univariate.toFixed(2)}
+                </td>
+              )}
+              <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-300">
+                {r.shipped.toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PhaseAuditCard({
+  title,
+  eyebrow,
+  rows,
+}: {
+  title: string;
+  eyebrow: string;
+  rows: TeamPositionWeightRow[];
+}) {
+  return (
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
+      <div className="mb-1 text-xs uppercase tracking-wider text-neutral-500">
+        {eyebrow}
+      </div>
+      <h3 className="mb-4 text-lg font-semibold text-neutral-100">{title}</h3>
+      <ul className="space-y-3">
+        {rows.map((r) => {
+          const shipped = r.shipped;
+          const reg = r.regressionPD;
+          const delta = shipped - r.prior;
+          const deltaTone =
+            Math.abs(delta) < 0.01
+              ? "text-neutral-500"
+              : delta > 0
+                ? "text-emerald-300"
+                : "text-amber-300";
+          return (
+            <li key={r.label}>
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <span className="font-medium text-neutral-200">{r.label}</span>
+                <span className="font-mono text-xs text-neutral-500">
+                  prior {r.prior.toFixed(2)}{" "}
+                  <span className={deltaTone}>
+                    → {shipped.toFixed(2)}
+                  </span>
+                </span>
+              </div>
+              <div className="relative h-2 overflow-hidden rounded-full bg-neutral-900">
+                {/* Regression coefficient — what the data says */}
+                <div
+                  className="absolute inset-y-0 left-0 bg-neutral-700/60"
+                  style={{ width: `${Math.min(reg, 1) * 100}%` }}
+                  title={`Regression coefficient: ${reg.toFixed(2)}`}
+                />
+                {/* Shipped weight — what we use */}
+                <div
+                  className="absolute inset-y-0 left-0 bg-emerald-400/70"
+                  style={{ width: `${shipped * 100}%` }}
+                  title={`Shipped weight: ${shipped.toFixed(2)}`}
+                />
+              </div>
+              <div className="mt-1 flex justify-between text-[10px] font-mono text-neutral-600">
+                <span>cap {r.cap.toFixed(2)}</span>
+                <span>reg {reg.toFixed(2)}</span>
+                <span>r {r.univariate >= 0 ? "+" : ""}{r.univariate.toFixed(2)}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function FindingCard({
+  finding,
+}: {
+  finding: (typeof TEAM_AUDIT_FINDINGS)[number];
+}) {
+  const accent =
+    finding.tone === "up"
+      ? "border-emerald-500/20 bg-emerald-500/5"
+      : finding.tone === "down"
+        ? "border-amber-500/20 bg-amber-500/5"
+        : "border-neutral-700/40 bg-neutral-900/30";
+  const deltaTone =
+    finding.tone === "up"
+      ? "text-emerald-300"
+      : finding.tone === "down"
+        ? "text-amber-300"
+        : "text-neutral-400";
+  return (
+    <div className={`rounded-lg border p-5 ${accent}`}>
+      <h3 className="mb-2 text-lg font-semibold tracking-tight text-neutral-100">
+        {finding.title}
+      </h3>
+      <p className="mb-3 text-sm leading-relaxed text-neutral-300">
+        {finding.body}
+      </p>
+      <div className={`font-mono text-xs ${deltaTone}`}>{finding.delta}</div>
+    </div>
+  );
+}
+
 
 // ===========================================================================
 // FOOTER

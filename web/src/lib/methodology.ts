@@ -242,3 +242,70 @@ export async function getCurrentTopAtPosition(
     })),
   };
 }
+
+
+/** One top-team row for the team-grades methodology blocks. */
+export type CurrentTopTeam = {
+  team_id: number;
+  abbr: string;
+  name: string;
+  phase_grade: number;
+};
+
+/**
+ * Top N teams at a phase (offense / defense / st) for the latest graded
+ * season. Mirrors {@link getCurrentTopAtPosition} but reads team_grades
+ * and selects the column matching the requested phase. Used by the
+ * team-grades section on /methodology to anchor each phase card to a
+ * live "best teams this year" block.
+ */
+export async function getCurrentTopTeamsByPhase(
+  phase: "offense" | "defense" | "st",
+  limit = 3,
+): Promise<{ season: number | null; entries: CurrentTopTeam[] }> {
+  const seasonRows = await sql<{ season: number | null }[]>`
+    SELECT MAX(season) AS season FROM team_grades
+  `;
+  const season = seasonRows[0]?.season ?? null;
+  if (season === null) return { season: null, entries: [] };
+
+  // The phase column is dynamic — postgres template tags don't take
+  // identifiers, so we branch and inline the right column name.
+  const rows = await (async () => {
+    if (phase === "offense") {
+      return sql<{ team_id: number; abbr: string; name: string; phase_grade: number }[]>`
+        SELECT tg.team_id, t.abbr, t.name, tg.offense_grade AS phase_grade
+        FROM team_grades tg JOIN teams t ON t.team_id = tg.team_id
+        WHERE tg.season = ${season}
+        ORDER BY tg.offense_grade DESC
+        LIMIT ${limit}
+      `;
+    }
+    if (phase === "defense") {
+      return sql<{ team_id: number; abbr: string; name: string; phase_grade: number }[]>`
+        SELECT tg.team_id, t.abbr, t.name, tg.defense_grade AS phase_grade
+        FROM team_grades tg JOIN teams t ON t.team_id = tg.team_id
+        WHERE tg.season = ${season}
+        ORDER BY tg.defense_grade DESC
+        LIMIT ${limit}
+      `;
+    }
+    return sql<{ team_id: number; abbr: string; name: string; phase_grade: number }[]>`
+      SELECT tg.team_id, t.abbr, t.name, tg.st_grade AS phase_grade
+      FROM team_grades tg JOIN teams t ON t.team_id = tg.team_id
+      WHERE tg.season = ${season}
+      ORDER BY tg.st_grade DESC
+      LIMIT ${limit}
+    `;
+  })();
+
+  return {
+    season: Number(season),
+    entries: rows.map((r) => ({
+      team_id: Number(r.team_id),
+      abbr: r.abbr,
+      name: r.name,
+      phase_grade: Number(r.phase_grade),
+    })),
+  };
+}
