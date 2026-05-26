@@ -17,13 +17,10 @@ export function TeamsSeasonPicker({ seasons, activeSeason }: Props) {
   const router = useRouter();
   if (seasons.length === 0) return null;
 
-  function urlFor(season: number): string {
-    return `/teams?season=${season}`;
-  }
-
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const qs = new URLSearchParams({ season: e.target.value }).toString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.push(urlFor(Number(e.target.value)) as any);
+    router.push(`/teams?${qs}` as any);
   }
 
   return (
@@ -56,7 +53,7 @@ export function TeamsSeasonPicker({ seasons, activeSeason }: Props) {
           return (
             <Link
               key={season}
-              href={urlFor(season)}
+              href={{ pathname: "/teams", query: { season } }}
               className={
                 isActive
                   ? "rounded-md bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-900"
