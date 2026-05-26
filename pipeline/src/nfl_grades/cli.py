@@ -356,6 +356,20 @@ def ingest_team_ol(season: int, refresh: bool) -> None:
     click.echo(f"season={result.season} teams_written={result.teams_written}")
 
 
+@ingest.command(name="team-records")
+@click.option("--season", type=int, required=True)
+def ingest_team_records(season: int) -> None:
+    """Pull regular-season records (W-L, point diff) from nflverse schedules.
+
+    Used by the team leaderboard on /teams as context columns. Not part
+    of grading.
+    """
+    from .ingest import team_season_records
+
+    result = team_season_records.run(season)
+    click.echo(f"season={result.season} teams_written={result.teams_written}")
+
+
 @ingest.command(name="all")
 @click.option("--season", type=int, required=True)
 @click.option("--refresh", is_flag=True)
@@ -419,6 +433,23 @@ def grade(season: int, position: str | None) -> None:
             f"stat_components_written={result.stat_components_written} "
             f"season_grades_written={result.season_grades_written}"
         )
+
+
+@main.command(name="grade-teams")
+@click.option("--season", type=int, required=True)
+def grade_teams(season: int) -> None:
+    """Compute team-level overall + Off/Def/ST grades (ADR-0026).
+
+    Aggregates already-computed player + OL grades into per-team
+    Offense / Defense / ST / Overall scores. Idempotent — re-running
+    overwrites the season's team_grades rows.
+    """
+    from .grading import team
+
+    result = team.run(season=season)
+    click.echo(
+        f"season={result.season} teams={result.n_teams} components={result.n_components}"
+    )
 
 
 @main.command()

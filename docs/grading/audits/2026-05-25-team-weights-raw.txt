@@ -1,0 +1,85 @@
+# Team weight audit — empirical (regression) + market (cap)
+
+Source seasons: 2018-2024
+Ridge alpha: 1.0
+Feature-matrix rows: 222
+
+## Per-phase weight comparison
+
+### OFFENSE
+  (regression n=222, R²(point_diff)=0.600, R²(spread)=0.563)
+
+pos       prior      cap    reg(PD)   reg(spread)
+--------------------------------------------------
+QB        0.400    0.280      0.609         0.568
+RB        0.100    0.050      0.094         0.106
+WR        0.150    0.180      0.013         0.070
+TE        0.100    0.060      0.079         0.008
+OL        0.250    0.430      0.205         0.248
+
+### DEFENSE
+  (regression n=219, R²(point_diff)=0.347, R²(spread)=0.249)
+
+pos       prior      cap    reg(PD)   reg(spread)
+--------------------------------------------------
+EDGE      0.250    0.270      0.226         0.272
+iDL       0.150    0.190      0.011         0.049
+LB        0.200    0.160      0.253         0.238
+CB        0.250    0.240      0.256         0.240
+S         0.150    0.140      0.254         0.201
+
+### ST
+  (regression n=219, R²(point_diff)=0.041, R²(spread)=0.019)
+
+pos       prior      cap    reg(PD)   reg(spread)
+--------------------------------------------------
+K         0.550    0.520      0.509         0.505
+P         0.450    0.480      0.491         0.495
+
+
+## Phase-weight comparison (v1.1 audit)
+
+Computed by aggregating per-position grades into offense/defense/st
+phase grades using the v1.0 reconciled weights, then regressing
+team success on the three phase grades.
+
+### Phase weights
+  (regression n=216, R²(point_diff)=0.791, R²(spread)=0.691)
+
+phase         prior      cap    reg(PD)   reg(spread)
+------------------------------------------------------
+offense       0.450    0.490      0.575         0.639
+defense       0.450    0.490      0.363         0.340
+st            0.100    0.020      0.062         0.021
+
+
+## Univariate Pearson r (per-position vs targets)
+
+(How much each position's grade alone correlates with team success.
+ Reading both this AND the multivariate weights above protects against
+ multicollinearity surprises.)
+
+
+### OFFENSE
+pos       r(PD)  r(spread)
+------------------------------
+QB        0.740     -0.710
+RB        0.422     -0.418
+WR        0.515     -0.517
+TE        0.490     -0.436
+OL        0.509     -0.507
+
+### DEFENSE
+pos       r(PD)  r(spread)
+------------------------------
+EDGE      0.322     -0.316
+iDL       0.125     -0.140
+LB        0.295     -0.237
+CB        0.385     -0.325
+S         0.310     -0.220
+
+### ST
+pos       r(PD)  r(spread)
+------------------------------
+K         0.152     -0.096
+P         0.150     -0.102

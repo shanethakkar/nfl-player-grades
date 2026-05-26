@@ -1089,3 +1089,40 @@ OL_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
 # We don't use a "min plays" gate the way per-player positions do because
 # all teams have full-season volume.
 OL_V1_QUALIFIED: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Team v1 overall grading — ADR-0026
+#
+# Position weights within each phase, and phase weights into the overall.
+# All derived empirically — see docs/grading/audits/2026-05-25-team-weights.md
+# for the audit (ridge regression of team success on snap-weighted per-
+# position grades + cap-allocation cross-check).
+# ---------------------------------------------------------------------------
+
+TEAM_V1_OFFENSE_WEIGHTS: dict[str, float] = {
+    "QB": 0.45,
+    "OL": 0.25,
+    "WR": 0.13,
+    "RB": 0.09,
+    "TE": 0.08,
+}
+
+TEAM_V1_DEFENSE_WEIGHTS: dict[str, float] = {
+    "EDGE": 0.24,
+    "CB":   0.24,
+    "LB":   0.22,
+    "S":    0.20,
+    "iDL":  0.10,
+}
+
+TEAM_V1_ST_WEIGHTS: dict[str, float] = {
+    "K": 0.52,
+    "P": 0.48,
+}
+
+TEAM_V1_PHASE_WEIGHTS: dict[str, float] = {
+    "offense": 0.55,
+    "defense": 0.40,
+    "st":      0.05,
+}

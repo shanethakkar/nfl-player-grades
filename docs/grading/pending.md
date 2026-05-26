@@ -25,8 +25,38 @@ Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, th
 | 15 | New position | Punters v1.1 (full audit-first process) | 0.5-1 day | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-p.md), [ADR](../adr/0024-p-v1-grading-formula.md)) — **v1.1 same-day correction: blocked_rate removed** (audit YoY/validity ~-0.05, blocks mostly snap/protection failures). v1.1 formula: net_avg (+0.55), inside_20_rate (+0.30). Critical lesson: K v1.1's FGOE-dominance pattern did NOT generalize for P. Validity +0.122 unchanged after blocked_rate removal. Face-check: Jack Fox #1, both 2024 Pro Bowl Ps in top 3. |
 | 16 | New position | OL unit-level grading (new schema/UI + full audit) | 3-5 days | **SHIPPED 2026-05-14** ([audit](audits/2026-05-14-exhaustive-ol.md), [ADR](../adr/0025-ol-v1-grading-formula.md)) — TEAM-LEVEL grading (not per-player; nflverse can't attribute pressures/blocks to specific OL). 3 new tables (team_ol_stats/components/grades). 13 candidates audited; 2 chosen with equal weight: YBC/carry +0.45 (run-block, isolates OL from RB), pressure_proxy/dropback -0.45 (sacks+hits, subsumes narrower variants). Validity gate skipped (no All-Pro OL unit award). Frontend: OL tab between TE and CB, team-mode rendering. Face-check: BAL #1, ARI/TB/BUF/PHI top 5; LAC #32. |
 | 17 | Synthesis | Cross-position methodology writeup for article | 1-2 days | pending |
+| 18 | New layer | **Team grades v1** (aggregate of player grades into Offense / Defense / ST / Overall) — see [ADR-0026](../adr/0026-team-v1-grading-formula.md) | 2-3 days | **DESIGN LOCKED 2026-05-25**, implementation pending |
 
-**Remaining realistic timeline: 3-5 weeks** of focused work (foundation complete; exhaustive audit phase + new positions + synthesis remaining).
+**Remaining realistic timeline: 3-5 weeks** of focused work (foundation complete; exhaustive audit phase + new positions + synthesis + team-grade layer remaining).
+
+## Team grades v1 — design summary (queue item #18)
+
+Methodology locked in [ADR-0026](../adr/0026-team-v1-grading-formula.md). Two-stage aggregation:
+
+1. **Within a position** — snap-weighted average of all players who logged snaps at that position on the team. Starters dominate; backups are rounding errors; injured-starter handoffs proportionally averaged. OL exempted (already team-level per ADR-0025).
+2. **Across positions in a phase** — position-weighted sum into Offense / Defense / ST sub-grades.
+3. **Overall** — 0.45 × Off + 0.45 × Def + 0.10 × ST.
+
+v1.0 position weights (empirically derived via ridge regression + cap-allocation reconciliation — see [audit 2026-05-25-team-weights.md](audits/2026-05-25-team-weights.md)):
+- **Offense**: QB 0.45, OL 0.25, WR 0.13, RB 0.09, TE 0.08
+- **Defense**: EDGE 0.24, CB 0.24, LB 0.22, S 0.20, iDL 0.10
+- **ST**: K 0.52, P 0.48
+
+Phase weights: **Off 0.55 / Def 0.40 / ST 0.05** (also empirically derived).
+
+Audit headline findings:
+- QB is the single dominant signal (regression coef 0.61, univariate r=0.74) — bumped from prior 0.40 → 0.45.
+- iDL is the weakest signal of any position (regression coef 0.01, univariate r=0.12) — trimmed from prior 0.15 → 0.10.
+- WR collapses in multivariate regression due to QB multicollinearity but is meaningful univariately — held at 0.13 not 0.
+- Phase regression (combined R² 0.79) showed offense is heavier than defense in modern NFL and ST is closer to its cap weight (~2%) than to a gut-feel 0.10.
+
+Validity ground truth: **Vegas closing line** (target r ≥ +0.50). YoY reliability: target ≥ 0.50.
+
+Implementation plan:
+- Migration adding `team_grades` + `team_grade_components` tables
+- Pipeline grader `pipeline/src/nfl_grades/grading/team.py` (pure-function math, reads `season_grades` + `team_ol_grades`)
+- Web: header card on `/teams/[abbr]` + a Teams index leaderboard
+- Validation: closing-line scrape + correlation tool (`nflgrades validity --entity team`)
 
 ## Foundation complete (2026-05-14): what's available now
 
