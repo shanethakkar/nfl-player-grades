@@ -789,6 +789,53 @@ const TE_BLOCKING_WEIGHTS: Record<string, number> = {
 };
 // AUTOGEN-END weights
 
+// ---------------------------------------------------------------------------
+// Team grading weights (ADR-0026).
+//
+// Hand-written here (not in the AUTOGEN block) because the sync script
+// only knows about per-player composites. Mirrors the constants in
+// pipeline/src/nfl_grades/grading/weights.py — keep the two in sync by
+// hand when the audit moves a weight. Each phase's position weights sum
+// to 1.0; phase weights sum to 1.0 too. Empirically derived — see
+// docs/grading/audits/2026-05-25-team-weights.md.
+// ---------------------------------------------------------------------------
+
+export type TeamPhase = "offense" | "defense" | "st";
+
+export const TEAM_OFFENSE_WEIGHTS: Record<string, number> = {
+  QB:  0.45,
+  OL:  0.25,
+  WR:  0.13,
+  RB:  0.09,
+  TE:  0.08,
+};
+
+export const TEAM_DEFENSE_WEIGHTS: Record<string, number> = {
+  EDGE: 0.24,
+  CB:   0.24,
+  LB:   0.22,
+  S:    0.20,
+  iDL:  0.10,
+};
+
+export const TEAM_ST_WEIGHTS: Record<string, number> = {
+  K: 0.52,
+  P: 0.48,
+};
+
+export const TEAM_PHASE_WEIGHTS: Record<TeamPhase, number> = {
+  offense: 0.55,
+  defense: 0.40,
+  st:      0.05,
+};
+
+export function teamPhaseWeights(phase: TeamPhase): Record<string, number> {
+  if (phase === "offense") return TEAM_OFFENSE_WEIGHTS;
+  if (phase === "defense") return TEAM_DEFENSE_WEIGHTS;
+  return TEAM_ST_WEIGHTS;
+}
+
+
 /** Weight of a component in the composite, or null if not in the formula. */
 export function componentWeight(name: string, role?: string | null): number | null {
   if (role === "blocking_te") return TE_BLOCKING_WEIGHTS[name] ?? null;

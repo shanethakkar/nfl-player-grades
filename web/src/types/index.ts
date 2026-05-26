@@ -390,3 +390,68 @@ export type PlayerDetail = {
   player: PlayerMeta;
   grades: SeasonGradeDetail[];
 };
+
+/**
+ * Per-team-season aggregate grade — Overall plus Offense/Defense/ST
+ * sub-grades (ADR-0026). Mirrors the `team_grades` table.
+ */
+export type TeamGradeSummary = {
+  team_id: number;
+  season: number;
+  overall_grade: number;
+  offense_grade: number;
+  defense_grade: number;
+  st_grade: number;
+  overall_percentile: number | null;
+  offense_percentile: number | null;
+  defense_percentile: number | null;
+  st_percentile: number | null;
+};
+
+/**
+ * One row per (phase, position) feeding the team grade — used to render
+ * the position breakdown on the team page. `position_grade` is on the
+ * familiar 0-100 scale; `weight` shows the position's share of the phase
+ * composite.
+ */
+export type TeamGradeComponent = {
+  phase: "offense" | "defense" | "st";
+  position: string;
+  position_grade: number;
+  weight: number;
+  n_players: number;
+  total_snaps: number;
+};
+
+/**
+ * One row per team for the /teams leaderboard. Joins team_grades with
+ * team_season_records and the team's top-graded QB (most-snaps starter)
+ * for context columns.
+ */
+export type TeamLeaderboardEntry = {
+  team_id: number;
+  abbr: string;
+  name: string;
+  conference: Conference;
+  division: Division;
+  season: number;
+  // Team grades (ADR-0026)
+  overall_grade: number;
+  offense_grade: number;
+  defense_grade: number;
+  st_grade: number;
+  overall_percentile: number | null;
+  // Context — regular season only
+  wins: number;
+  losses: number;
+  ties: number;
+  point_diff: number;
+  // Top QB (snap-leader at QB on this team this season). Null when the
+  // team had no graded QB rows (e.g., very early in an in-progress year).
+  top_qb_name: string | null;
+  top_qb_grade: number | null;
+  // Last-N seasons of this team's overall_grade, ordered by season asc.
+  // Drives the inline sparkline next to the team name. Same shape as
+  // LeaderboardEntry.gradeTrend for consistency.
+  gradeTrend: { season: number; grade: number }[];
+};

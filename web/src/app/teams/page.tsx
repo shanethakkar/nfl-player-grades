@@ -1,85 +1,82 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
-import { TeamLogo } from "@/components/TeamLogo";
-import { getAllTeams } from "@/lib/queries";
-import type { Conference, Division, Team } from "@/types";
+import { TeamLeaderboardTable } from "@/components/TeamLeaderboardTable";
+import { TeamsSeasonPicker } from "@/components/TeamsSeasonPicker";
+import { getGradedTeamSeasons, getTeamsLeaderboard } from "@/lib/queries";
 
-export const metadata: Metadata = {
-  title: "Teams — NFL Player Grades",
-};
+type SearchParams = Promise<{ season?: string | string[] }>;
 
-const CONFERENCES: Conference[] = ["AFC", "NFC"];
-const DIVISIONS: Division[] = ["East", "North", "South", "West"];
+type Props = { searchParams: SearchParams };
 
-export default async function TeamsIndexPage() {
-  const teams = await getAllTeams();
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { season } = await searchParams;
+  const s = firstOf(season);
+  if (s && Number.isFinite(Number(s))) {
+    return { title: `Team Grades — ${s}` };
+  }
+  return { title: "Team Grades" };
+}
 
-  // Bucket teams by conference → division for the grouped grid below.
-  const byBucket = new Map<string, Team[]>();
-  for (const t of teams) {
-    const key = `${t.conference}-${t.division}`;
-    const list = byBucket.get(key) ?? [];
-    list.push(t);
-    byBucket.set(key, list);
+export default async function TeamsIndexPage({ searchParams }: Props) {
+  const seasons = await getGradedTeamSeasons();
+  if (seasons.length === 0) {
+    return <EmptyState />;
   }
 
+  const { season: seasonRaw } = await searchParams;
+  const requested = firstOf(seasonRaw);
+  const activeSeason =
+    requested && seasons.includes(Number(requested))
+      ? Number(requested)
+      : seasons[0];
+
+  const entries = await getTeamsLeaderboard(activeSeason);
+
   return (
-    <main className="mx-auto max-w-[1600px] px-6 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Pick a team to see its roster, grades, and starting lineup by
-          season.
+    <main className="mx-auto max-w-[1600px] px-6 py-4 sm:py-10">
+      {/* Title + description stack on top, picker drops onto its own row
+          below the blurb. Cleaner than crowding the picker beside the
+          title when there's no second control to anchor it. */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          Team Grades
+        </h1>
+        <p className="mt-1 hidden text-sm text-neutral-400 md:block">
+          All 32 teams ranked by composite grade. Click any row for the team
+          page (roster + lineup + position breakdown). Methodology:{" "}
+          <a className="underline" href="/methodology">
+            see methodology
+          </a>
+          .
         </p>
+        <div className="mt-3 md:mt-4">
+          <TeamsSeasonPicker seasons={seasons} activeSeason={activeSeason} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
-        {CONFERENCES.map((conf) => (
-          <section key={conf}>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-              {conf === "AFC" ? "American Conference" : "National Conference"}
-            </h2>
-            <div className="space-y-6">
-              {DIVISIONS.map((div) => {
-                const list = byBucket.get(`${conf}-${div}`) ?? [];
-                if (list.length === 0) return null;
-                return (
-                  <div key={div}>
-                    <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-600">
-                      {conf} {div}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {list.map((t) => (
-                        <TeamCard key={t.team_id} team={t} />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
+      <section className="mt-3 -ml-6 -mr-6 sm:ml-0 sm:mr-0 sm:mt-6">
+        <TeamLeaderboardTable entries={entries} season={activeSeason} />
+      </section>
     </main>
   );
 }
 
-function TeamCard({ team }: { team: Team }) {
+function EmptyState() {
   return (
-    <Link
-      href={`/teams/${team.abbr}`}
-      className="group flex items-center gap-2.5 rounded-lg border border-neutral-800 bg-neutral-950 px-2.5 py-2.5 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
-    >
-      <TeamLogo abbr={team.abbr} size={28} className="shrink-0" />
-      <div className="min-w-0 leading-tight">
-        <div className="text-sm font-medium text-neutral-100 group-hover:text-white">
-          {team.name}
-        </div>
-        <div className="mt-0.5 text-[10px] uppercase tracking-wider text-neutral-500">
-          {team.abbr}
-        </div>
-      </div>
-    </Link>
+    <main className="mx-auto max-w-3xl px-6 py-20 text-center">
+      <h1 className="text-2xl font-semibold">No team grades yet</h1>
+      <p className="mt-2 text-sm text-neutral-400">
+        Run{" "}
+        <code className="rounded bg-neutral-800 px-1.5 py-0.5">
+          nflgrades grade-teams --season 2024
+        </code>{" "}
+        in the pipeline to populate <code>team_grades</code>, then reload.
+      </p>
+    </main>
   );
+}
+
+function firstOf(v: string | string[] | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
 }

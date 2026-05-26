@@ -4,12 +4,16 @@ import { notFound } from "next/navigation";
 
 import { LineupDiagram } from "@/components/LineupDiagram";
 import { RosterTable } from "@/components/RosterTable";
+import { TeamGradeCard } from "@/components/TeamGradeCard";
 import { TeamLogo } from "@/components/TeamLogo";
 import { TeamSeasonPicker } from "@/components/TeamSeasonPicker";
 import { TeamSwitcher } from "@/components/TeamSwitcher";
 import {
   getAllTeams,
   getTeamByAbbr,
+  getTeamGrade,
+  getTeamGradeComponents,
+  getTeamGradeHistory,
   getTeamLineup,
   getTeamRoster,
   getTeamSeasons,
@@ -60,13 +64,16 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       ? requested
       : (seasons[0] ?? null);
 
-  const [roster, lineup] =
+  const [roster, lineup, teamGrade, teamGradeComponents, teamGradeHistory] =
     activeSeason !== null
       ? await Promise.all([
           getTeamRoster(abbr, activeSeason),
           getTeamLineup(abbr, activeSeason),
+          getTeamGrade(abbr, activeSeason),
+          getTeamGradeComponents(abbr, activeSeason),
+          getTeamGradeHistory(abbr),
         ])
-      : [[], null];
+      : [[], null, null, [], []];
 
   return (
     <main className="mx-auto max-w-[1600px] px-6 py-10">
@@ -109,6 +116,17 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
           )}
         </div>
       </div>
+
+      {teamGrade && activeSeason !== null && (
+        <section className="mb-10">
+          <TeamGradeCard
+            summary={teamGrade}
+            components={teamGradeComponents}
+            history={teamGradeHistory}
+            season={activeSeason}
+          />
+        </section>
+      )}
 
       <section className="mb-12">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">

@@ -25,6 +25,9 @@ import type {
   StatComponentDetail,
   Team,
   TeamContext,
+  TeamGradeComponent,
+  TeamGradeSummary,
+  TeamLeaderboardEntry,
   TeamLineup,
   TeamRosterEntry,
   TopQb,
@@ -61,6 +64,228 @@ export async function getAllTeams(): Promise<Team[]> {
     division: r.division as Division,
   }));
 }
+
+/**
+ * Per-team-season aggregate grade (Overall + Offense/Defense/ST). Used
+ * by the team-grade header card on /teams/[abbr]. Returns null when no
+ * team_grades row exists (typically: very recent in-season state where
+ * grading hasn't run yet, or pre-2018 seasons that lack the inputs).
+ */
+export async function getTeamGrade(
+  teamAbbr: string,
+  season: number,
+): Promise<TeamGradeSummary | null> {
+  const rows = await sql<TeamGradeSummary[]>`
+    SELECT
+      tg.team_id,
+      tg.season,
+      tg.overall_grade,
+      tg.offense_grade,
+      tg.defense_grade,
+      tg.st_grade,
+      tg.overall_percentile,
+      tg.offense_percentile,
+      tg.defense_percentile,
+      tg.st_percentile
+    FROM team_grades tg
+    JOIN teams t ON t.team_id = tg.team_id
+    WHERE t.abbr = ${teamAbbr} AND tg.season = ${season}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    team_id: Number(row.team_id),
+    season: Number(row.season),
+    overall_grade: Number(row.overall_grade),
+    offense_grade: Number(row.offense_grade),
+    defense_grade: Number(row.defense_grade),
+    st_grade: Number(row.st_grade),
+    overall_percentile: row.overall_percentile == null ? null : Number(row.overall_percentile),
+    offense_percentile: row.offense_percentile == null ? null : Number(row.offense_percentile),
+    defense_percentile: row.defense_percentile == null ? null : Number(row.defense_percentile),
+    st_percentile: row.st_percentile == null ? null : Number(row.st_percentile),
+  };
+}
+
+/**
+ * Full overall-grade history for a team — one row per season the team
+ * was graded (2018+ in v1). Drives the career-grade chart on the team
+ * page; mirrors what the player page renders from season_grades.
+ */
+export async function getTeamGradeHistory(
+  teamAbbr: string,
+): Promise<{ season: number; overall_grade: number }[]> {
+  const rows = await sql<{ season: number; overall_grade: number }[]>`
+    SELECT tg.season, tg.overall_grade
+    FROM team_grades tg
+    JOIN teams t ON t.team_id = tg.team_id
+    WHERE t.abbr = ${teamAbbr}
+    ORDER BY tg.season ASC
+  `;
+  return rows.map((r) => ({
+    season: Number(r.season),
+    overall_grade: Number(r.overall_grade),
+  }));
+}
+
+/**
+ * One row per (phase, position) that fed the team grade. Ordered:
+ * offense → defense → st, then by weight desc within each phase, so
+ * the biggest contributors land first in the breakdown UI.
+ */
+export async function getTeamGradeComponents(
+  teamAbbr: string,
+  season: number,
+): Promise<TeamGradeComponent[]> {
+  const rows = await sql<TeamGradeComponent[]>`
+    SELECT
+      tgc.phase,
+      tgc.position,
+      tgc.position_grade,
+      tgc.weight,
+      tgc.n_players,
+      tgc.total_snaps
+    FROM team_grade_components tgc
+    JOIN teams t ON t.team_id = tgc.team_id
+    WHERE t.abbr = ${teamAbbr} AND tgc.season = ${season}
+    ORDER BY
+      CASE tgc.phase WHEN 'offense' THEN 0 WHEN 'defense' THEN 1 ELSE 2 END,
+      tgc.weight DESC
+  `;
+  return rows.map((r) => ({
+    phase: r.phase,
+    position: r.position,
+    position_grade: Number(r.position_grade),
+    weight: Number(r.weight),
+    n_players: Number(r.n_players),
+    total_snaps: Number(r.total_snaps),
+  }));
+}
+
+
+/**
+ * Seasons we have team_grades rows for — drives the season picker on
+ * the /teams leaderboard. Ordered newest first.
+ */
+export async function getGradedTeamSeasons(): Promise<number[]> {
+  const rows = await sql<{ season: number }[]>`
+    SELECT DISTINCT season FROM team_grades ORDER BY season DESC
+  `;
+  return rows.map((r) => Number(r.season));
+}
+
+/**
+ * Full /teams leaderboard for a given season: every team with its
+ * Overall + Off/Def/ST grades, regular-season record + point diff, and
+ * the team's most-snaps QB (with that QB's grade as context).
+ *
+ * The top-QB join uses a LATERAL subquery so each row picks one starter
+ * (snap-leader) cleanly — preserves the leaderboard's "32 rows" cardinality.
+ */
+export async function getTeamsLeaderboard(
+  season: number,
+): Promise<TeamLeaderboardEntry[]> {
+  const rows = await sql<TeamLeaderboardEntry[]>`
+    SELECT
+      t.team_id,
+      t.abbr,
+      t.name,
+      t.conference,
+      t.division,
+      tg.season,
+      tg.overall_grade,
+      tg.offense_grade,
+      tg.defense_grade,
+      tg.st_grade,
+      tg.overall_percentile,
+      COALESCE(tsr.wins,   0)::int AS wins,
+      COALESCE(tsr.losses, 0)::int AS losses,
+      COALESCE(tsr.ties,   0)::int AS ties,
+      COALESCE(tsr.point_diff, 0)::int AS point_diff,
+      qb.full_name        AS top_qb_name,
+      qb.composite_grade  AS top_qb_grade
+    FROM team_grades tg
+    JOIN teams t ON t.team_id = tg.team_id
+    LEFT JOIN team_season_records tsr
+      ON tsr.team_id = tg.team_id AND tsr.season = tg.season
+    LEFT JOIN LATERAL (
+      SELECT p.full_name, sg.composite_grade
+      FROM player_seasons ps
+      JOIN players p ON p.player_id = ps.player_id
+      JOIN season_grades sg
+        ON sg.player_id = ps.player_id
+       AND sg.season    = ps.season
+       AND sg.position  = 'QB'
+      WHERE ps.team_id = tg.team_id
+        AND ps.season  = tg.season
+      ORDER BY ps.snaps_offense DESC NULLS LAST
+      LIMIT 1
+    ) qb ON TRUE
+    WHERE tg.season = ${season}
+    ORDER BY tg.overall_grade DESC
+  `;
+  const baseEntries: TeamLeaderboardEntry[] = rows.map((r) => ({
+    team_id: Number(r.team_id),
+    abbr: r.abbr,
+    name: r.name,
+    conference: r.conference as Conference,
+    division: r.division as Division,
+    season: Number(r.season),
+    overall_grade: Number(r.overall_grade),
+    offense_grade: Number(r.offense_grade),
+    defense_grade: Number(r.defense_grade),
+    st_grade: Number(r.st_grade),
+    overall_percentile:
+      r.overall_percentile == null ? null : Number(r.overall_percentile),
+    wins: Number(r.wins),
+    losses: Number(r.losses),
+    ties: Number(r.ties),
+    point_diff: Number(r.point_diff),
+    top_qb_name: r.top_qb_name,
+    top_qb_grade: r.top_qb_grade == null ? null : Number(r.top_qb_grade),
+    gradeTrend: [],
+  }));
+  return await _attachTeamGradeTrend(baseEntries, season);
+}
+
+/**
+ * Attach the last-N seasons of each team's overall_grade to drive the
+ * inline sparkline next to the team name. Mirrors
+ * {@link _attachTeamOlGradeTrend} in shape; queries team_grades
+ * (the new team-level overall, ADR-0026), keyed by team_id.
+ */
+async function _attachTeamGradeTrend(
+  entries: TeamLeaderboardEntry[],
+  currentSeason: number,
+  span: number = 5,
+): Promise<TeamLeaderboardEntry[]> {
+  const teamIds = entries.map((e) => e.team_id);
+  if (teamIds.length === 0) return entries;
+
+  const minSeason = currentSeason - (span - 1);
+  const rows = await sql<
+    { team_id: number; season: number; overall_grade: number }[]
+  >`
+    SELECT team_id, season, overall_grade
+    FROM team_grades
+    WHERE team_id = ANY(${teamIds})
+      AND season BETWEEN ${minSeason} AND ${currentSeason}
+    ORDER BY team_id, season ASC
+  `;
+  const trend = new Map<number, { season: number; grade: number }[]>();
+  for (const r of rows) {
+    const list = trend.get(r.team_id) ?? [];
+    list.push({ season: Number(r.season), grade: Number(r.overall_grade) });
+    trend.set(r.team_id, list);
+  }
+  return entries.map((e) => ({
+    ...e,
+    gradeTrend: trend.get(e.team_id) ?? [],
+  }));
+}
+
 
 /**
  * Seasons we have any player_seasons rows for this team — used to
