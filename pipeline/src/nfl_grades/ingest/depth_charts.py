@@ -156,8 +156,29 @@ def _select_snapshot(df_all: pd.DataFrame, season: int) -> tuple[pd.DataFrame, s
     if "dt" in df_all.columns and "pos_abb" in df_all.columns:
         if df_all.empty:
             raise RuntimeError(f"no depth-chart rows for season {season}")
-        latest_dt = df_all["dt"].max()
-        snap = df_all[df_all["dt"] == latest_dt].copy()
+        # IMPORTANT: filter out post-season-FA snapshots before picking the
+        # "latest" one. nflverse keeps updating the depth-chart feed all
+        # offseason, so the un-filtered max(dt) lands on a March/April
+        # snapshot that reflects NEW team assignments after free agency.
+        # That mis-attributes players to teams they didn't play for during
+        # the season (e.g. for 2025, the Mar-14-2026 snapshot showed
+        # Coby Bryant on CHI even though he played the 2025 season on SEA).
+        #
+        # NFL league year begins around March 12 each year — anything before
+        # March 1 is safely "end-of-season state" (post-playoffs, pre-FA).
+        cutoff = f"{season + 1}-03-01"
+        df_pre_fa = df_all[df_all["dt"] < cutoff].copy()
+        if df_pre_fa.empty:
+            # No pre-FA data yet — fall back to the absolute latest, but log
+            # loudly so the operator knows the snapshot is post-FA.
+            logger.warning(
+                "no depth-chart rows before %s for season %d — using post-FA "
+                "snapshot. Player attribution may reflect %d offseason moves.",
+                cutoff, season, season + 1,
+            )
+            df_pre_fa = df_all
+        latest_dt = df_pre_fa["dt"].max()
+        snap = df_pre_fa[df_pre_fa["dt"] == latest_dt].copy()
         out = snap.rename(
             columns={
                 "team": "club_code",
