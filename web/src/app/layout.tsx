@@ -17,11 +17,11 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "NFL Player Grades",
   description:
-    "Every NFL player graded 0-100 using advanced stats. Browse depth charts and season/career grades for all 32 teams.",
+    "Every NFL player on a 0-100 scale. 2,600+ players, 189 metrics audited, every weight derived from data.",
   openGraph: {
     title: "NFL Player Grades",
     description:
-      "Every NFL player graded 0-100 using advanced stats. Open methodology — every weight derived from data.",
+      "Every NFL player on a 0-100 scale. 2,600+ players, 189 metrics audited, every weight derived from data.",
     images: [
       {
         url: "/api/og/rushmore",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "NFL Player Grades",
     description:
-      "Every NFL player graded 0-100. Open methodology.",
+      "Every NFL player graded 0-100. 2,600+ players, 189 metrics audited.",
     images: ["/api/og/rushmore"],
   },
 };
