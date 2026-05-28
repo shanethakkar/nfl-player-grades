@@ -87,6 +87,8 @@ export type DepthChartEntry = DepthChartsRow;
  */
 export type LeaderboardEntry = {
   player_id: number;
+  /** URL-safe slug used to build /players/[slug] links. */
+  slug: string;
   full_name: string;
   position: string;
   season: number;
@@ -254,6 +256,7 @@ export type SeasonGradeDetail = {
  */
 export type TopQb = {
   player_id: number;
+  slug: string;
   full_name: string;
   composite_grade: number | null;
   qualified: boolean | null;
@@ -305,6 +308,8 @@ export type LineupSlot = {
   /** Depth order within the raw position (1 = starter). */
   depth_order: number | null;
   player_id: number | null;
+  /** Null when the slot has no player (e.g. unfilled depth chart row). */
+  slug: string | null;
   full_name: string | null;
   composite_grade: number | null;
   qualified: boolean | null;
@@ -363,6 +368,7 @@ export type TeamLineup = {
  */
 export type TeamRosterEntry = {
   player_id: number;
+  slug: string;
   full_name: string;
   /** Position as listed on the team's roster (e.g. "QB", "WR", "SAF"). */
   position_played: string;

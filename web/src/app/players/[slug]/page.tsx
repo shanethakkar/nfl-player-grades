@@ -9,10 +9,10 @@ import { CareerSummary } from "@/components/CareerSummary";
 import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SeasonGradesSection } from "@/components/SeasonGradesSection";
 import { TeamLogo } from "@/components/TeamLogo";
-import { getPlayerDetail } from "@/lib/queries";
+import { getPlayerDetailBySlug } from "@/lib/queries";
 
 type PageProps = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 };
 
 /**
@@ -24,12 +24,8 @@ type PageProps = {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const { id } = await params;
-  const playerId = Number(id);
-  if (!Number.isFinite(playerId) || playerId <= 0) {
-    return { title: "Player" };
-  }
-  const detail = await getPlayerDetail(playerId);
+  const { slug } = await params;
+  const detail = await getPlayerDetailBySlug(slug);
   if (detail === null) return { title: "Player" };
   return {
     title: `${detail.player.full_name} — NFL Player Grades`,
@@ -37,11 +33,8 @@ export async function generateMetadata({
 }
 
 export default async function PlayerPage({ params }: PageProps) {
-  const { id } = await params;
-  const playerId = Number(id);
-  if (!Number.isFinite(playerId) || playerId <= 0) notFound();
-
-  const detail = await getPlayerDetail(playerId);
+  const { slug } = await params;
+  const detail = await getPlayerDetailBySlug(slug);
   if (detail === null) notFound();
 
   const { player, grades } = detail;

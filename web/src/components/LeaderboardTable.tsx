@@ -1287,11 +1287,21 @@ function Row({
             {isTeamRow ? (
               <span className="font-medium text-neutral-100">{e.full_name}</span>
             ) : (
+              // Chevron after the player name signals "click for the
+              // player profile." Sits muted (neutral-600) and brightens
+              // + nudges right on hover. OL rows are exempt because
+              // there's no per-OL profile.
               <Link
-                href={{ pathname: `/players/${e.player_id}` }}
-                className="font-medium text-neutral-100 hover:text-white hover:underline"
+                href={{ pathname: `/players/${e.slug}` }}
+                className="group inline-flex items-center gap-1 font-medium text-neutral-100 hover:text-white hover:underline"
               >
-                {e.full_name}
+                <span>{e.full_name}</span>
+                <span
+                  aria-hidden
+                  className="text-xs leading-none text-neutral-600 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-neutral-300"
+                >
+                  ›
+                </span>
               </Link>
             )}
             {roleText && (
@@ -1325,7 +1335,7 @@ function Row({
           <span className="text-neutral-500">—</span>
         )}
       </Td>
-      <Td className="text-right font-mono">
+      <Td className="text-right font-mono text-base font-semibold">
         <span className={gradeColor(e.composite_grade)}>
           {e.composite_grade.toFixed(1)}
         </span>

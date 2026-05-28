@@ -207,72 +207,83 @@ export default async function HomePage({ searchParams }: Props) {
     LOW_VOLUME_COPY[activePosition] ?? LOW_VOLUME_COPY[DEFAULT_POSITION];
 
   return (
-    <main className="mx-auto max-w-[1600px] px-6 py-4 sm:py-10">
-      <div className="flex items-center justify-between gap-3 md:flex-wrap md:items-end md:gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            {/* Below md the position name lives in the dropdown to the
-                right, so the H1 carries only "Grades" \u2014 no redundant
-                "QB" both in the title and the picker. md+ restores the
-                "QB Grades" form since the pill picker doesn't repeat the
-                title. */}
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-              <span className="hidden md:inline">{activePosition} </span>
-              Grades
-            </h1>
-            <span className="md:hidden">
-              <InfoDisclosure label="About these grades">
-                {qualified.length}{" "}
-                {qualified.length === 1 ? noun.singular : noun.plural}
-                {" \u00B7 "}
-                {blurb} (see{" "}
-                <a className="underline" href="/methodology">
-                  methodology
-                </a>
-                )
-              </InfoDisclosure>
-            </span>
+    <main className="mx-auto max-w-[1400px] px-6 py-4 sm:py-10">
+      {/* Centered column that hugs the table's content width \u2014 header
+          and table share the same width, so the header's left edge
+          tracks the table's left edge regardless of how wide the
+          leaderboard is. Description is `max-w-2xl` capped so a long
+          blurb can't push the column wider than the table. */}
+      <div className="mx-auto w-max max-w-full">
+        <header>
+          {/* On mobile: title-left, pickers-right on the same row to
+              reclaim vertical space (matches /teams). On md+ the wrapper
+              collapses to block so title and pickers stack as before,
+              giving the desktop pill-style pickers their own row. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 md:block">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                <span className="hidden md:inline">{activePosition} </span>
+                Grades
+              </h1>
+              <span className="md:hidden">
+                <InfoDisclosure label="About these grades">
+                  {qualified.length}{" "}
+                  {qualified.length === 1 ? noun.singular : noun.plural}
+                  {" \u00B7 "}
+                  {blurb} (see{" "}
+                  <a className="underline" href="/methodology">
+                    methodology
+                  </a>
+                  )
+                </InfoDisclosure>
+              </span>
+            </div>
+            {/* `w-0 min-w-full` is a layout trick: the description's
+                max-content (one long unwrapped line) doesn't push the
+                centered column wider than the table, but the description
+                still fills the column width and wraps at the table's
+                right edge. */}
+            <p className="mt-1 hidden w-0 min-w-full text-sm text-neutral-400 md:block">
+              {qualified.length}{" "}
+              {qualified.length === 1 ? noun.singular : noun.plural}
+              {" \u00B7 "}
+              {blurb} (see{" "}
+              <a className="underline" href="/methodology">
+                methodology
+              </a>
+              )
+            </p>
+            <div className="flex items-center gap-2 md:mt-4 md:gap-3">
+              <PositionPicker
+                positions={pickerPositions}
+                activePosition={activePosition}
+                activeSeason={activeSeason}
+              />
+              <SeasonPicker
+                seasons={seasons}
+                activeSeason={activeSeason}
+                activePosition={activePosition}
+              />
+            </div>
           </div>
-          <p className="mt-1 hidden text-sm text-neutral-400 md:block">
-            {qualified.length}{" "}
-            {qualified.length === 1 ? noun.singular : noun.plural}
-            {" \u00B7 "}
-            {blurb} (see{" "}
-            <a className="underline" href="/methodology">
-              methodology
-            </a>
-            )
+        </header>
+
+        {activePosition === "OL" && (
+          <p className="mt-3 text-xs text-neutral-500">
+            OL is graded as a team unit. Public play-by-play data
+            doesn&rsquo;t attribute individual blocks to specific linemen.
           </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 md:gap-3">
-          <PositionPicker
-            positions={pickerPositions}
-            activePosition={activePosition}
-            activeSeason={activeSeason}
-          />
-          <SeasonPicker
-            seasons={seasons}
-            activeSeason={activeSeason}
-            activePosition={activePosition}
-          />
-        </div>
+        )}
+
+        <section
+          className={
+            (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") +
+            " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
+          }
+        >
+          <LeaderboardTable entries={qualified} position={activePosition} />
+        </section>
       </div>
-
-      {activePosition === "OL" && (
-        <p className="mt-3 text-xs text-neutral-500">
-          OL is graded as a team unit. Public play-by-play data
-          doesn&rsquo;t attribute individual blocks to specific linemen.
-        </p>
-      )}
-
-      <section
-        className={
-          (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") +
-          " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
-        }
-      >
-        <LeaderboardTable entries={qualified} position={activePosition} />
-      </section>
 
       {unqualified.length > 0 && (
         <section className="mt-10">

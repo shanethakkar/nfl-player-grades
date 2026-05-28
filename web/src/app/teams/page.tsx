@@ -33,30 +33,39 @@ export default async function TeamsIndexPage({ searchParams }: Props) {
   const entries = await getTeamsLeaderboard(activeSeason);
 
   return (
-    <main className="mx-auto max-w-[1600px] px-6 py-4 sm:py-10">
-      {/* Title + description stack on top, picker drops onto its own row
-          below the blurb. Cleaner than crowding the picker beside the
-          title when there's no second control to anchor it. */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          Team Grades
-        </h1>
-        <p className="mt-1 hidden text-sm text-neutral-400 md:block">
-          All 32 teams ranked by composite grade. Click any row for the team
-          page (roster + lineup + position breakdown). Methodology:{" "}
-          <a className="underline" href="/methodology">
-            see methodology
-          </a>
-          .
-        </p>
-        <div className="mt-3 md:mt-4">
-          <TeamsSeasonPicker seasons={seasons} activeSeason={activeSeason} />
-        </div>
-      </div>
+    <main className="mx-auto max-w-[1400px] px-6 py-4 sm:py-10">
+      {/* Centered column hugging the table's content width. Header
+          (title + description + picker) sits left-aligned within the
+          column, so its left edge tracks the table's left edge. */}
+      <div className="mx-auto w-max max-w-full">
+        <header>
+          {/* Title-left + season-picker-right on the same row so the
+              header reads compact on mobile — the picker doesn't drop
+              to its own row below "Team Grades". Description hangs
+              below the title block on desktop. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+              Team Grades
+            </h1>
+            <TeamsSeasonPicker seasons={seasons} activeSeason={activeSeason} />
+          </div>
+          {/* `w-0 min-w-full` lets the description fill the column
+              (= table width) and wrap at the table's right edge,
+              without its own max-content pushing the column wider. */}
+          <p className="mt-2 hidden w-0 min-w-full text-sm text-neutral-400 md:block">
+            All 32 teams ranked by composite grade. Click any row for the team
+            page (roster + lineup + position breakdown). Methodology:{" "}
+            <a className="underline" href="/methodology">
+              see methodology
+            </a>
+            .
+          </p>
+        </header>
 
-      <section className="mt-3 -ml-6 -mr-6 sm:ml-0 sm:mr-0 sm:mt-6">
-        <TeamLeaderboardTable entries={entries} season={activeSeason} />
-      </section>
+        <section className="mt-3 -ml-6 -mr-6 sm:ml-0 sm:mr-0 sm:mt-6">
+          <TeamLeaderboardTable entries={entries} season={activeSeason} />
+        </section>
+      </div>
     </main>
   );
 }

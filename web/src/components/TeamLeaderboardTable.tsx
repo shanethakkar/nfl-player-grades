@@ -208,17 +208,20 @@ function Row({
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
       <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
         <div className="flex items-center gap-4">
+          {/* Chevron after the team name mirrors the player-row
+              treatment — signals "click for the team profile." */}
           <Link
             href={{ pathname: `/teams/${e.abbr}`, query: { season } }}
-            className="flex items-center gap-3 hover:text-white"
+            className="group inline-flex items-center gap-2 hover:text-white"
           >
-            <TeamLogo abbr={e.abbr} size={24} />
-            <div className="flex flex-col leading-tight">
-              <span className="font-medium text-neutral-100">{e.name}</span>
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500">
-                {e.abbr}
-              </span>
-            </div>
+            <TeamLogo abbr={e.abbr} size={20} />
+            <span className="font-medium text-neutral-100">{e.name}</span>
+            <span
+              aria-hidden
+              className="text-xs leading-none text-neutral-600 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-neutral-300"
+            >
+              ›
+            </span>
           </Link>
           {/* Inline overall-grade trend across the last 5 seasons.
               Same SparklinePopover used on the player leaderboard.

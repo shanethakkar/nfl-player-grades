@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BackLink } from "@/components/BackLink";
 import { LineupDiagram } from "@/components/LineupDiagram";
 import { RosterTable } from "@/components/RosterTable";
 import { TeamGradeCard } from "@/components/TeamGradeCard";
@@ -76,16 +76,10 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       : [[], null, null, [], []];
 
   return (
-    <main className="mx-auto max-w-[1600px] px-6 py-10">
-      <div className="mb-2 text-xs uppercase tracking-wider text-neutral-600">
-        <Link href="/teams" className="hover:text-neutral-300">
-          Teams
-        </Link>
-        <span className="mx-2 text-neutral-700">/</span>
-        <span>{abbr}</span>
-      </div>
+    <main className="mx-auto max-w-[1400px] px-6 py-10">
+      <BackLink />
 
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="mt-4 mb-8 flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-center gap-4">
           <TeamLogo abbr={team.abbr} size={56} />
           <div>

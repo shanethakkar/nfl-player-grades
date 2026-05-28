@@ -13,6 +13,7 @@ import { gradeColor } from "@/lib/grades";
 
 type Hit = {
   player_id: number;
+  slug: string;
   full_name: string;
   position: string;
   team_abbr: string | null;
@@ -103,7 +104,8 @@ export function PlayerSearch() {
     (hit: Hit) => {
       setOpen(false);
       setQuery("");
-      router.push(`/players/${hit.player_id}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.push(`/players/${hit.slug}` as any);
     },
     [router],
   );

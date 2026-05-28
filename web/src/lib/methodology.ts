@@ -14,6 +14,7 @@ import { sql } from "./db";
 
 export type TierExample = {
   player_id: number;
+  slug: string;
   full_name: string;
   season: number;
   position: string;
@@ -89,6 +90,7 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
   const rows = await sql<
     {
       player_id: number;
+      slug: string;
       full_name: string;
       season: number;
       position: string;
@@ -99,6 +101,7 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
     WITH tiered AS (
       SELECT
         sg.player_id,
+        p.slug,
         p.full_name,
         sg.season,
         sg.position,
@@ -117,20 +120,20 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
     ),
     deduped AS (
       SELECT DISTINCT ON (tier_id, player_id)
-        player_id, full_name, season, position, composite_grade, tier_id
+        player_id, slug, full_name, season, position, composite_grade, tier_id
       FROM tiered
       ORDER BY tier_id, player_id, composite_grade DESC
     ),
     ranked AS (
       SELECT
-        player_id, full_name, season, position, composite_grade, tier_id,
+        player_id, slug, full_name, season, position, composite_grade, tier_id,
         ROW_NUMBER() OVER (
           PARTITION BY tier_id
           ORDER BY composite_grade DESC, season DESC, player_id
         ) AS rk
       FROM deduped
     )
-    SELECT player_id, full_name, season, position, composite_grade, tier_id
+    SELECT player_id, slug, full_name, season, position, composite_grade, tier_id
     FROM ranked
     WHERE rk <= 3
   `;
@@ -140,6 +143,7 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
     const bucket = byTier.get(r.tier_id) ?? [];
     bucket.push({
       player_id: Number(r.player_id),
+      slug: r.slug,
       full_name: r.full_name,
       season: Number(r.season),
       position: r.position,
@@ -158,6 +162,7 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
 
 export type CurrentTopEntry = {
   player_id: number;
+  slug: string;
   full_name: string;
   composite_grade: number;
 };
@@ -182,10 +187,15 @@ export async function getCurrentTopAtPosition(
     if (season === null) return { season: null, entries: [] };
 
     const rows = await sql<
-      { player_id: number; full_name: string; composite_grade: number }[]
+      { player_id: number; slug: string; full_name: string; composite_grade: number }[]
     >`
       SELECT
         g.team_id     AS player_id,   -- reuse field name for consistent shape
+        t.abbr        AS slug,        -- OL "slug" is the team abbr; the
+                                      -- methodology link path is broken
+                                      -- for OL either way (no per-OL
+                                      -- profile exists) — kept consistent
+                                      -- with the field-reuse hack above.
         t.name        AS full_name,
         g.composite_grade
       FROM team_ol_grades g
@@ -198,6 +208,7 @@ export async function getCurrentTopAtPosition(
       season: Number(season),
       entries: rows.map((r) => ({
         player_id: Number(r.player_id),
+        slug: r.slug,
         full_name: r.full_name,
         composite_grade: Number(r.composite_grade),
       })),
@@ -216,12 +227,14 @@ export async function getCurrentTopAtPosition(
   const rows = await sql<
     {
       player_id: number;
+      slug: string;
       full_name: string;
       composite_grade: number;
     }[]
   >`
     SELECT
       sg.player_id,
+      p.slug,
       p.full_name,
       sg.composite_grade
     FROM season_grades sg
@@ -237,6 +250,7 @@ export async function getCurrentTopAtPosition(
     season: Number(season),
     entries: rows.map((r) => ({
       player_id: Number(r.player_id),
+      slug: r.slug,
       full_name: r.full_name,
       composite_grade: Number(r.composite_grade),
     })),

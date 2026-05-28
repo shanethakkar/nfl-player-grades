@@ -1,5 +1,11 @@
 """Ingest rosters and the player master into Postgres.
 
+NOTE on slugs (post-migration 0024): every new player needs a URL-safe
+slug, unique across the players table. The upsert assigns a slug only
+for NEW players; existing players keep their backfilled slug. The
+collision-resolution chain (base -> position -> draft year -> gsis_id)
+matches the one in `scripts/backfill_player_slugs.py`.
+
 Pipeline:
 
     nflreadpy.load_players()    --(_cache)--> df_players_master  (24k rows, all-time)
@@ -31,12 +37,81 @@ layer is the "ingest glue" that's allowed to read DataFrames and write SQL.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+
+_SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _base_slug(full_name: str) -> str:
+    s = (full_name or "").lower().strip()
+    s = _SLUG_NON_ALNUM.sub("-", s)
+    return s.strip("-")
+
+
+def _assign_slugs_for_new_players(
+    conn: Connection, rows: list[dict[str, object]]
+) -> None:
+    """Set `slug` in-place on each row. For players already in `players`
+    (matched by gsis_id), reuse the existing slug. For NEW players,
+    pick a fresh slug via the same fallback chain used by the backfill:
+    base -> base-position -> base-draftyear -> base-gsisid.
+
+    Mutates rows; doesn't return anything.
+    """
+    if not rows:
+        return
+
+    gsis_ids = [r["gsis_id"] for r in rows if r.get("gsis_id")]
+    existing_by_gsis: dict[str, str] = {}
+    if gsis_ids:
+        existing_by_gsis = {
+            row.gsis_id: row.slug
+            for row in conn.execute(
+                text("SELECT gsis_id, slug FROM players WHERE gsis_id = ANY(:ids)"),
+                {"ids": gsis_ids},
+            )
+        }
+
+    # Pre-load every existing slug so we can check candidates in-memory.
+    used_slugs: set[str] = {
+        s for (s,) in conn.execute(text("SELECT slug FROM players WHERE slug IS NOT NULL"))
+    }
+
+    for r in rows:
+        gsis = r.get("gsis_id")
+        if gsis and gsis in existing_by_gsis:
+            r["slug"] = existing_by_gsis[gsis]
+            continue
+
+        base = _base_slug(str(r.get("full_name") or ""))
+        if not base:
+            # No usable name — fall back to gsis_id as a stable token.
+            r["slug"] = f"player-{gsis}" if gsis else f"player-unknown-{id(r)}"
+            used_slugs.add(r["slug"])
+            continue
+
+        pos = r.get("position")
+        pos_token = _SLUG_NON_ALNUM.sub("-", (pos or "").lower()).strip("-")
+        draft_year = r.get("draft_year")
+
+        candidates: list[str] = [base]
+        if pos_token:
+            candidates.append(f"{base}-{pos_token}")
+        if draft_year:
+            candidates.append(f"{base}-{draft_year}")
+        if gsis:
+            # gsis is globally unique by construction — guaranteed fallback.
+            candidates.append(f"{base}-{str(gsis).replace('-', '').lstrip('0') or 'x'}")
+
+        chosen = next((c for c in candidates if c not in used_slugs), candidates[-1])
+        r["slug"] = chosen
+        used_slugs.add(chosen)
 
 from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.ingest._cache import cache_or_fetch
@@ -341,18 +416,20 @@ def _transform_player_seasons(
 
 
 def _upsert_players(conn: Connection, rows: list[dict[str, object]]) -> int:
-    """UPSERT into players keyed on gsis_id."""
+    """UPSERT into players keyed on gsis_id. Generates a unique slug for
+    every NEW player; existing players keep their slug (URLs are stable)."""
     if not rows:
         return 0
+    _assign_slugs_for_new_players(conn, rows)
     sql = text(
         """
         INSERT INTO players (
             gsis_id, pfr_id, full_name, position, birth_date, height_inches, weight_lbs,
-            draft_year, draft_round, draft_pick, current_team_id, last_updated
+            draft_year, draft_round, draft_pick, current_team_id, slug, last_updated
         )
         VALUES (
             :gsis_id, :pfr_id, :full_name, :position, :birth_date, :height_inches, :weight_lbs,
-            :draft_year, :draft_round, :draft_pick, :current_team_id, NOW()
+            :draft_year, :draft_round, :draft_pick, :current_team_id, :slug, NOW()
         )
         ON CONFLICT (gsis_id) DO UPDATE SET
             pfr_id          = COALESCE(EXCLUDED.pfr_id, players.pfr_id),
@@ -365,6 +442,9 @@ def _upsert_players(conn: Connection, rows: list[dict[str, object]]) -> int:
             draft_round     = EXCLUDED.draft_round,
             draft_pick      = EXCLUDED.draft_pick,
             current_team_id = EXCLUDED.current_team_id,
+            -- slug is intentionally NOT updated on conflict: existing
+            -- URLs must stay stable even if the player's name or
+            -- position changes.
             last_updated    = NOW()
         """
     )

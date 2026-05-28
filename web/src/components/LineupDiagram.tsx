@@ -283,9 +283,9 @@ function PlayerCardInner({
       <div className="text-[9px] font-semibold uppercase tracking-wider text-neutral-500">
         {slot.slot}
       </div>
-      {slot.player_id ? (
+      {slot.player_id && slot.slug ? (
         <Link
-          href={{ pathname: `/players/${slot.player_id}` }}
+          href={{ pathname: `/players/${slot.slug}` }}
           className="block truncate text-[11px] font-medium text-neutral-100 group-hover/card:text-white"
         >
           {slot.full_name}
@@ -422,9 +422,9 @@ function MobileRow({
         {slot}
       </span>
       <div className="min-w-0 flex-1">
-        {data.player_id ? (
+        {data.player_id && data.slug ? (
           <Link
-            href={{ pathname: `/players/${data.player_id}` }}
+            href={{ pathname: `/players/${data.slug}` }}
             className="truncate text-sm font-medium text-neutral-100 hover:text-white hover:underline"
           >
             {data.full_name}

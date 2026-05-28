@@ -246,7 +246,7 @@ function TierRow({ tier }: { tier: TierBucket }) {
 function ExampleChip({ ex }: { ex: TierExample }) {
   return (
     <Link
-      href={{ pathname: `/players/${ex.player_id}` }}
+      href={{ pathname: `/players/${ex.slug}` }}
       className="group inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-950 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100"
     >
       <span className="font-medium">{ex.full_name}</span>
@@ -389,7 +389,7 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
           <li key={e.player_id} className="flex items-center gap-2">
             <span className="w-4 text-neutral-600">{i + 1}.</span>
             <Link
-              href={{ pathname: `/players/${e.player_id}` }}
+              href={{ pathname: `/players/${e.slug}` }}
               className="text-neutral-200 hover:text-neutral-100 hover:underline"
             >
               {e.full_name}

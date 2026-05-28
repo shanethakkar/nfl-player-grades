@@ -57,7 +57,7 @@ export function TeamContextPanel({ context: ctx }: Props) {
               Top QB
             </span>{" "}
             <Link
-              href={{ pathname: `/players/${ctx.top_qb.player_id}` }}
+              href={{ pathname: `/players/${ctx.top_qb.slug}` }}
               className="text-neutral-200 hover:underline"
             >
               {ctx.top_qb.full_name}

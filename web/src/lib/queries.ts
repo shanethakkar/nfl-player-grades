@@ -342,6 +342,7 @@ async function _getTeamRoster(
     SELECT
       p.player_id,
       p.full_name,
+      p.slug,
       ps.position_played,
       ps.games,
       ps.games_started,
@@ -379,6 +380,7 @@ async function _getTeamRoster(
   `;
   return rows.map((r) => ({
     player_id: Number(r.player_id),
+    slug: r.slug,
     full_name: r.full_name,
     position_played: r.position_played,
     games: Number(r.games),
@@ -408,6 +410,7 @@ type RawLineupRow = {
   position: string;
   depth_order: number;
   player_id: number;
+  slug: string;
   full_name: string;
   composite_grade: number | null;
   qualified: boolean | null;
@@ -467,6 +470,7 @@ async function _getTeamLineup(
       dc.depth_order,
       p.player_id,
       p.full_name,
+      p.slug,
       sg.composite_grade,
       sg.qualified,
       sg.position AS grading_position,
@@ -519,6 +523,7 @@ async function _getTeamLineup(
       raw_position: r.position,
       depth_order: r.depth_order,
       player_id: r.player_id,
+      slug: r.slug,
       full_name: r.full_name,
       composite_grade:
         r.composite_grade === null ? null : Number(r.composite_grade),
@@ -598,6 +603,7 @@ async function _getTeamLineup(
       raw_position: r.position,
       depth_order: r.depth_order,
       player_id: r.player_id,
+      slug: r.slug,
       full_name: r.full_name,
       composite_grade: null, // hidden — OL is a team grade, not per-player
       qualified: null,
@@ -700,6 +706,7 @@ async function _getTeamLineup(
     raw_position: r.position,
     depth_order: r.depth_order,
     player_id: r.player_id,
+    slug: r.slug,
     full_name: r.full_name,
     composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
     qualified: r.qualified,
@@ -718,6 +725,7 @@ async function _getTeamLineup(
     raw_position: r.position,
     depth_order: r.depth_order,
     player_id: r.player_id,
+    slug: r.slug,
     full_name: r.full_name,
     composite_grade: r.composite_grade === null ? null : Number(r.composite_grade),
     qualified: r.qualified,
@@ -740,13 +748,14 @@ async function _getTeamLineup(
     const fallbacks = await sql<{
       position: string;
       player_id: number;
+      slug: string;
       full_name: string;
       composite_grade: number | null;
       qualified: boolean | null;
       grade_season: number | null;
     }[]>`
       (
-        SELECT 'K' AS position, p.player_id, p.full_name,
+        SELECT 'K' AS position, p.player_id, p.slug, p.full_name,
                sg.composite_grade, sg.qualified, sg.season AS grade_season
         FROM player_seasons ps
         JOIN teams t   ON t.team_id   = ps.team_id
@@ -770,7 +779,7 @@ async function _getTeamLineup(
       )
       UNION ALL
       (
-        SELECT 'P' AS position, p.player_id, p.full_name,
+        SELECT 'P' AS position, p.player_id, p.slug, p.full_name,
                sg.composite_grade, sg.qualified, sg.season AS grade_season
         FROM player_seasons ps
         JOIN teams t   ON t.team_id   = ps.team_id
@@ -799,6 +808,7 @@ async function _getTeamLineup(
         raw_position: null,
         depth_order: null,
         player_id: Number(r.player_id),
+        slug: r.slug ?? null,
         full_name: r.full_name,
         composite_grade:
           r.composite_grade === null ? null : Number(r.composite_grade),
@@ -1023,6 +1033,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1079,6 +1090,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1161,6 +1173,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1226,6 +1239,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1285,6 +1299,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1355,6 +1370,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1420,6 +1436,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1490,6 +1507,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1557,6 +1575,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1610,6 +1629,7 @@ async function _getLeaderboard(
       SELECT
         sg.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1662,6 +1682,7 @@ async function _getLeaderboard(
     SELECT
       sg.player_id,
       p.full_name,
+      p.slug,
       sg.position,
       sg.season,
       sg.composite_grade,
@@ -1721,6 +1742,7 @@ const teamLookupLateralForSgP = sql`
  */
 export type PlayerSearchHit = {
   player_id: number;
+  slug: string;
   full_name: string;
   position: string;
   team_abbr: string | null;
@@ -1738,6 +1760,7 @@ export async function searchPlayers(
   const rows = await sql<
     {
       player_id: number;
+      slug: string;
       full_name: string;
       position: string;
       team_abbr: string | null;
@@ -1749,6 +1772,7 @@ export async function searchPlayers(
       SELECT
         p.player_id,
         p.full_name,
+        p.slug,
         sg.position,
         sg.season,
         sg.composite_grade,
@@ -1764,6 +1788,7 @@ export async function searchPlayers(
     )
     SELECT
       m.player_id,
+      m.slug,
       m.full_name,
       m.position,
       m.best_grade,
@@ -1791,6 +1816,7 @@ export async function searchPlayers(
   `;
   return rows.map((r) => ({
     player_id: Number(r.player_id),
+    slug: r.slug,
     full_name: r.full_name,
     position: r.position,
     team_abbr: r.team_abbr,
@@ -1824,6 +1850,7 @@ async function _getPlayerDetail(
         p.player_id,
         p.gsis_id,
         p.full_name,
+        p.slug,
         p.position,
         t.abbr AS current_team_abbr
       FROM players p
@@ -1990,6 +2017,7 @@ async function getTeamContexts(
         season: number;
         team_abbr: string;
         player_id: number;
+        slug: string;
         full_name: string;
         n_dropbacks: number;
         composite_grade: number | null;
@@ -2020,6 +2048,7 @@ async function getTeamContexts(
         lq.team_abbr,
         p.player_id,
         p.full_name,
+        p.slug,
         lq.n_dropbacks,
         sg.composite_grade,
         sg.qualified
@@ -2088,6 +2117,7 @@ async function getTeamContexts(
   for (const r of qbRows) {
     qbByKey.set(`${r.season}:${r.team_abbr}`, {
       player_id: Number(r.player_id),
+      slug: r.slug,
       full_name: r.full_name,
       composite_grade:
         r.composite_grade === null ? null : Number(r.composite_grade),
@@ -2155,6 +2185,28 @@ export const getLeaderboard = unstable_cache(
 export const getPlayerDetail = unstable_cache(
   _getPlayerDetail,
   ["player-detail"],
+  { revalidate: 3600 },
+);
+
+/**
+ * Slug-based lookup for the player profile route. Resolves the slug
+ * (e.g. "drake-maye") to a player_id, then delegates to the existing
+ * id-based detail query. Returns null when no player matches the slug.
+ */
+async function _getPlayerDetailBySlug(
+  slug: string,
+): Promise<PlayerDetail | null> {
+  const rows = await sql<{ player_id: number }[]>`
+    SELECT player_id FROM players WHERE slug = ${slug} LIMIT 1
+  `;
+  const id = rows[0]?.player_id;
+  if (id === undefined) return null;
+  return _getPlayerDetail(Number(id));
+}
+
+export const getPlayerDetailBySlug = unstable_cache(
+  _getPlayerDetailBySlug,
+  ["player-detail-by-slug"],
   { revalidate: 3600 },
 );
 

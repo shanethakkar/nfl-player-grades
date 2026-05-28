@@ -185,7 +185,7 @@ function Row({ entry, rank }: { entry: TeamRosterEntry; rank: number }) {
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
       <Td>
         <Link
-          href={{ pathname: `/players/${entry.player_id}` }}
+          href={{ pathname: `/players/${entry.slug}` }}
           className="font-medium text-neutral-100 hover:text-white hover:underline"
         >
           {entry.full_name}
