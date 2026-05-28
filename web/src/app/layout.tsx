@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "@/styles/globals.css";
+import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
 const geistSans = localFont({
@@ -43,9 +44,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen font-sans antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col font-sans antialiased`}>
         <SiteHeader />
-        {children}
+        {/* `flex-1` keeps short pages from leaving the footer floating
+            mid-viewport — long pages flow naturally. */}
+        <div className="flex-1">{children}</div>
+        <SiteFooter />
       </body>
     </html>
   );
