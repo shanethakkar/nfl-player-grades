@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { Logo } from "./Logo";
 import { MobileNav } from "./MobileNav";
@@ -8,13 +11,33 @@ import { PlayerSearch } from "./PlayerSearch";
  * Persistent site header. Small, monospaced, lets the grade tables
  * remain the visual focus.
  *
+ * - `sticky top-0` so the nav follows the scroll; always-on
+ *   backdrop-blur means content faintly shows through, and once the
+ *   page has scrolled past the top the bg darkens + a hairline bottom
+ *   border appears for separation against the leaderboard.
  * - Desktop (md+): logo + inline nav + search.
  * - Mobile: logo + hamburger drawer (MobileNav) — keeps the header to a
  *   single row so the leaderboard sits closer to the top of the viewport.
  */
 export function SiteHeader() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <header className="border-b border-neutral-800 bg-neutral-950">
+    <header
+      className={
+        "sticky top-0 z-40 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-200 " +
+        (scrolled
+          ? "border-b border-neutral-800 bg-neutral-950/80 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
+          : "border-b border-transparent bg-neutral-950/95")
+      }
+    >
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-6 py-4">
         <Link
           href="/"

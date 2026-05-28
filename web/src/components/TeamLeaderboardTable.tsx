@@ -93,7 +93,7 @@ export function TeamLeaderboardTable({ entries, season }: Props) {
               sort={sort}
               onSort={onSort}
               align="left"
-              className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800"
+              className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800 transition-shadow duration-150 group-data-[scrolled-x=true]/tbl:shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]"
             />
             <SortHeader col={COL_OVERALL} sort={sort} onSort={onSort} align="right" />
             <SortHeader col={COL_OFF}     sort={sort} onSort={onSort} align="right" />
@@ -206,7 +206,7 @@ function Row({
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
-      <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
+      <Td className={`sticky left-0 z-20 border-r border-neutral-800 transition-shadow duration-150 group-data-[scrolled-x=true]/tbl:shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)] ${stickyBg}`}>
         <div className="flex items-center gap-4">
           {/* Chevron after the team name mirrors the player-row
               treatment — signals "click for the team profile." */}
@@ -286,14 +286,19 @@ function SortHeader({
   className?: string;
 }) {
   const active = sort.key === col.key;
-  const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
   const alignCls = align === "right" ? "text-right" : "text-left";
+  // Same rotating ▼ pattern as the player leaderboard — keeps the two
+  // tables consistent and lets the direction flip animate.
   const sortIndicator = (
     <span
       aria-hidden
-      className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}
+      className={
+        "inline-block text-[10px] transition-transform duration-150 " +
+        (active && sort.dir === "asc" ? "rotate-180 " : "") +
+        (active ? "" : "opacity-30 group-hover:opacity-60")
+      }
     >
-      {arrow || "▾"}
+      ▼
     </span>
   );
   const labelNode = col.hover ? (

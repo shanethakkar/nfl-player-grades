@@ -61,14 +61,19 @@ export function MobileNav() {
 
       {open && (
         <>
-          {/* Backdrop — tap to close */}
+          {/* Backdrop — tap to close. Fades in to soften the drawer's
+              entrance against the page underneath. */}
           <div
             aria-hidden
-            className="fixed inset-0 z-40 bg-black/60"
+            className="fixed inset-0 z-40 bg-black/60 animate-fade-in"
             onClick={() => setOpen(false)}
           />
-          {/* Drawer — full-width panel anchored below the header */}
-          <div className="fixed inset-x-0 top-[57px] z-50 border-b border-neutral-800 bg-neutral-950 px-6 py-4">
+          {/* Drawer — full-width panel anchored below the header. Slides
+              down + fades in from -6px on open; compositor-only so it
+              stays smooth on cheap phones. No exit animation (close is
+              instant) — common pattern for mobile drawers, keeps the
+              implementation simple and side-effect-free. */}
+          <div className="fixed inset-x-0 top-[57px] z-50 border-b border-neutral-800 bg-neutral-950 px-6 py-4 animate-slide-down">
             <div className="mb-4">
               <PlayerSearch />
             </div>

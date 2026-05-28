@@ -120,7 +120,7 @@ export function LeaderboardTable({ entries, position }: Props) {
                   in this same row slide UNDER the sticky Player cell
                   instead of drifting visually on top of it. */}
               <th />
-              <th className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800" />
+              <th className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800 transition-shadow duration-150 group-data-[scrolled-x=true]/tbl:shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]" />
               <th />
               <th />
               <th />
@@ -149,7 +149,7 @@ export function LeaderboardTable({ entries, position }: Props) {
               sort={sort}
               col={FIXED_COLUMNS_BY_KEY.player}
               onSort={onSort}
-              className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800"
+              className="sticky left-0 z-30 bg-neutral-950 border-r border-neutral-800 transition-shadow duration-150 group-data-[scrolled-x=true]/tbl:shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]"
             />
             <SortHeader
               label="Team"
@@ -1281,7 +1281,7 @@ function Row({
   return (
     <tr className={rowClass}>
       <Td className="text-center text-xs text-neutral-500">{rank}</Td>
-      <Td className={`sticky left-0 z-20 border-r border-neutral-800 ${stickyBg}`}>
+      <Td className={`sticky left-0 z-20 border-r border-neutral-800 transition-shadow duration-150 group-data-[scrolled-x=true]/tbl:shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)] ${stickyBg}`}>
         <div className="flex items-center gap-4">
           <div>
             {isTeamRow ? (
@@ -1381,15 +1381,22 @@ function SortHeader({
   totalFormulaWeight?: number;
 }) {
   const active = sort.key === col.key;
-  const arrow = active ? (sort.dir === "asc" ? "▲" : "▼") : "";
   const alignCls =
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
+  // Single ▼ glyph rotated 180° when sorting ascending, so the
+  // direction flip animates instead of swapping characters. The
+  // inactive state shows the same glyph muted so the header still
+  // signals "sortable" on hover.
   const sortIndicator = (
     <span
       aria-hidden
-      className={`text-[10px] ${active ? "" : "opacity-0 group-hover:opacity-50"}`}
+      className={
+        "inline-block text-[10px] transition-transform duration-150 " +
+        (active && sort.dir === "asc" ? "rotate-180 " : "") +
+        (active ? "" : "opacity-30 group-hover:opacity-60")
+      }
     >
-      {arrow || "▾"}
+      ▼
     </span>
   );
   // For FORMULA columns with a weight, append the share % to the hover

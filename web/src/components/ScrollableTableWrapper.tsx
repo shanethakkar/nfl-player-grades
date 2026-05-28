@@ -115,7 +115,16 @@ export function ScrollableTableWrapper({ children }: { children: ReactNode }) {
   const canScroll = canScrollLeft || canScrollRight;
 
   return (
-    <div className="relative w-max max-w-full overflow-hidden rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r">
+    <div
+      // `group/tbl` + `data-scrolled-x` lets the sticky first column
+      // inside the table read the wrapper's scroll state via Tailwind's
+      // `group-data-[scrolled-x=true]/tbl:` variant. We use that to fade
+      // a right-edge shadow onto the sticky column once the user pans
+      // away from scrollLeft=0, so the pinned column visually separates
+      // from the columns sliding underneath it.
+      data-scrolled-x={canScrollLeft ? "true" : "false"}
+      className="group/tbl relative w-max max-w-full overflow-hidden rounded-l-lg border-y border-l border-neutral-800 sm:rounded-lg sm:border-r"
+    >
       <div
         ref={scrollRef}
         onMouseDown={onMouseDown}

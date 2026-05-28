@@ -62,7 +62,7 @@ export function InfoDisclosure({ label = "More info", children }: Props) {
         </svg>
       </button>
       {open && (
-        <span className="absolute left-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs leading-relaxed text-neutral-300 shadow-lg">
+        <span className="absolute left-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] origin-top-left rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs leading-relaxed text-neutral-300 shadow-lg animate-pop-in">
           {children}
         </span>
       )}
