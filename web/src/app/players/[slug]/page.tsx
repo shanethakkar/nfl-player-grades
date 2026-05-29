@@ -53,8 +53,22 @@ export default async function PlayerPage({ params }: PageProps) {
               {player.current_team_abbr && (
                 <>
                   <span className="text-neutral-600">·</span>
-                  <TeamLogo abbr={player.current_team_abbr} size={22} />
-                  <span className="text-neutral-300">{player.current_team_abbr}</span>
+                  {/* Team chip is a Link to the team profile so users
+                      can pivot from "this player" → "the rest of this
+                      roster" in one click. */}
+                  <Link
+                    href={{ pathname: `/teams/${player.current_team_abbr}` }}
+                    className="group/team inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-900"
+                  >
+                    <TeamLogo abbr={player.current_team_abbr} size={22} />
+                    <span className="text-neutral-300 group-hover/team:text-neutral-100">{player.current_team_abbr}</span>
+                    <span
+                      aria-hidden
+                      className="text-xs leading-none text-neutral-600 transition-all duration-150 group-hover/team:translate-x-0.5 group-hover/team:text-neutral-300"
+                    >
+                      ›
+                    </span>
+                  </Link>
                 </>
               )}
             </div>

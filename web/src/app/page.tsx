@@ -253,7 +253,12 @@ export default async function HomePage({ searchParams }: Props) {
               </a>
               )
             </p>
-            <div className="flex items-center gap-2 md:mt-4 md:gap-3">
+            {/* `flex-wrap` lets the season picker drop to its own row
+                when the viewport isn't wide enough to fit both pickers
+                side-by-side, instead of getting clipped at the right
+                edge. `gap-y-2` keeps the two rows visually separated
+                when that happens. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2 md:mt-4 md:gap-x-3">
               <PositionPicker
                 positions={pickerPositions}
                 activePosition={activePosition}
@@ -281,46 +286,53 @@ export default async function HomePage({ searchParams }: Props) {
             " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
           }
         >
-          <LeaderboardTable entries={qualified} position={activePosition} />
+          <LeaderboardTable
+            entries={qualified}
+            position={activePosition}
+            season={activeSeason}
+          />
         </section>
-      </div>
 
-      {unqualified.length > 0 && (
-        <section className="mt-10">
-          {/* Collapsed by default. The qualified table is the headline; the
-              low-volume rows are a noisy footnote most readers don't need.
-              Keeping it as native <details> means it works without JS and
-              lets the URL hash (#low-volume) deep-link straight to it. */}
-          <details
-            id="low-volume"
-            className="group/lv rounded-lg border border-neutral-800"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-neutral-400 hover:text-neutral-200">
-              <span>
-                {lowVolume.heading}{" "}
-                <span className="ml-1 font-normal normal-case text-neutral-500">
-                  ({unqualified.length})
+        {unqualified.length > 0 && (
+          // Section sits INSIDE the centered `w-max` column so its
+          // table shares the qualified table's horizontal lane \u2014
+          // identical left/right edges, no offset. The outer card
+          // border is gone (it was the second cause of misalignment,
+          // adding 16px of inner padding); the summary's bottom border
+          // serves as the visual divider when collapsed.
+          <section className="mt-10">
+            <details id="low-volume" className="group/lv">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-neutral-800 py-3 text-sm font-semibold uppercase tracking-wide text-neutral-400 hover:text-neutral-200">
+                <span>
+                  {lowVolume.heading}{" "}
+                  <span className="ml-1 font-normal normal-case text-neutral-500">
+                    ({unqualified.length})
+                  </span>
                 </span>
-              </span>
-              <span
-                aria-hidden
-                className="text-xs text-neutral-500 transition-transform group-open/lv:rotate-180"
-              >
-                {"\u25BC"}
-              </span>
-            </summary>
-            <div className="border-t border-neutral-800 px-4 py-4">
-              <p className="mb-3 text-xs text-neutral-500">
+                <span
+                  aria-hidden
+                  className="text-xs text-neutral-500 transition-transform group-open/lv:rotate-180"
+                >
+                  {"\u25BC"}
+                </span>
+              </summary>
+              <p className="mb-3 mt-3 text-xs text-neutral-500">
                 {lowVolume.threshold}
               </p>
-              <LeaderboardTable
-                entries={unqualified}
-                position={activePosition}
-              />
-            </div>
-          </details>
-        </section>
-      )}
+              {/* Same `-ml-6 -mr-6 sm:ml-0 sm:mr-0` treatment as the
+                  qualified table so mobile gets viewport-edge bleed
+                  and desktop sits flush in the column. */}
+              <div className="-ml-6 -mr-6 sm:ml-0 sm:mr-0">
+                <LeaderboardTable
+                  entries={unqualified}
+                  position={activePosition}
+                  season={activeSeason}
+                />
+              </div>
+            </details>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

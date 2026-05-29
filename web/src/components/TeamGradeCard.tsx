@@ -106,7 +106,7 @@ export function TeamGradeCard({ summary, components, history, season }: Props) {
                   {PHASE_LABEL[phase]}
                 </span>
                 {rows.map((r) => (
-                  <PositionChip key={r.position} row={r} />
+                  <PositionChip key={r.position} row={r} season={season} />
                 ))}
               </div>
             );
@@ -162,13 +162,28 @@ function PhaseChip({
   );
 }
 
-function PositionChip({ row }: { row: TeamGradeComponent }) {
+function PositionChip({
+  row,
+  season,
+}: {
+  row: TeamGradeComponent;
+  season: number;
+}) {
   // Chip = a small pill with the position label + its team grade.
   // No weight on the chip itself (the weights are already locked in
   // methodology; the chip is for ranking strengths/weaknesses at a glance).
+  // The chip is a Link to the corresponding position leaderboard for
+  // this season — clicking "QB 89" jumps to the QB Grades page so users
+  // can see who actually drove the number. QB omits `position=` since
+  // it's the default.
+  const query: Record<string, string | number> = { season };
+  if (row.position !== "QB") query.position = row.position;
   return (
-    <span className="inline-flex items-baseline gap-1.5 rounded-md border border-neutral-800/80 bg-neutral-900/50 px-2.5 py-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+    <Link
+      href={{ pathname: "/", query }}
+      className="group/chip inline-flex items-baseline gap-1.5 rounded-md border border-neutral-800/80 bg-neutral-900/50 px-2.5 py-1 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 group-hover/chip:text-neutral-200">
         {row.position}
       </span>
       <span
@@ -176,6 +191,6 @@ function PositionChip({ row }: { row: TeamGradeComponent }) {
       >
         {row.position_grade.toFixed(0)}
       </span>
-    </span>
+    </Link>
   );
 }

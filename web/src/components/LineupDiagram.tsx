@@ -284,11 +284,21 @@ function PlayerCardInner({
         {slot.slot}
       </div>
       {slot.player_id && slot.slug ? (
+        // The chevron sits to the right of the name but only fades in
+        // on card hover — the cards are tight, so an always-visible
+        // chevron crowds the layout, while a hover-reveal keeps the
+        // resting state clean and still signals "clickable."
         <Link
           href={{ pathname: `/players/${slot.slug}` }}
-          className="block truncate text-[11px] font-medium text-neutral-100 group-hover/card:text-white"
+          className="inline-flex max-w-full items-center gap-0.5 text-[11px] font-medium text-neutral-100 group-hover/card:text-white"
         >
-          {slot.full_name}
+          <span className="truncate">{slot.full_name}</span>
+          <span
+            aria-hidden
+            className="text-[9px] leading-none text-neutral-600 opacity-0 transition-all duration-150 group-hover/card:translate-x-0.5 group-hover/card:text-neutral-300 group-hover/card:opacity-100"
+          >
+            ›
+          </span>
         </Link>
       ) : (
         <div className="truncate text-[11px] font-medium text-neutral-500">—</div>
@@ -425,9 +435,15 @@ function MobileRow({
         {data.player_id && data.slug ? (
           <Link
             href={{ pathname: `/players/${data.slug}` }}
-            className="truncate text-sm font-medium text-neutral-100 hover:text-white hover:underline"
+            className="group/lnk inline-flex max-w-full items-center gap-1 truncate text-sm font-medium text-neutral-100 hover:text-white"
           >
-            {data.full_name}
+            <span className="truncate">{data.full_name}</span>
+            <span
+              aria-hidden
+              className="text-xs leading-none text-neutral-600 transition-all duration-150 group-hover/lnk:translate-x-0.5 group-hover/lnk:text-neutral-300"
+            >
+              ›
+            </span>
           </Link>
         ) : (
           <span className="text-sm text-neutral-500">—</span>

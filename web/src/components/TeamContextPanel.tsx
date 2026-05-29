@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { gradeColor } from "@/lib/grades";
+import { fmtInt } from "@/lib/format";
 import type { TeamContext } from "@/types";
 
 type Props = {
@@ -75,7 +76,7 @@ export function TeamContextPanel({ context: ctx }: Props) {
               </>
             )}{" "}
             <span className="text-neutral-500">
-              ({ctx.top_qb.dropbacks} dropbacks
+              ({fmtInt(ctx.top_qb.dropbacks)} dropbacks
               {ctx.top_qb.qualified === false ? ", non-qualified" : ""})
             </span>
           </span>

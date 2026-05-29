@@ -8,6 +8,7 @@ import { SparklinePopover } from "@/components/SparklinePopover";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Tooltip } from "@/components/Tooltip";
 import { gradeColor } from "@/lib/grades";
+import { fmtSignedInt } from "@/lib/format";
 import type { TeamLeaderboardEntry } from "@/types";
 
 type Props = {
@@ -201,7 +202,6 @@ function Row({
 
   const recordText =
     e.ties > 0 ? `${e.wins}-${e.losses}-${e.ties}` : `${e.wins}-${e.losses}`;
-  const pdSign = e.point_diff > 0 ? "+" : "";
 
   return (
     <tr className={rowClass}>
@@ -251,8 +251,7 @@ function Row({
       </Td>
       <Td className="text-right font-mono text-neutral-300">{recordText}</Td>
       <Td className={`text-right font-mono ${e.point_diff >= 0 ? "text-neutral-200" : "text-neutral-500"}`}>
-        {pdSign}
-        {e.point_diff}
+        {fmtSignedInt(e.point_diff)}
       </Td>
       <Td className="text-neutral-300">
         {e.top_qb_name ? (

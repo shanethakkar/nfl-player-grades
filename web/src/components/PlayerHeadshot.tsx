@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Pixelated player headshot. Loads from `/headshots/{playerId}.png` —
@@ -14,6 +14,14 @@ import { useState } from "react";
  * If the player doesn't have a generated headshot yet (file 404s), the
  * onError handler hides the element entirely — no broken-image icon,
  * no layout shift on most pages (the flex parent collapses).
+ *
+ * Fade-in: img starts at `opacity-0`, transitions to `opacity-100` once
+ * the PNG has rendered. The `useEffect` covers the cached-image case
+ * (page reload with the headshot already in disk cache) — the browser
+ * marks `<img>.complete = true` before React attaches `onLoad`, so the
+ * event never fires and we have to detect the already-loaded state
+ * ourselves. Without this, reloading a player profile leaves the
+ * headshot invisible until next navigation.
  */
 type Props = {
   playerId: number;
@@ -23,17 +31,37 @@ type Props = {
 };
 
 export function PlayerHeadshot({ playerId, size = 96, className = "" }: Props) {
+  const ref = useRef<HTMLImageElement>(null);
   const [errored, setErrored] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const img = ref.current;
+    if (!img) return;
+    if (img.complete) {
+      // naturalWidth = 0 means the img errored before mount; let
+      // onError handle that case.
+      if (img.naturalWidth > 0) setLoaded(true);
+      else setErrored(true);
+    }
+  }, []);
+
   if (errored) return null;
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
+      ref={ref}
       src={`/headshots/${playerId}.png`}
       alt=""
       width={size}
       height={size}
       style={{ imageRendering: "pixelated" }}
-      className={"shrink-0 " + className}
+      className={
+        "shrink-0 transition-opacity duration-300 ease-out " +
+        (loaded ? "opacity-100 " : "opacity-0 ") +
+        className
+      }
+      onLoad={() => setLoaded(true)}
       onError={() => setErrored(true)}
     />
   );

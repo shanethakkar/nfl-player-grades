@@ -29,11 +29,28 @@ export function SeasonGradesSection({ grades }: Props) {
   return (
     <div className="mt-10">
       <div className="mb-4 flex justify-end">
+        {/* Toggle reads as engaged when on: brighter border + filled
+            bg + brighter text. The dot before the label flips emerald
+            in the on state, giving a small "indicator light" cue
+            without changing the layout width as the label flips. */}
         <button
           type="button"
           onClick={() => setAdvanced((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-400 transition-colors hover:border-neutral-500 hover:text-neutral-100"
+          aria-pressed={advanced}
+          className={
+            "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors " +
+            (advanced
+              ? "border-neutral-600 bg-neutral-900 text-neutral-100"
+              : "border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-100")
+          }
         >
+          <span
+            aria-hidden
+            className={
+              "h-1.5 w-1.5 rounded-full transition-colors " +
+              (advanced ? "bg-emerald-400" : "bg-neutral-600")
+            }
+          />
           {advanced ? "Hide advanced" : "Show advanced"}
         </button>
       </div>
@@ -185,9 +202,18 @@ function ComponentPercentileBars({
             </div>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
               {displayPct !== null && (
+                // `bar-grow` animates from width 0 to the value of the
+                // `--bar-end` CSS var, set inline so each bar gets its
+                // own target. Reads as the data being computed when the
+                // page first paints — cheap, premium.
                 <div
-                  className="h-full rounded-full"
-                  style={{ width: `${displayPct}%`, backgroundColor: color }}
+                  className="bar-grow h-full rounded-full"
+                  style={
+                    {
+                      "--bar-end": `${displayPct}%`,
+                      backgroundColor: color,
+                    } as React.CSSProperties
+                  }
                 />
               )}
             </div>

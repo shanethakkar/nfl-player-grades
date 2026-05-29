@@ -90,7 +90,7 @@ export function Tooltip({ content, children, direction = "up" }: Props) {
             transform: direction === "up" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
             zIndex: 9999,
           }}
-          className="pointer-events-none w-52 whitespace-pre-line rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-neutral-300 shadow-lg"
+          className="pointer-events-none w-52 animate-pop-in whitespace-pre-line rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-neutral-300 shadow-lg"
         >
           {content}
           <span

@@ -19,6 +19,12 @@ type Props = {
    * component picks the right column spec per row.
    */
   position: string;
+  /**
+   * Currently-active season. Threaded into the per-row Team chip Link
+   * so clicking a team logo / abbr in the leaderboard lands on that
+   * team's profile for the same year the user was just browsing.
+   */
+  season: number;
 };
 
 type SortDir = "asc" | "desc";
@@ -40,7 +46,7 @@ type SortState = { key: string; dir: SortDir };
  * - `<thead>` is `sticky top-0` so column names stay visible on long
  *   lists (RB/WR with 70+ rows).
  */
-export function LeaderboardTable({ entries, position }: Props) {
+export function LeaderboardTable({ entries, position, season }: Props) {
   // `COLUMN_SPECS[position]` is a module-level constant array per position;
   // wrapping it in useMemo gives a stable reference for the deps array of
   // the `allColumns` memo below.
@@ -196,6 +202,7 @@ export function LeaderboardTable({ entries, position }: Props) {
               rank={idx + 1}
               columns={columns}
               position={position}
+              season={season}
             />
           ))}
         </tbody>
@@ -288,8 +295,13 @@ function fmtPct(v: number | null, digits: number): string {
   return `${(v * 100).toFixed(digits)}`;
 }
 
+// Local re-export of the shared comma-formatter so the column specs
+// below stay readable (`render: (e) => fmtInt(e.qb_pass_yards)`). The
+// signature differs from the lib version only in tolerating `null`,
+// which is the common shape in this file's row type.
 function fmtInt(v: number | null): string {
-  return v === null || !Number.isFinite(v) ? "—" : String(v);
+  if (v === null || !Number.isFinite(v)) return "—";
+  return new Intl.NumberFormat("en-US").format(Math.round(v));
 }
 
 // Box-score counts that may carry half-credit (sacks, TFLs). Whole numbers
@@ -1252,11 +1264,13 @@ function Row({
   rank,
   columns,
   position,
+  season,
 }: {
   entry: LeaderboardEntry;
   rank: number;
   columns: SortableColumn[];
   position: string;
+  season: number;
 }) {
   const isEven = rank % 2 === 0;
   const rowClass = e.qualified
@@ -1309,11 +1323,12 @@ function Row({
                 {roleText}
               </span>
             )}
-            {!e.qualified && (
-              <span className="ml-2 rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] uppercase text-neutral-500">
-                low volume
-              </span>
-            )}
+            {/* The "low volume" badge on individual rows is redundant
+                here — unqualified rows only ever render inside the
+                low-volume <details> section on the page, which is
+                itself labeled "Low-Volume Passers". The status surfaces
+                instead on the player profile (where there's no section
+                heading for context). */}
           </div>
           {e.gradeTrend.length > 0 && (
             <div className="hidden sm:block">
@@ -1327,10 +1342,16 @@ function Row({
       </Td>
       <Td>
         {e.team_abbr ? (
-          <div className="flex items-center gap-1.5">
+          // Team chip → team profile (preserving the active season).
+          // Also gives OL rows a real click target since OL's "player"
+          // column is plain text (no per-OL profile).
+          <Link
+            href={{ pathname: `/teams/${e.team_abbr}`, query: { season } }}
+            className="group/team inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 -my-0.5 transition-colors hover:bg-neutral-900"
+          >
             <TeamLogo abbr={e.team_abbr} size={20} />
-            <span className="text-xs text-neutral-400">{e.team_abbr}</span>
-          </div>
+            <span className="text-xs text-neutral-400 group-hover/team:text-neutral-100">{e.team_abbr}</span>
+          </Link>
         ) : (
           <span className="text-neutral-500">—</span>
         )}

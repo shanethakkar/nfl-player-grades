@@ -130,7 +130,7 @@ export function SparklinePopover({ points, header = "Career grade" }: Props) {
               : "translate(-50%, -100%)",
           }}
         >
-          <div className="rounded-lg border border-neutral-700 bg-neutral-950/95 p-3 shadow-xl shadow-black/60 backdrop-blur">
+          <div className="animate-pop-in rounded-lg border border-neutral-700 bg-neutral-950/95 p-3 shadow-xl shadow-black/60 backdrop-blur">
             <SparklineDetail points={points} header={header} />
           </div>
         </div>

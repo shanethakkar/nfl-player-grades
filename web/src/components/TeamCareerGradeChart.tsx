@@ -79,6 +79,7 @@ export function TeamCareerGradeChart({ history, activeSeason }: Props) {
               strokeDasharray="4 3"
             />
             <polyline
+              className="chart-line"
               points={points}
               fill="none"
               stroke="#404040"
@@ -91,7 +92,7 @@ export function TeamCareerGradeChart({ history, activeSeason }: Props) {
               const color = gradeHex(g.overall_grade);
               const isActive = g.season === activeSeason;
               return (
-                <g key={g.season}>
+                <g key={g.season} className="chart-point">
                   <text
                     x={cx}
                     y={cy - 8}

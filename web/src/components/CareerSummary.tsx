@@ -89,7 +89,11 @@ function Stat({
   sub?: string | null;
 }) {
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3">
+    // Hover brightens the border + bumps the bg slightly, matching the
+    // PositionChip / PhaseChip treatment on /teams/[abbr]. Even though
+    // these cards aren't clickable, the hover feedback makes the page
+    // feel tactile and signals "you can read this card."
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900/60">
       <div className="text-[11px] uppercase tracking-wide text-neutral-500">
         {label}
       </div>
