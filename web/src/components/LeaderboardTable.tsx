@@ -1344,13 +1344,19 @@ function Row({
         {e.team_abbr ? (
           // Team chip → team profile (preserving the active season).
           // Also gives OL rows a real click target since OL's "player"
-          // column is plain text (no per-OL profile).
+          // column is plain text (no per-OL profile). Hover signal:
+          // text brightens + underline on the abbr (matches the
+          // player-name link in the sticky column). No background
+          // highlight — it would just clash with the row's alternating
+          // bg color.
           <Link
             href={{ pathname: `/teams/${e.team_abbr}`, query: { season } }}
-            className="group/team inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 -my-0.5 transition-colors hover:bg-neutral-900"
+            className="group/team inline-flex items-center gap-1.5"
           >
             <TeamLogo abbr={e.team_abbr} size={20} />
-            <span className="text-xs text-neutral-400 group-hover/team:text-neutral-100">{e.team_abbr}</span>
+            <span className="text-xs text-neutral-400 transition-colors group-hover/team:text-neutral-100 group-hover/team:underline">
+              {e.team_abbr}
+            </span>
           </Link>
         ) : (
           <span className="text-neutral-500">—</span>

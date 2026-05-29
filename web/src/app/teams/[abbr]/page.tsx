@@ -81,7 +81,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       : [[], null, null, [], []];
 
   return (
-    <main className="mx-auto max-w-[1400px] px-6 py-10">
+    <main className="mx-auto max-w-[1400px] px-4 py-10 sm:px-6">
       <BackLink />
 
       <div className="mt-4 mb-8 flex flex-wrap items-end justify-between gap-4">

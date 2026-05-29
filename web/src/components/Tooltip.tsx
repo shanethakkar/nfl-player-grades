@@ -82,6 +82,13 @@ export function Tooltip({ content, children, direction = "up" }: Props) {
     >
       {children}
       {pos && (
+        // Two-layer wrapping: the outer span owns positioning (fixed
+        // coords + the centering / above-trigger translate). The inner
+        // span owns the pop-in animation. CSS `transform` is a single
+        // property, so putting the animation on the same element as
+        // the positioning translate causes the animation's transform
+        // to override the inline one — that's why the tooltip used to
+        // render at the trigger's top instead of above it.
         <span
           style={{
             position: "fixed",
@@ -90,15 +97,17 @@ export function Tooltip({ content, children, direction = "up" }: Props) {
             transform: direction === "up" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
             zIndex: 9999,
           }}
-          className="pointer-events-none w-52 animate-pop-in whitespace-pre-line rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-neutral-300 shadow-lg"
+          className="pointer-events-none"
         >
-          {content}
-          <span
-            className={[
-              "absolute left-1/2 -translate-x-1/2 border-4 border-transparent",
-              direction === "up" ? "top-full border-t-neutral-700" : "bottom-full border-b-neutral-700",
-            ].join(" ")}
-          />
+          <span className="relative block w-52 animate-pop-in whitespace-pre-line rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-neutral-300 shadow-lg">
+            {content}
+            <span
+              className={[
+                "absolute left-1/2 -translate-x-1/2 border-4 border-transparent",
+                direction === "up" ? "top-full border-t-neutral-700" : "bottom-full border-b-neutral-700",
+              ].join(" ")}
+            />
+          </span>
         </span>
       )}
     </span>

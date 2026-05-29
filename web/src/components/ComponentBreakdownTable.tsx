@@ -51,7 +51,12 @@ export function ComponentBreakdownTable({ components, advanced, role }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-800">
+    // No border or rounded corners on mobile — the parent
+    // SeasonGradeCard's outer card border already contains the table,
+    // so a second nested border just eats horizontal space and adds
+    // visual chrome. On `sm:+` the table gets back its own contained
+    // look so it visually sits inside the card on desktop.
+    <div className="overflow-x-auto sm:rounded-lg sm:border sm:border-neutral-800">
       <table className="min-w-full text-sm">
         {advanced ? (
           <AdvancedView components={components} role={role} />
@@ -74,13 +79,19 @@ function FriendlyView({
     <>
       <thead className="bg-neutral-950 text-xs uppercase tracking-wide text-neutral-500">
         <tr>
-          <th className="px-3 py-2 text-left">Stat</th>
-          <th className="px-3 py-2 text-right">Value</th>
-          <th className="px-3 py-2 text-right">Percentile</th>
-          <th className="hidden px-3 py-2 text-right text-neutral-600 sm:table-cell">
+          <th className="px-2 py-2.5 text-left sm:px-3">Stat</th>
+          <th className="px-2 py-2.5 text-right sm:px-3">Value</th>
+          {/* Percentile column carries the bar + the numeric ranking.
+              `w-[42%]` reserves space for the bar so it doesn't get
+              crushed by the value/weight/sample columns when stat
+              names are short. */}
+          <th className="w-[42%] px-2 py-2.5 text-left sm:px-3">
+            Percentile
+          </th>
+          <th className="hidden px-3 py-2.5 text-right text-neutral-600 sm:table-cell">
             Weight
           </th>
-          <th className="hidden px-3 py-2 text-right text-neutral-600 sm:table-cell">
+          <th className="hidden px-3 py-2.5 text-right text-neutral-600 sm:table-cell">
             Sample
           </th>
         </tr>
@@ -103,7 +114,7 @@ function FriendlyView({
                   : "border-t border-neutral-900"
               }
             >
-              <td className="px-3 py-2 text-neutral-200">
+              <td className="px-2 py-2.5 text-neutral-200 sm:px-3">
                 {description ? (
                   <Tooltip content={description}>
                     <span className="cursor-help decoration-dotted underline-offset-4 hover:underline">
@@ -119,19 +130,45 @@ function FriendlyView({
                   </span>
                 )}
               </td>
-              <td className="px-3 py-2 text-right font-mono text-neutral-100">
+              <td className="px-2 py-2.5 text-right font-mono text-neutral-100 sm:px-3">
                 {formatComponentValue(c.component_name, c.raw_value)}
               </td>
-              <td
-                className="px-3 py-2 text-right font-mono"
-                style={{ color: pctColor }}
-              >
-                {formatPercentile(c.z_score)}
+              {/* Bar + percentile, sharing one cell. The bar fills the
+                  cell's leftover width (`flex-1`) so it scales
+                  naturally with the column; the percentile text sits
+                  to its right with a fixed width so vertical
+                  alignment is consistent down the column. The cell
+                  on `tracked, not graded` rows inherits the muted row
+                  bg + the bar inherits a desaturated color via row
+                  opacity, so they read as secondary without special
+                  handling. */}
+              <td className="px-2 py-2.5 sm:px-3">
+                <div className="flex items-center gap-2 sm:gap-2.5">
+                  <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800/80">
+                    {displayPct !== null && (
+                      <div
+                        className="bar-grow h-full rounded-full"
+                        style={
+                          {
+                            "--bar-end": `${displayPct}%`,
+                            backgroundColor: pctColor,
+                          } as React.CSSProperties
+                        }
+                      />
+                    )}
+                  </div>
+                  <span
+                    className="w-9 shrink-0 text-right font-mono text-xs tabular-nums sm:w-10 sm:text-sm"
+                    style={{ color: pctColor }}
+                  >
+                    {formatPercentile(c.z_score)}
+                  </span>
+                </div>
               </td>
-              <td className="hidden px-3 py-2 text-right font-mono text-neutral-500 sm:table-cell">
+              <td className="hidden px-3 py-2.5 text-right font-mono text-neutral-500 sm:table-cell">
                 {formatWeight(componentWeight(c.component_name, role))}
               </td>
-              <td className="hidden px-3 py-2 text-right font-mono text-neutral-500 sm:table-cell">
+              <td className="hidden px-3 py-2.5 text-right font-mono text-neutral-500 sm:table-cell">
                 {formatSample(c.component_name, c.sample_size)}
               </td>
             </tr>

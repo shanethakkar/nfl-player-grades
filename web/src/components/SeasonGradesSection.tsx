@@ -6,18 +6,12 @@ import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
 import { TeamLogo } from "@/components/TeamLogo";
-import { Tooltip } from "@/components/Tooltip";
 import {
   cbRoleLabel,
-  componentDescription,
-  componentLabel,
-  componentWeight,
   DATA_TIER_LABELS,
-  gradeHex,
   teRoleLabel,
-  zToPercentile,
 } from "@/lib/grades";
-import type { DataTier, SeasonGradeDetail, StatComponentDetail } from "@/types";
+import type { DataTier, SeasonGradeDetail } from "@/types";
 
 type Props = {
   grades: SeasonGradeDetail[];
@@ -79,7 +73,7 @@ function SeasonGradeCard({
     g.position === "CB" ? cbRoleLabel(g.role) :
     null;
   return (
-    <section className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-6">
+    <section className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -97,23 +91,39 @@ function SeasonGradeCard({
                 {roleText}
               </span>
             )}
-            <span className="group/tier relative">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                className="h-3.5 w-3.5 cursor-default text-neutral-600 hover:text-neutral-400"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-36 -translate-x-1/2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-center text-xs text-neutral-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover/tier:opacity-100">
-                {DATA_TIER_LABELS[g.data_tier as DataTier]}
-              </span>
-            </span>
+            {/* Data-tier indicator. Hidden entirely for tier 1 ("Rich
+                data") — the default, no need to flag it. For tier 2
+                ("Decent data") + tier 3 ("Limited data") we show:
+                  - Mobile: a small (i) icon with a hover/tap tooltip,
+                    since there's no room for an inline pill on top of
+                    the team + role chips
+                  - Desktop: an inline pill with the label visible, so
+                    readers can see the data quality at a glance
+                    without a hover round trip. */}
+            {g.data_tier !== 1 && (
+              <>
+                <span className="group/tier relative sm:hidden">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="h-3.5 w-3.5 cursor-default text-neutral-600 hover:text-neutral-400"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-36 -translate-x-1/2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-center text-xs text-neutral-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover/tier:opacity-100">
+                    {DATA_TIER_LABELS[g.data_tier as DataTier]}
+                  </span>
+                </span>
+                <span className="hidden rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 sm:inline-flex">
+                  {DATA_TIER_LABELS[g.data_tier as DataTier]}
+                </span>
+              </>
+            )}
           </div>
           <p className="mt-1 text-xs text-neutral-500">
             {g.qualified
@@ -142,11 +152,13 @@ function SeasonGradeCard({
 
       {g.context && <TeamContextPanel context={g.context} />}
 
-      <ComponentPercentileBars
-        components={g.components}
-        role={g.role ?? undefined}
-      />
-
+      {/* The percentile bars used to live above this table as a
+          standalone "summary at a glance" — but the same stat names
+          and percentile values appeared again as columns in the
+          table below, which made the two sections read as redundant.
+          The bar now lives inside the table's PERCENTILE column, so
+          stat / value / visual bar / numeric percentile / weight /
+          sample all sit on one row aligned in proper columns. */}
       <div className="mt-5">
         <ComponentBreakdownTable
           components={g.components}
@@ -156,77 +168,6 @@ function SeasonGradeCard({
         />
       </div>
     </section>
-  );
-}
-
-function ComponentPercentileBars({
-  components,
-  role,
-}: {
-  components: StatComponentDetail[];
-  role?: string;
-}) {
-  const rows = components
-    .filter((c) => c.z_score !== null && Number.isFinite(c.z_score!))
-    .map((c) => {
-      const w = componentWeight(c.component_name, role);
-      const isNegative = w !== null && w < 0;
-      const pct = zToPercentile(c.z_score);
-      const displayPct = pct === null ? null : isNegative ? 100 - pct : pct;
-      return { c, displayPct };
-    });
-
-  if (rows.length === 0) return null;
-
-  return (
-    <div className="mt-4 space-y-2">
-      {rows.map(({ c, displayPct }) => {
-        const color = displayPct !== null ? gradeHex(displayPct) : undefined;
-        return (
-          <div key={c.component_name} className="flex items-center gap-3">
-            <div className="flex w-32 shrink-0 items-center justify-end">
-              {(() => {
-                const desc = componentDescription(c.component_name);
-                return desc ? (
-                  <Tooltip content={desc}>
-                    <span className="cursor-help text-right text-[11px] text-neutral-500 decoration-dotted underline-offset-4 hover:underline">
-                      {componentLabel(c.component_name)}
-                    </span>
-                  </Tooltip>
-                ) : (
-                  <span className="text-right text-[11px] text-neutral-500">
-                    {componentLabel(c.component_name)}
-                  </span>
-                );
-              })()}
-            </div>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
-              {displayPct !== null && (
-                // `bar-grow` animates from width 0 to the value of the
-                // `--bar-end` CSS var, set inline so each bar gets its
-                // own target. Reads as the data being computed when the
-                // page first paints — cheap, premium.
-                <div
-                  className="bar-grow h-full rounded-full"
-                  style={
-                    {
-                      "--bar-end": `${displayPct}%`,
-                      backgroundColor: color,
-                    } as React.CSSProperties
-                  }
-                />
-              )}
-            </div>
-            <span
-              className="w-10 text-right font-mono text-[11px]"
-              style={{ color: color ?? "#737373" }}
-            >
-              {displayPct !== null ? `${displayPct}th` : "—"}
-            </span>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

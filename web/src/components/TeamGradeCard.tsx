@@ -46,7 +46,7 @@ export function TeamGradeCard({ summary, components, history, season }: Props) {
   for (const c of components) byPhase[c.phase].push(c);
 
   return (
-    <section className="rounded-xl border border-neutral-800 bg-neutral-950/70 p-6 sm:p-8">
+    <section className="rounded-xl border border-neutral-800 bg-neutral-950/70 p-4 sm:p-8">
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-500">
         Team grade · {season}
       </div>
@@ -98,16 +98,23 @@ export function TeamGradeCard({ summary, components, history, season }: Props) {
             const rows = byPhase[phase];
             if (rows.length === 0) return null;
             return (
+              // Mobile: label stacks above the chips so all chips
+              // share the same left edge — no staircase effect from
+              // the first chip starting after the inline label.
+              // Desktop (sm+): label sits inline at 112px wide and the
+              // chips flow to its right.
               <div
                 key={phase}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2"
+                className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2"
               >
-                <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 sm:w-28 sm:shrink-0">
                   {PHASE_LABEL[phase]}
                 </span>
-                {rows.map((r) => (
-                  <PositionChip key={r.position} row={r} season={season} />
-                ))}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:contents">
+                  {rows.map((r) => (
+                    <PositionChip key={r.position} row={r} season={season} />
+                  ))}
+                </div>
               </div>
             );
           })}
