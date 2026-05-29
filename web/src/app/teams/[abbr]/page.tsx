@@ -19,6 +19,11 @@ import {
   getTeamSeasons,
 } from "@/lib/queries";
 
+// ISR — page HTML cached at the edge for an hour. Queries are cached
+// for the same TTL via `unstable_cache`. Team data only refreshes when
+// the pipeline runs (Bowls in season, audits otherwise).
+export const revalidate = 3600;
+
 type PageProps = {
   params: Promise<{ abbr: string }>;
   searchParams: Promise<{ season?: string | string[] }>;

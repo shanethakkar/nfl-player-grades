@@ -10,6 +10,12 @@ import {
   getLeaderboard,
 } from "@/lib/queries";
 
+// ISR — Vercel caches the rendered HTML at the edge for an hour;
+// underlying queries are cached for the same TTL. Most visits become
+// CDN cache hits with zero server work. The data only changes when
+// the pipeline reruns (rare).
+export const revalidate = 3600;
+
 type SearchParams = Promise<{
   season?: string | string[];
   position?: string | string[];

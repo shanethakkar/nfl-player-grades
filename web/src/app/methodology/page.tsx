@@ -22,7 +22,10 @@ import {
   type TierExample,
 } from "@/lib/methodology";
 
-export const dynamic = "force-dynamic";
+// ISR — re-render the page at most once per hour. Underlying queries
+// are also wrapped in `unstable_cache` with the same TTL, so most
+// visits become CDN cache hits with zero server work.
+export const revalidate = 3600;
 
 export const metadata = {
   title: "How grades work — NFL Player Grades",

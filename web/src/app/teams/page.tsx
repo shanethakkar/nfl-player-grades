@@ -4,6 +4,11 @@ import { TeamLeaderboardTable } from "@/components/TeamLeaderboardTable";
 import { TeamsSeasonPicker } from "@/components/TeamsSeasonPicker";
 import { getGradedTeamSeasons, getTeamsLeaderboard } from "@/lib/queries";
 
+// ISR — page HTML cached at the edge for an hour; underlying queries
+// share the same TTL via `unstable_cache`. Data only changes when the
+// pipeline reruns.
+export const revalidate = 3600;
+
 type SearchParams = Promise<{ season?: string | string[] }>;
 
 type Props = { searchParams: SearchParams };

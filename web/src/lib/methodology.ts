@@ -10,6 +10,8 @@
 
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { sql } from "./db";
 
 export type TierExample = {
@@ -86,7 +88,7 @@ export const GRADE_TIERS: ReadonlyArray<{
  * "below average" band). That reads better than dredging up the
  * worst-graded qualified seasons in history.
  */
-export async function getGradeTierExamples(): Promise<TierBucket[]> {
+async function _getGradeTierExamples(): Promise<TierBucket[]> {
   const rows = await sql<
     {
       player_id: number;
@@ -159,6 +161,11 @@ export async function getGradeTierExamples(): Promise<TierBucket[]> {
     examples: byTier.get(t.id) ?? [],
   }));
 }
+export const getGradeTierExamples = unstable_cache(
+  _getGradeTierExamples,
+  ["grade-tier-examples"],
+  { revalidate: 3600 },
+);
 
 export type CurrentTopEntry = {
   player_id: number;
@@ -174,7 +181,7 @@ export type CurrentTopEntry = {
  * "see current top N" links so the page stays anchored to live data
  * instead of hardcoded names.
  */
-export async function getCurrentTopAtPosition(
+async function _getCurrentTopAtPosition(
   position: string,
   limit = 3,
 ): Promise<{ season: number | null; entries: CurrentTopEntry[] }> {
@@ -256,6 +263,11 @@ export async function getCurrentTopAtPosition(
     })),
   };
 }
+export const getCurrentTopAtPosition = unstable_cache(
+  _getCurrentTopAtPosition,
+  ["current-top-at-position"],
+  { revalidate: 3600 },
+);
 
 
 /** One top-team row for the team-grades methodology blocks. */
@@ -273,7 +285,7 @@ export type CurrentTopTeam = {
  * team-grades section on /methodology to anchor each phase card to a
  * live "best teams this year" block.
  */
-export async function getCurrentTopTeamsByPhase(
+async function _getCurrentTopTeamsByPhase(
   phase: "offense" | "defense" | "st",
   limit = 3,
 ): Promise<{ season: number | null; entries: CurrentTopTeam[] }> {
@@ -323,3 +335,8 @@ export async function getCurrentTopTeamsByPhase(
     })),
   };
 }
+export const getCurrentTopTeamsByPhase = unstable_cache(
+  _getCurrentTopTeamsByPhase,
+  ["current-top-teams-by-phase"],
+  { revalidate: 3600 },
+);

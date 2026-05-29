@@ -11,6 +11,11 @@ import { SeasonGradesSection } from "@/components/SeasonGradesSection";
 import { TeamLogo } from "@/components/TeamLogo";
 import { getPlayerDetailBySlug } from "@/lib/queries";
 
+// ISR — page HTML cached at the edge for an hour. Player profiles
+// only change when the grading pipeline reruns; until then every
+// visit can come from the edge cache with zero server work.
+export const revalidate = 3600;
+
 type PageProps = {
   params: Promise<{ slug: string }>;
 };

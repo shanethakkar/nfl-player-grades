@@ -37,7 +37,7 @@ import type {
  * Seasons that have any graded rows (any position). Ordered newest first
  * so the UI can default to the latest.
  */
-export async function getGradedSeasons(): Promise<number[]> {
+async function _getGradedSeasons(): Promise<number[]> {
   const rows = await sql<{ season: number }[]>`
     SELECT DISTINCT season
     FROM season_grades
@@ -45,12 +45,17 @@ export async function getGradedSeasons(): Promise<number[]> {
   `;
   return rows.map((r) => Number(r.season));
 }
+export const getGradedSeasons = unstable_cache(
+  _getGradedSeasons,
+  ["graded-seasons"],
+  { revalidate: 3600 },
+);
 
 /**
  * All 32 teams, ordered by conference → division → name. Used by the
  * /teams index page to render the grouped logo grid.
  */
-export async function getAllTeams(): Promise<Team[]> {
+async function _getAllTeams(): Promise<Team[]> {
   const rows = await sql<Team[]>`
     SELECT team_id, abbr, name, conference, division,
            primary_color, secondary_color
@@ -64,6 +69,11 @@ export async function getAllTeams(): Promise<Team[]> {
     division: r.division as Division,
   }));
 }
+export const getAllTeams = unstable_cache(
+  _getAllTeams,
+  ["all-teams"],
+  { revalidate: 3600 },
+);
 
 /**
  * Per-team-season aggregate grade (Overall + Offense/Defense/ST). Used
@@ -71,7 +81,7 @@ export async function getAllTeams(): Promise<Team[]> {
  * team_grades row exists (typically: very recent in-season state where
  * grading hasn't run yet, or pre-2018 seasons that lack the inputs).
  */
-export async function getTeamGrade(
+async function _getTeamGrade(
   teamAbbr: string,
   season: number,
 ): Promise<TeamGradeSummary | null> {
@@ -108,13 +118,18 @@ export async function getTeamGrade(
     st_percentile: row.st_percentile == null ? null : Number(row.st_percentile),
   };
 }
+export const getTeamGrade = unstable_cache(
+  _getTeamGrade,
+  ["team-grade"],
+  { revalidate: 3600 },
+);
 
 /**
  * Full overall-grade history for a team — one row per season the team
  * was graded (2018+ in v1). Drives the career-grade chart on the team
  * page; mirrors what the player page renders from season_grades.
  */
-export async function getTeamGradeHistory(
+async function _getTeamGradeHistory(
   teamAbbr: string,
 ): Promise<{ season: number; overall_grade: number }[]> {
   const rows = await sql<{ season: number; overall_grade: number }[]>`
@@ -129,13 +144,18 @@ export async function getTeamGradeHistory(
     overall_grade: Number(r.overall_grade),
   }));
 }
+export const getTeamGradeHistory = unstable_cache(
+  _getTeamGradeHistory,
+  ["team-grade-history"],
+  { revalidate: 3600 },
+);
 
 /**
  * One row per (phase, position) that fed the team grade. Ordered:
  * offense → defense → st, then by weight desc within each phase, so
  * the biggest contributors land first in the breakdown UI.
  */
-export async function getTeamGradeComponents(
+async function _getTeamGradeComponents(
   teamAbbr: string,
   season: number,
 ): Promise<TeamGradeComponent[]> {
@@ -163,18 +183,28 @@ export async function getTeamGradeComponents(
     total_snaps: Number(r.total_snaps),
   }));
 }
+export const getTeamGradeComponents = unstable_cache(
+  _getTeamGradeComponents,
+  ["team-grade-components"],
+  { revalidate: 3600 },
+);
 
 
 /**
  * Seasons we have team_grades rows for — drives the season picker on
  * the /teams leaderboard. Ordered newest first.
  */
-export async function getGradedTeamSeasons(): Promise<number[]> {
+async function _getGradedTeamSeasons(): Promise<number[]> {
   const rows = await sql<{ season: number }[]>`
     SELECT DISTINCT season FROM team_grades ORDER BY season DESC
   `;
   return rows.map((r) => Number(r.season));
 }
+export const getGradedTeamSeasons = unstable_cache(
+  _getGradedTeamSeasons,
+  ["graded-team-seasons"],
+  { revalidate: 3600 },
+);
 
 /**
  * Full /teams leaderboard for a given season: every team with its
@@ -184,7 +214,7 @@ export async function getGradedTeamSeasons(): Promise<number[]> {
  * The top-QB join uses a LATERAL subquery so each row picks one starter
  * (snap-leader) cleanly — preserves the leaderboard's "32 rows" cardinality.
  */
-export async function getTeamsLeaderboard(
+async function _getTeamsLeaderboard(
   season: number,
 ): Promise<TeamLeaderboardEntry[]> {
   const rows = await sql<TeamLeaderboardEntry[]>`
@@ -285,13 +315,18 @@ async function _attachTeamGradeTrend(
     gradeTrend: trend.get(e.team_id) ?? [],
   }));
 }
+export const getTeamsLeaderboard = unstable_cache(
+  _getTeamsLeaderboard,
+  ["teams-leaderboard"],
+  { revalidate: 3600 },
+);
 
 
 /**
  * Seasons we have any player_seasons rows for this team — used to
  * populate the year selector on the team page. Ordered newest first.
  */
-export async function getTeamSeasons(teamAbbr: string): Promise<number[]> {
+async function _getTeamSeasons(teamAbbr: string): Promise<number[]> {
   const rows = await sql<{ season: number }[]>`
     SELECT DISTINCT ps.season
     FROM player_seasons ps
@@ -301,12 +336,17 @@ export async function getTeamSeasons(teamAbbr: string): Promise<number[]> {
   `;
   return rows.map((r) => Number(r.season));
 }
+export const getTeamSeasons = unstable_cache(
+  _getTeamSeasons,
+  ["team-seasons"],
+  { revalidate: 3600 },
+);
 
 /**
  * Minimal team metadata for the header on /teams/[abbr]. Returns null
  * when no team matches the abbr (e.g. typo in URL).
  */
-export async function getTeamByAbbr(teamAbbr: string): Promise<Team | null> {
+async function _getTeamByAbbr(teamAbbr: string): Promise<Team | null> {
   const rows = await sql<Team[]>`
     SELECT team_id, abbr, name, conference, division,
            primary_color, secondary_color
@@ -323,6 +363,11 @@ export async function getTeamByAbbr(teamAbbr: string): Promise<Team | null> {
     division: row.division as Division,
   };
 }
+export const getTeamByAbbr = unstable_cache(
+  _getTeamByAbbr,
+  ["team-by-abbr"],
+  { revalidate: 3600 },
+);
 
 /**
  * Every player who appears in player_seasons for (teamAbbr, season),
@@ -854,7 +899,7 @@ export const getTeamLineup = unstable_cache(_getTeamLineup, ["team-lineup"], {
  * Includes "OL" if team_ol_grades has any rows (OL is team-level, lives
  * in a separate table — see ADR-0025).
  */
-export async function getGradedPositions(): Promise<string[]> {
+async function _getGradedPositions(): Promise<string[]> {
   const [playerRows, teamOlRows] = await Promise.all([
     sql<{ position: string }[]>`
       SELECT DISTINCT position
@@ -871,6 +916,11 @@ export async function getGradedPositions(): Promise<string[]> {
   }
   return positions;
 }
+export const getGradedPositions = unstable_cache(
+  _getGradedPositions,
+  ["graded-positions"],
+  { revalidate: 3600 },
+);
 
 /**
  * Attach a `gradeTrend` array (last N qualifying seasons) to each entry
