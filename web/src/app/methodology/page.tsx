@@ -2,6 +2,10 @@ import type React from "react";
 import Link from "next/link";
 
 import {
+  MethodologyTOCDesktop,
+  MethodologyTOCMobile,
+} from "@/components/MethodologyTOC";
+import {
   componentDescription,
   componentLabel,
   componentSharePercent,
@@ -162,15 +166,33 @@ export default async function MethodologyPage() {
   ];
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <Hero />
-      <GradeScale tiers={tiers} />
-      <PositionGrid positions={positions} />
-      <HowItsBuilt />
-      <TeamGradesSection cards={teamPhaseCards} />
-      <Limitations />
-      <DataSource />
-      <Footer />
+    // Two-column layout on `lg:` (≥1024px): main content + sticky TOC
+    // rail. On smaller viewports the TOC collapses to an "On this
+    // page" disclosure that sticks under the SiteHeader. Section
+    // headings have `scroll-mt-20` so anchor jumps don't land behind
+    // the sticky SiteHeader.
+    <main className="mx-auto max-w-[1280px] px-4 py-10 sm:px-6 sm:py-12">
+      {/* Mobile TOC — rendered above the content so it sticks to the
+          top of the viewport (just under the SiteHeader). Hidden at
+          lg:+ where the desktop right-rail takes over. */}
+      <div className="lg:hidden">
+        <MethodologyTOCMobile />
+      </div>
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_220px] lg:gap-12">
+        <div className="min-w-0">
+          <Hero />
+          <GradeScale tiers={tiers} />
+          <PositionGrid positions={positions} />
+          <HowItsBuilt />
+          <TeamGradesSection cards={teamPhaseCards} />
+          <Limitations />
+          <DataSource />
+          <Footer />
+        </div>
+        <aside className="hidden lg:block">
+          <MethodologyTOCDesktop />
+        </aside>
+      </div>
     </main>
   );
 }
@@ -206,7 +228,7 @@ function Hero() {
 
 function GradeScale({ tiers }: { tiers: TierBucket[] }) {
   return (
-    <section className="mb-16">
+    <section id="scale" className="mb-16 scroll-mt-20">
       <SectionHeading eyebrow="The scale" title="What each grade means" />
       {/* Change 3: continuous color ramp so the reader sees the full spectrum before reading. */}
       <div className="mb-4 h-2 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-emerald-400" />
@@ -289,7 +311,7 @@ type PositionCardData = {
 
 function PositionGrid({ positions }: { positions: PositionCardData[] }) {
   return (
-    <section className="mb-16">
+    <section id="positions" className="mb-16 scroll-mt-20">
       <SectionHeading
         eyebrow="What gets measured"
         title="Each position has its own model"
@@ -305,7 +327,10 @@ function PositionGrid({ positions }: { positions: PositionCardData[] }) {
 
 function PositionCard({ data }: { data: PositionCardData }) {
   return (
-    <article className="flex flex-col rounded-lg border border-neutral-800 bg-neutral-950/40 p-5">
+    <article
+      id={`pos-${data.position}`}
+      className="flex scroll-mt-20 flex-col rounded-lg border border-neutral-800 bg-neutral-950/40 p-5"
+    >
       <div className="mb-3">
         <div className="mb-0.5 font-mono text-xs uppercase tracking-wider text-neutral-500">
           {data.position}
@@ -333,9 +358,7 @@ function PositionCard({ data }: { data: PositionCardData }) {
         </p>
       )}
 
-      <div className="mt-4 border-t border-neutral-900 pt-4">
-        <CurrentTopBlock data={data} />
-      </div>
+      <CurrentTopBlock data={data} />
     </article>
   );
 }
@@ -377,17 +400,32 @@ function WeightChip({ name, weight }: ComponentEntry) {
 function CurrentTopBlock({ data }: { data: PositionCardData }) {
   if (data.top.season === null || data.top.entries.length === 0) {
     return (
-      <p className="text-xs text-neutral-500">
-        No qualified {data.position} grades yet.
-      </p>
+      <div className="mt-4 border-t border-neutral-900 pt-4">
+        <p className="text-xs text-neutral-500">
+          No qualified {data.position} grades yet.
+        </p>
+      </div>
     );
   }
+  // Native <details> so each card collapses independently with no
+  // client component. Closed by default — keeps the position grid
+  // compact at first paint, the methodology (weight chips) stays
+  // fully visible, and readers who want the "see it in practice"
+  // example players can pop them open per-position.
   return (
-    <div className="text-xs text-neutral-400">
-      <div className="mb-2 uppercase tracking-wider text-neutral-500">
-        Top {data.top.entries.length} this season ({data.top.season})
-      </div>
-      <ol className="space-y-1">
+    <details className="group/top mt-4 border-t border-neutral-900 pt-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs text-neutral-500 transition-colors hover:text-neutral-300">
+        <span className="uppercase tracking-wider">
+          Top {data.top.entries.length} this season ({data.top.season})
+        </span>
+        <span
+          aria-hidden
+          className="text-[10px] text-neutral-600 transition-transform group-open/top:rotate-180"
+        >
+          ▼
+        </span>
+      </summary>
+      <ol className="mt-3 space-y-1 text-xs text-neutral-400">
         {data.top.entries.map((e, i) => (
           <li key={e.player_id} className="flex items-center gap-2">
             <span className="w-4 text-neutral-600">{i + 1}.</span>
@@ -408,11 +446,11 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
           pathname: "/",
           query: { season: data.top.season, position: data.position },
         }}
-        className="mt-3 inline-block text-neutral-400 hover:text-neutral-100 hover:underline"
+        className="mt-3 inline-block text-xs text-neutral-400 hover:text-neutral-100 hover:underline"
       >
         See full {data.position} leaderboard →
       </Link>
-    </div>
+    </details>
   );
 }
 
@@ -439,7 +477,7 @@ const PHASE_ACCENT: Record<TeamPhase, { bar: string; chip: string; text: string 
 
 function TeamGradesSection({ cards }: { cards: TeamPhaseCardData[] }) {
   return (
-    <section className="mb-16">
+    <section id="team-grades" className="mb-16 scroll-mt-20">
       <SectionHeading
         eyebrow="Team grades"
         title="Rolling positions up to teams"
@@ -592,9 +630,7 @@ function TeamPhaseCard({ data }: { data: TeamPhaseCardData }) {
         ))}
       </div>
 
-      <div className="mt-4 border-t border-neutral-900 pt-4">
-        <TopTeamsBlock data={data} />
-      </div>
+      <TopTeamsBlock data={data} />
     </article>
   );
 }
@@ -602,17 +638,27 @@ function TeamPhaseCard({ data }: { data: TeamPhaseCardData }) {
 function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
   if (data.top.season === null || data.top.entries.length === 0) {
     return (
-      <p className="text-xs text-neutral-500">
-        No team grades for this phase yet.
-      </p>
+      <div className="mt-4 border-t border-neutral-900 pt-4">
+        <p className="text-xs text-neutral-500">
+          No team grades for this phase yet.
+        </p>
+      </div>
     );
   }
   return (
-    <div className="text-xs text-neutral-400">
-      <div className="mb-2 uppercase tracking-wider text-neutral-500">
-        Top {data.top.entries.length} this season ({data.top.season})
-      </div>
-      <ol className="space-y-1">
+    <details className="group/top mt-4 border-t border-neutral-900 pt-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs text-neutral-500 transition-colors hover:text-neutral-300">
+        <span className="uppercase tracking-wider">
+          Top {data.top.entries.length} this season ({data.top.season})
+        </span>
+        <span
+          aria-hidden
+          className="text-[10px] text-neutral-600 transition-transform group-open/top:rotate-180"
+        >
+          ▼
+        </span>
+      </summary>
+      <ol className="mt-3 space-y-1 text-xs text-neutral-400">
         {data.top.entries.map((e, i) => (
           <li key={e.team_id} className="flex items-center gap-2">
             <span className="w-4 text-neutral-600">{i + 1}.</span>
@@ -630,11 +676,11 @@ function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
       </ol>
       <Link
         href={{ pathname: "/teams", query: { season: data.top.season } }}
-        className="mt-3 inline-block text-neutral-400 hover:text-neutral-100 hover:underline"
+        className="mt-3 inline-block text-xs text-neutral-400 hover:text-neutral-100 hover:underline"
       >
         See full team leaderboard →
       </Link>
-    </div>
+    </details>
   );
 }
 
@@ -644,7 +690,7 @@ function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
 
 function HowItsBuilt() {
   return (
-    <section className="mb-16">
+    <section id="how-built" className="mb-16 scroll-mt-20">
       <SectionHeading eyebrow="The pipeline" title="How a grade is built" />
       <div className="grid gap-5 sm:grid-cols-3">
         <Step
@@ -790,7 +836,7 @@ function Limitations() {
   ];
 
   return (
-    <section className="mb-16">
+    <section id="limitations" className="mb-16 scroll-mt-20">
       <SectionHeading
         eyebrow="Known gaps"
         title="What we don't measure (yet)"
@@ -820,7 +866,7 @@ function Limitations() {
 
 function DataSource() {
   return (
-    <section className="mb-16">
+    <section id="data" className="mb-16 scroll-mt-20">
       <SectionHeading
         eyebrow="Where the data comes from"
         title="Built on nflverse"
