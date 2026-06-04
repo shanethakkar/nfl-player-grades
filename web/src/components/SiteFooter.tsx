@@ -7,8 +7,9 @@ import { Logo } from "./Logo";
  *
  *  1. Brand block — logo + name + one-line description so the footer
  *     still tells visitors what the site is even if they landed deep.
- *  2. Link columns — internal docs (Methodology / Research) + external
- *     project link (GitHub). Kept compact; no megafooter.
+ *  2. Link columns — internal docs (Methodology / Research), the
+ *     external project link (GitHub), and a Creator column linking to
+ *     the author's site + LinkedIn. Kept compact; no megafooter.
  *  3. Fine-print row — copyright, the NFL-disclaimer (required since
  *     we render team logos + names), data-source credit, and a build
  *     chip linking to the current commit on GitHub. The build chip is
@@ -41,7 +42,7 @@ export function SiteFooter() {
           </div>
 
           {/* Link columns */}
-          <div className="grid grid-cols-2 gap-x-10 gap-y-5 text-sm sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-10 gap-y-5 text-sm sm:grid-cols-4">
             <div>
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 Grades
@@ -76,7 +77,7 @@ export function SiteFooter() {
                 </li>
               </ul>
             </div>
-            <div className="col-span-2 sm:col-span-1">
+            <div>
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
                 Project
               </h3>
@@ -90,6 +91,35 @@ export function SiteFooter() {
                   >
                     <GitHubIcon />
                     GitHub
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                Creator
+              </h3>
+              <ul className="mt-2 space-y-1.5 text-neutral-300">
+                <li>
+                  <a
+                    href="https://shanethakkar.com"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1.5 hover:text-white"
+                  >
+                    <GlobeIcon />
+                    shanethakkar.com
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://www.linkedin.com/in/shanethakkar"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1.5 hover:text-white"
+                  >
+                    <LinkedInIcon />
+                    LinkedIn
                   </a>
                 </li>
               </ul>
@@ -144,6 +174,37 @@ function GitHubIcon() {
       aria-hidden
     >
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+function LinkedInIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden
+    >
+      <path d="M13.63 0H2.37A2.34 2.34 0 0 0 0 2.31v11.38A2.34 2.34 0 0 0 2.37 16h11.26A2.34 2.34 0 0 0 16 13.69V2.31A2.34 2.34 0 0 0 13.63 0ZM4.84 13.5H2.5V6.06h2.34v7.44Zm-1.17-8.46a1.36 1.36 0 1 1 0-2.71 1.36 1.36 0 0 1 0 2.71ZM13.5 13.5h-2.34V9.88c0-.86-.02-1.97-1.2-1.97-1.2 0-1.39.94-1.39 1.91v3.68H6.24V6.06h2.25v1.02h.03a2.46 2.46 0 0 1 2.22-1.22c2.37 0 2.81 1.56 2.81 3.59v4.05Z" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      aria-hidden
+    >
+      <circle cx="8" cy="8" r="6.6" />
+      <path d="M1.4 8h13.2M8 1.4c1.8 1.8 2.7 4.1 2.7 6.6S9.8 12.8 8 14.6C6.2 12.8 5.3 10.5 5.3 8S6.2 3.2 8 1.4Z" />
     </svg>
   );
 }
