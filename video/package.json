@@ -1,0 +1,37 @@
+{
+  "name": "nfl-grades-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "record:1": "tsx scripts/record-clip-1-leaderboard.ts",
+    "record:2": "tsx scripts/record-clip-2-player-profile.ts",
+    "record:3": "tsx scripts/record-clip-3-chart-team-nav.ts",
+    "record:4": "tsx scripts/record-clip-4-lineup.ts",
+    "record:5": "tsx scripts/record-clip-5-methodology.ts",
+    "record:all": "npm run record:1 && npm run record:2 && npm run record:3 && npm run record:4 && npm run record:5",
+    "convert": "tsx scripts/convert-clips-to-mp4.ts",
+    "convert:1": "tsx scripts/convert-clips-to-mp4.ts 1",
+    "convert:2": "tsx scripts/convert-clips-to-mp4.ts 2",
+    "convert:3": "tsx scripts/convert-clips-to-mp4.ts 3",
+    "convert:4": "tsx scripts/convert-clips-to-mp4.ts 4",
+    "convert:5": "tsx scripts/convert-clips-to-mp4.ts 5",
+    "studio": "remotion studio remotion-entry.tsx",
+    "render": "remotion render remotion-entry.tsx Promo out/promo.mp4"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "playwright": "^1.60.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.471",
+    "@remotion/google-fonts": "^4.0.471",
+    "@remotion/transitions": "^4.0.471",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "remotion": "^4.0.471"
+  }
+}

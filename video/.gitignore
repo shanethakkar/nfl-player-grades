@@ -1,0 +1,13 @@
+# Dependencies / build output (also covered by the repo-root .gitignore,
+# kept here so the video project is self-describing).
+node_modules/
+out/
+
+# Throwaway inspection frames extracted with scripts/extract-frames.ts
+# (and ad-hoc ffmpeg pulls) — regenerable, never source.
+frames/
+
+# Raw Playwright recordings (per-clip *-raw/ dirs hold the untrimmed
+# WebM). Regenerable via `npm run record:*`; only the trimmed
+# recordings/clip-N.mp4 inputs are tracked.
+recordings/*-raw/
