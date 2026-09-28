@@ -21,14 +21,19 @@ GARBAGE_TIME_SQL = """(
                  AND ABS(score_differential) > 14)
 )"""
 
-# Plays to include in the QB v1 grade. One row per dropback in REG
-# season, excluding aborted snaps, 2-pt conversions, and garbage time.
+# The QB who dropped back. nflverse leaves passer_player_id null on
+# scrambles and credits the QB as the rusher instead.
+QB_DROPBACK_PLAYER_SQL = "COALESCE(passer_player_id, rusher_player_id)"
+
+# Plays to include in the QB v1 grade. One row per dropback (pass, sack
+# or scramble) in REG season, excluding aborted snaps, 2-pt conversions,
+# and garbage time.
 QB_DROPBACK_FILTER_SQL = f"""
     season_type = 'REG'
     AND qb_dropback = TRUE
     AND (aborted_play IS NULL OR aborted_play = FALSE)
     AND (two_point_attempt IS NULL OR two_point_attempt = FALSE)
-    AND passer_player_id IS NOT NULL
+    AND {QB_DROPBACK_PLAYER_SQL} IS NOT NULL
     AND NOT {GARBAGE_TIME_SQL}
 """.strip()
 

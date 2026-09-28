@@ -191,11 +191,38 @@ class TestExtractFeatures:
         m = df[df["gsis_id"] == "00-0033873"]
         assert len(m) == 1
         row = m.iloc[0]
-        # Mahomes 2024: ~600 dropbacks, slightly positive EPA, +CPOE.
-        # Garbage-time filter will knock some off - expect 400-650.
-        assert 400 <= row["n_dropbacks"] <= 650
+        # Mahomes 2024: ~650 dropbacks including scrambles, slightly
+        # positive EPA, +CPOE. Garbage-time filter will knock some off.
+        assert 400 <= row["n_dropbacks"] <= 700
         assert -0.10 < row["epa_per_dropback"] < 0.25
         assert 0.40 < row["success_rate"] < 0.60
+
+    def test_dropbacks_include_scrambles(self, conn, has_2024_plays) -> None:
+        # nflverse leaves passer_player_id null on scrambles and credits the
+        # QB as rusher. Jayden Daniels led the league in scrambles in 2024.
+        daniels = "00-0039910"
+        countable = """
+            season = 2024 AND season_type = 'REG' AND qb_dropback
+            AND (aborted_play IS NULL OR aborted_play = FALSE)
+            AND (two_point_attempt IS NULL OR two_point_attempt = FALSE)
+            AND NOT ((qtr >= 4 AND ABS(score_differential) > 21)
+                  OR (qtr = 4 AND game_seconds_remaining < 300
+                              AND ABS(score_differential) > 14))
+        """
+        n_passer, n_scrambles = conn.execute(
+            text(
+                f"SELECT COUNT(*) FILTER (WHERE passer_player_id = :id), "
+                f"COUNT(*) FILTER (WHERE qb_scramble AND rusher_player_id = :id) "
+                f"FROM plays WHERE {countable}"
+            ),
+            {"id": daniels},
+        ).one()
+        assert n_scrambles > 50
+
+        row = extract_features(conn, 2024).set_index("gsis_id").loc[daniels]
+        assert row["n_dropbacks"] == n_passer + n_scrambles
+        # CPOE only exists on pass attempts, so scrambles don't add to it.
+        assert row["n_pass_attempts"] < n_passer
 
 
 class TestWriteResults:

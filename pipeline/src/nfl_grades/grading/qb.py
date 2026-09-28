@@ -22,7 +22,7 @@ from sqlalchemy.engine import Connection
 from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
-from nfl_grades.grading.filters import QB_DROPBACK_FILTER_SQL
+from nfl_grades.grading.filters import QB_DROPBACK_FILTER_SQL, QB_DROPBACK_PLAYER_SQL
 from nfl_grades.grading.weights import (
     QB_V1_CONFIDENCE_FULL_DROPBACKS,
     QB_V1_QUALIFIED_MIN_DROPBACKS,
@@ -87,8 +87,14 @@ def run(season: int) -> RunResult:
 # section fills up with single-dropback gadget throwers.
 
 _FEATURES_SQL = text(f"""
+    WITH dropbacks AS (
+        SELECT {QB_DROPBACK_PLAYER_SQL} AS gsis_id, pass_attempt, cpoe, epa, success
+        FROM plays
+        WHERE season = :season
+          AND {QB_DROPBACK_FILTER_SQL}
+    )
     SELECT
-        pl.passer_player_id                      AS gsis_id,
+        pl.gsis_id                               AS gsis_id,
         p.player_id                              AS player_id,
         p.full_name                              AS full_name,
         COUNT(*)                                 AS n_dropbacks,
@@ -96,12 +102,10 @@ _FEATURES_SQL = text(f"""
         AVG(pl.epa)                              AS epa_per_dropback,
         AVG(pl.cpoe) FILTER (WHERE pl.pass_attempt AND pl.cpoe IS NOT NULL) AS cpoe,
         AVG(pl.success::int)                     AS success_rate
-    FROM plays pl
-    JOIN players p ON p.gsis_id = pl.passer_player_id
-    WHERE pl.season = :season
-      AND p.position = 'QB'
-      AND {QB_DROPBACK_FILTER_SQL}
-    GROUP BY pl.passer_player_id, p.player_id, p.full_name
+    FROM dropbacks pl
+    JOIN players p ON p.gsis_id = pl.gsis_id
+    WHERE p.position = 'QB'
+    GROUP BY pl.gsis_id, p.player_id, p.full_name
     HAVING COUNT(*) >= 1
 """)
 

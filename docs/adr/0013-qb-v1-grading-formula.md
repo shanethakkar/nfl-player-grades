@@ -51,6 +51,10 @@ plays.two_point_attempt = FALSE
 NOT garbage_time
 ```
 
+The play belongs to `COALESCE(passer_player_id, rusher_player_id)`:
+nflverse leaves the passer null on scrambles and credits the QB as the
+rusher (see v1.2 below).
+
 **Garbage-time** (ADR-0013 formalizes the proposal's rule):
 
 ```
@@ -171,3 +175,19 @@ variance weighting. Those go in v2 and get their own ADR.
 **Known limitation surfaced (not addressed in v1.1):** the audit found `qb_rush_epa_per_rush` to be an independent signal (YoY 0.398, max_r −0.08 with existing) measuring **mobile-QB value** — a real skill not in v1 (Lamar/Allen/Hurts get incomplete credit). Weak Pro Bowl validity (+0.04) and per-rush attribution issues (scramble vs designed-rush) kept it out for now. Documented for revisit in a future revision once we have better data.
 
 **Tooling:** shipped via the new preview/regrade workflow ([`docs/grading/iteration-workflow.md`](../grading/iteration-workflow.md)). End-to-end ~2 minutes mechanical work.
+
+### v1.2 (2026-09-28) — scrambles counted (bug fix, Grading v2 #3)
+
+**Dropbacks now include scrambles.** The filter required `passer_player_id IS NOT NULL`, but nflverse leaves the passer null on scrambles and credits the QB as rusher. Every scramble was dropped (2024: 1,062 plays at +0.54 EPA), even though this ADR and `qb-v1-proposal.md` say scrambles count. The play is now attributed to `COALESCE(passer_player_id, rusher_player_id)`. In 2024 every `qb_dropback` play has one or the other; the null-passer plays are exactly the scrambles.
+
+- `qb_epa_per_dropback` and `qb_success_rate` count scrambles. `n_dropbacks` (the shrinkage n, the qualified threshold and confidence) counts them too.
+- `qb_cpoe` is unchanged. It only exists on pass attempts.
+- Weights, k values, garbage-time, aborted-play and 2-pt exclusions are unchanged. Designed QB runs are still not in the grade.
+
+Source: F5 in [`docs/grading/audits/2026-09-27-system-audit.md`](../grading/audits/2026-09-27-system-audit.md).
+
+**Face-check 2024 (qualified):** Spearman old vs new 0.992. Jayden Daniels (+68 scrambles) EPA/db .086 → .168, rank 14 → 10, grade +10.2. Drake Maye 20 → 17 (+10.1). Jalen Hurts .115 → .184, 7 → 5 (+5.5). Mahomes 10 → 9 (+3.9). Pocket passers with few scrambles drift down slightly as the cohort's EPA spread shifts (Carr −4.0, Cousins −3.1). Top 3 unchanged.
+
+**Other seasons:** Spearman old vs new 0.980–0.994 in every season 2016–2025. The biggest risers are the scramblers: Justin Fields 2022 (+16.1), Kaepernick 2016 (+12.8), Hurts 2021 (+8.6), Josh Allen 2022 (6 → 2).
+
+**Restatement:** QB 2016–2025 on Neon with the full `grade` path (a SQL extract change, so `regrade` can't apply it). Pending owner sign-off on the face-check.
