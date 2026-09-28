@@ -6,7 +6,10 @@ Three tools introduced 2026-05-14 collapse the pre-existing 7-step shipping proc
 - **`pipeline/scripts/sync_weights_to_web.py`** — keep `web/src/lib/grades.ts` in sync with `pipeline/.../weights.py`
 - **`nflgrades regrade`** — recompute composite/percentile from existing z-scores, no SQL extract
 
-Always preview first. Always sync to web before regrading. Always regrade Neon, not local.
+Path B changes (grader code, not weights) have their own preview:
+**`pipeline/scripts/preview_extract.py`** re-runs the grader's extract from the working tree and diffs it against the stored grades.
+
+Always preview first. Always sync to web before regrading. Always regrade Neon, not local. Always re-run `grade-teams` after changing any player grades.
 
 ## Decision: which path?
 
@@ -16,7 +19,7 @@ Always preview first. Always sync to web before regrading. Always regrade Neon, 
 
 **Path B — Schema change** (rare):
 - Adding a new component, removing one entirely, changing a SQL extract, or adding a new graded position.
-- Use the full `grade` (not `regrade`) pipeline. See [checklists/add-position.md](checklists/add-position.md) for new positions, [checklists/removing-a-component.md](checklists/removing-a-component.md) for component removal.
+- Use the full `grade` (not `regrade`) pipeline. See [Path B](#path-b--grader-code-change) below, [checklists/add-position.md](checklists/add-position.md) for new positions, [checklists/removing-a-component.md](checklists/removing-a-component.md) for component removal.
 
 If unsure, ask: "does this require touching `_RAW_VALUE_COLS`, `_SAMPLE_SIZE_COLS`, or the grader's SQL?" If yes → Path B. If no → Path A.
 
@@ -40,6 +43,9 @@ python pipeline/scripts/sync_weights_to_web.py
 export DATABASE_URL="postgresql+psycopg://...neon...neondb?..."
 for y in 2016 2017 2018 2019 2020 2021 2022 2023 2024 2025; do
   nflgrades regrade --season $y --position RB
+  # Team grades are built from each player's composite_z (ADR-0026), so
+  # they go stale whenever player grades change.
+  nflgrades grade-teams --season $y
 done
 
 # 5. FACE-CHECK the new top-15 on Neon (optional but recommended)
@@ -57,6 +63,31 @@ git push
 
 End-to-end on the RB v1.2 ship (rb_rec_epa_per_target +0.18 → +0.05): steps 1-5 took **~30 seconds** of wall-clock. Steps 6-7 (documentation) take longer, but that's the *thinking* — the *shipping* is fast.
 
+## Path B — grader code change
+
+Use this for a change to a grader's SQL extract, filter or cohort (e.g. #3: QB dropbacks now count scrambles). `nflgrades preview` can't show these, because it rescores the stored z-scores.
+
+```bash
+# 1. PREVIEW (read-only): runs the working-tree extract + compute_grades
+#    and diffs against the stored season_grades
+uv run python pipeline/scripts/preview_extract.py --season 2024 --position QB --top 30
+# Repeat for a few other seasons. Check the rank correlation and that the
+# movers are the players the change should move.
+
+# 2. GET SIGN-OFF on the face-check before touching Neon.
+
+# 3. RESTATE Neon: full grade, then the two follow-up steps, for every season
+for y in 2016 2017 2018 2019 2020 2021 2022 2023 2024 2025; do
+  nflgrades grade --season $y --position QB
+  nflgrades backfill-team-context --season $y   # grade leaves team_abbr NULL
+  nflgrades grade-teams --season $y             # team grades read composite_z
+done
+
+# 4. ADR revision-history entry with the face-check numbers, then commit.
+```
+
+**The follow-up steps are required.** `grade` deletes and re-inserts the position's `season_grades` rows, and the new rows have `team_abbr = NULL`. Until `backfill-team-context` runs, the leaderboard shows no team for that position. `grade-teams` writes nothing for 2016-2017 (no OL grades before 2018, see ADR-0026); that is expected.
+
 ## What each tool does (so you can debug)
 
 ### `nflgrades preview --season Y --position P --weight K=V [--show-deltas]`
@@ -69,6 +100,13 @@ End-to-end on the RB v1.2 ship (rb_rec_epa_per_target +0.18 → +0.05): steps 1-
 - Output: top-N with current vs preview grade and delta, plus optional biggest-movers section.
 
 Useful for "what if rb_rec_epa was +0.05?" exploration before committing. Verified: preview with no overrides produces exactly the shipped grades (max delta 0.0000).
+
+### `pipeline/scripts/preview_extract.py --season Y --position P [--top N]`
+
+- Runs the position's `extract_features` + `compute_grades` from the working tree, in a transaction it rolls back.
+- Diffs against stored `season_grades`: Spearman over qualified players, the new top N with stored rank/grade, biggest movers, and players entering or leaving the graded cohort.
+- **Read-only.** Player positions only; OL (team-level) is not supported.
+- With no code change it matches the stored grades exactly (Spearman 1.000, all deltas 0).
 
 ### `pipeline/scripts/sync_weights_to_web.py [--check]`
 
@@ -96,12 +134,13 @@ Speed: ~5× faster than full `grade` on a single season (TE 2024: 1.30s full vs 
 - **Does not handle TE blocking-weight redistribution** unless the weight is in both dicts. If you change a weight that only exists in `TE_V1_WEIGHTS` (like `te_target_earn_rate`), blocking-tier TEs won't see that change — matches production behavior. If you want to change blocking weights too, edit `TE_V1_BLOCKING_WEIGHTS` and re-run sync.
 - **Does not auto-update ADRs or research notes.** Those still need hand-written rationale — that's the *why* of the change, which is the part worth documenting. Use the ADR revision history pattern (see ADR-0014 v1.2 for a recent example).
 - **Does not handle a new component or removed component.** Those need a real grader code change (Python SQL, raw_value_cols, etc.). Use the full `grade` path.
+- **Does not refresh team grades.** `regrade` changes `composite_z`, which team grades aggregate. Run `grade-teams` for the same seasons (step 4 above).
 
 ## When NOT to use this workflow (use Path B instead)
 
 - Adding a new component → schema change, full `grade` path. See [checklists/add-position.md](checklists/add-position.md).
 - Removing a component entirely (not just zeroing weight) → schema change, full `grade` path. See [checklists/removing-a-component.md](checklists/removing-a-component.md) for the `_DELETE_STAT_COMPONENTS` gotcha (must be `LIKE 'pos_%'`).
-- Changing a SQL extract (e.g., a different filter, a new join) → full `grade` path; regrade can't help because the z-scores would be stale.
+- Changing a SQL extract (e.g., a different filter, a new join) → [Path B](#path-b--grader-code-change); regrade can't help because the z-scores would be stale.
 - Adding a new graded position → full [checklists/add-position.md](checklists/add-position.md) 13-step.
 
 ## Files this workflow touches
@@ -109,6 +148,7 @@ Speed: ~5× faster than full `grade` on a single season (TE 2024: 1.30s full vs 
 - `pipeline/src/nfl_grades/grading/weights.py` — source of truth for weights
 - `web/src/lib/grades.ts` — auto-synced (between AUTOGEN markers)
 - `season_grades` table on Neon — composite_grade, composite_z, percentile (via regrade)
+- `team_grades` / `team_grade_components` on Neon (via `grade-teams`)
 - `docs/adr/00XX-...md` — hand-edited revision history
 - `docs/grading/research/*.md` — hand-edited rationale per position
 

@@ -33,7 +33,7 @@ WHERE season = :season AND component_name LIKE 'pos_%'
    - Remove from the imports if it was named
    - **Verify `_DELETE_STAT_COMPONENTS` uses `LIKE` not `= ANY`**.
 
-3. **Re-grade all seasons for that position.** The `LIKE`-based delete will wipe the removed component's rows; the new INSERT writes only the kept components.
+3. **Re-grade all seasons for that position.** The `LIKE`-based delete will wipe the removed component's rows; the new INSERT writes only the kept components. Follow each `grade` with `backfill-team-context` and `grade-teams` (see [Path B](../iteration-workflow.md#path-b--grader-code-change)); `grade` leaves `team_abbr` NULL.
 
 4. **Verify in Neon**:
    ```sql

@@ -33,9 +33,9 @@ To use local Docker instead, set `DATABASE_URL` in the shell first (see
 The pure grading tests (`tests/grading/test_{scoring,composite,sigmoid,zscore,empirical_bayes}.py`)
 touch no database.
 
-## Known failures (as of 2026-09-27, before issue #6)
+## Known failures (as of 2026-09-28, after issue #3)
 
-The full suite is 206 passed / 7 failed. These 7 were failing before the
+The full suite is 215 passed / 7 failed. These 7 were failing before the
 Grading v2 work and are **not** regressions:
 
 | Test | Cause |

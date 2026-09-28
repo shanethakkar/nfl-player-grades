@@ -167,11 +167,14 @@ Set-Location pipeline
 # Ingest
 foreach ($s in 2018..2025) { nflgrades ingest pfr-def-coverage-pos --season $s }
 
-# Grade
-foreach ($s in 2018..2025) { nflgrades grade --season $s --position POS }
-
-# Optional: backfill team context if offensive position
-# nflgrades backfill-team-context --season $s
+# Grade, then the required follow-ups. `grade` leaves season_grades.team_abbr
+# NULL for every position until backfill-team-context runs, and team grades
+# aggregate player composite_z (ADR-0026).
+foreach ($s in 2018..2025) {
+  nflgrades grade --season $s --position POS
+  nflgrades backfill-team-context --season $s
+  nflgrades grade-teams --season $s
+}
 ```
 
 Sanity check: query top 10 qualified players for the most recent season and verify they are recognizable names at the right tier.

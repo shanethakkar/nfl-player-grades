@@ -228,8 +228,14 @@ data and write to their own table family.
 
 ## Qualification
 
-Every team that played a season is graded. 32 teams × 10 seasons (2016-2025)
-= 320 team-season rows. No threshold gate.
+Every team that played a season is graded. No threshold gate.
+
+Coverage is 2018-2025: 32 teams × 8 seasons = 256 team-season rows.
+Team grading needs the OL unit grade, and OL grades begin in 2018 because
+PFR rush data does (ADR-0025). For 2016-2017, `grade-teams` logs a
+"missing data" warning and writes nothing; it exits before deleting, so
+it never removes existing rows. (Corrected 2026-09-28; this section
+originally claimed 2016-2025.)
 
 ---
 
