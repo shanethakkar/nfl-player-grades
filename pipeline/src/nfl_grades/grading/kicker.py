@@ -27,10 +27,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
-    K_COMPONENT_FGOE_PER_ATT,
     K_V1_1_BASELINES,
     K_V1_CONFIDENCE_FULL_FG_ATT,
     K_V1_MIN_FG_ATT_TO_GRADE,
@@ -224,25 +223,9 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
         df[f"raw_{component}"] = raw
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
-        z_frame[component] = z.fillna(0.0)
+        z_frame[component] = z
 
-    df["composite_z"] = composite.combine(z_frame, K_V1_WEIGHTS)
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
-    if len(qualified_grades) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: (
-                100.0 * np.searchsorted(qualified_grades, g, side="right") / len(qualified_grades)
-                if not pd.isna(g)
-                else np.nan
-            )
-        )
-    else:
-        df["percentile"] = 50.0
-    df.loc[df["grade"].isna(), "percentile"] = np.nan
-
-    return df
+    return df.assign(**scoring.score(z_frame, K_V1_WEIGHTS, df["qualified"]))
 
 
 # ---------------------------------------------------------------------------

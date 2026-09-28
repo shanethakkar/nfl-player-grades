@@ -52,7 +52,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
     CB_ROLE_HYBRID,
@@ -294,30 +294,12 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
 
-        # NaN z-scores (missing YAC or degenerate edge cases) are replaced with
-        # 0.0 (neutral) before entering the composite. The raw NaN is preserved
-        # in stat_components.z_score so the UI renders "—" rather than "0.0".
-        z_frame[component] = z.fillna(0.0)
+        # NaN z-scores (missing YAC or degenerate edge cases) are scored as
+        # neutral. The raw NaN is preserved in stat_components.z_score so the
+        # UI renders "—" rather than "0.0".
+        z_frame[component] = z
 
-    # --- composite + sigmoid ---
-    df["composite_z"] = composite.combine(z_frame, CB_V1_WEIGHTS)
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    # --- percentile against the qualified cohort ---
-    qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
-    if len(qualified_grades) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: (
-                100.0 * np.searchsorted(qualified_grades, g, side="right") / len(qualified_grades)
-                if not pd.isna(g)
-                else np.nan
-            )
-        )
-    else:
-        df["percentile"] = 50.0
-    df.loc[df["grade"].isna(), "percentile"] = np.nan
-
-    return df
+    return df.assign(**scoring.score(z_frame, CB_V1_WEIGHTS, df["qualified"]))
 
 
 # ---------------------------------------------------------------------------

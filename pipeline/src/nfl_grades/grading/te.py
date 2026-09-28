@@ -12,13 +12,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import RB_REC_FILTER_SQL
 from nfl_grades.grading.weights import (
@@ -302,31 +301,13 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
         df[f"raw_{component}"] = raw
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
-        z_frame[component] = z.fillna(0.0)
+        z_frame[component] = z
 
-    # Per-row composite: full weights vs blocking (earn omitted in weights dict).
-    comp_z: list[float] = []
-    for i, r in df.iterrows():
-        w = TE_V1_BLOCKING_WEIGHTS if r["role"] == TE_ROLE_BLOCKING else TE_V1_WEIGHTS
-        sub = z_frame.loc[[i], list(w.keys())]
-        comp_z.append(float(composite.combine(sub, w).iloc[0]))
-    df["composite_z"] = comp_z
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
-    if len(qualified_grades) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: (
-                100.0 * np.searchsorted(qualified_grades, g, side="right") / len(qualified_grades)
-                if not pd.isna(g)
-                else np.nan
-            )
-        )
-    else:
-        df["percentile"] = 50.0
-    df.loc[df["grade"].isna(), "percentile"] = np.nan
-
-    return df
+    # Blocking TEs are scored on a Formula without target earn rate.
+    formulas = df["role"].map(
+        lambda role: TE_V1_BLOCKING_WEIGHTS if role == TE_ROLE_BLOCKING else TE_V1_WEIGHTS
+    )
+    return df.assign(**scoring.score(z_frame, formulas, df["qualified"]))
 
 
 _DELETE_STAT_COMPONENTS = text("""

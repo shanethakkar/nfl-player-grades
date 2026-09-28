@@ -15,13 +15,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import QB_DROPBACK_FILTER_SQL
 from nfl_grades.grading.weights import (
@@ -168,27 +167,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"z_{component}"] = z
         z_frame[component] = z
 
-    # --- composite + sigmoid ---
-    df["composite_z"] = composite.combine(z_frame, QB_V1_WEIGHTS)
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    # --- percentile within this position+season, qualified-only ranking
-    #     but all rows receive a percentile (based on their grade vs the
-    #     qualified distribution). Unqualified QBs get their percentile
-    #     against the qualified cohort too — "if you played starter
-    #     reps, here's where you'd stack."
-    qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
-    if len(qualified_grades) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: (
-                100.0 * np.searchsorted(qualified_grades, g, side="right") / len(qualified_grades)
-            )
-        )
-    else:
-        df["percentile"] = 50.0
-    df.loc[df["grade"].isna(), "percentile"] = np.nan
-
-    return df
+    # A QB missing a Component (no pass attempts -> no CPOE) is left
+    # ungraded rather than imputed (ADR-0013).
+    return df.assign(**scoring.score(z_frame, QB_V1_WEIGHTS, df["qualified"], missing="ungraded"))
 
 
 # ---------------------------------------------------------------------------

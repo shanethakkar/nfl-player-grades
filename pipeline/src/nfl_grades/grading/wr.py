@@ -40,13 +40,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import RB_REC_FILTER_SQL
 from nfl_grades.grading.weights import (
@@ -336,33 +335,12 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"adjusted_{component}"] = shrunk  # v1: no opp-adj, adjusted == shrunk
         df[f"z_{component}"] = z
 
-        # ADR-0015: any NaN z-score (from missing NGS separation, from
-        # zero-reception / zero-target degenerate cases, etc.) is
-        # replaced with 0 (neutral) before entering the composite. The
-        # true NaN is preserved in stat_components.z_score so the UI
-        # can render "-" instead of "0.0".
-        z_for_composite = z.fillna(0.0)
-        z_frame[component] = z_for_composite
+        # ADR-0015: a NaN z-score (missing NGS separation, zero-target
+        # degenerate cases) is scored as neutral. The true NaN is kept in
+        # stat_components.z_score so the UI renders "-" instead of "0.0".
+        z_frame[component] = z
 
-    # --- composite + sigmoid ---
-    df["composite_z"] = composite.combine(z_frame, WR_V1_WEIGHTS)
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    # --- percentile against the qualified cohort ---
-    qualified_grades = df.loc[df["qualified"], "grade"].sort_values().to_numpy()
-    if len(qualified_grades) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: (
-                100.0 * np.searchsorted(qualified_grades, g, side="right") / len(qualified_grades)
-                if not pd.isna(g)
-                else np.nan
-            )
-        )
-    else:
-        df["percentile"] = 50.0
-    df.loc[df["grade"].isna(), "percentile"] = np.nan
-
-    return df
+    return df.assign(**scoring.score(z_frame, WR_V1_WEIGHTS, df["qualified"]))
 
 
 # ---------------------------------------------------------------------------

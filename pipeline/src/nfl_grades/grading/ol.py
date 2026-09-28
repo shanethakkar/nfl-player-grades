@@ -22,17 +22,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import composite, empirical_bayes, sigmoid, zscore
+from nfl_grades.grading import empirical_bayes, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.weights import (
-    OL_COMPONENT_PRESSURE_PROXY,
-    OL_COMPONENT_YBC_PER_CARRY,
     OL_V1_RAW_VALUE_COLS,
     OL_V1_SAMPLE_SIZE_COLS,
     OL_V1_SHRINKAGE_K,
@@ -159,20 +156,9 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
         df[f"raw_{component}"] = raw
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
-        z_frame[component] = z.fillna(0.0)
+        z_frame[component] = z
 
-    df["composite_z"] = composite.combine(z_frame, OL_V1_WEIGHTS)
-    df["grade"] = sigmoid.to_grade(df["composite_z"].to_numpy())
-
-    grades_sorted = df["grade"].sort_values().to_numpy()
-    if len(grades_sorted) >= 2:
-        df["percentile"] = df["grade"].apply(
-            lambda g: 100.0 * np.searchsorted(grades_sorted, g, side="right") / len(grades_sorted)
-        )
-    else:
-        df["percentile"] = 50.0
-
-    return df
+    return df.assign(**scoring.score(z_frame, OL_V1_WEIGHTS, df["qualified"]))
 
 
 # ---------------------------------------------------------------------------

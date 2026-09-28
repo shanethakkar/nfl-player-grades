@@ -4,10 +4,11 @@ This is the "fast iteration" path for tuning formula weights:
 
     nflgrades preview --season 2024 --position TE --weight te_drop_rate=-0.10
 
-The flow reads existing `stat_components.z_score` for the qualified cohort,
+The flow reads existing `stat_components.z_score` for the position-season,
 applies a candidate weight dict (defaults from `weights.py`, overridden by
-`--weight` flags), recomputes composite_z + grade, and prints a side-by-side
-comparison against the currently-shipped grade.
+`--weight` flags), rescores through the grader's own scoring step
+(`scoring.score`), and prints a side-by-side comparison against the
+currently-shipped grade.
 
 Read-only — does not write to `season_grades` or `stat_components`. Use the
 `grade --skip-extract` path (TBD) to commit the change after a preview run.
@@ -22,18 +23,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from nfl_grades.db import get_engine
-from nfl_grades.grading import composite, sigmoid
+from nfl_grades.grading import scoring
 from nfl_grades.grading.weights import (
     CB_V1_WEIGHTS,
     EDGE_V1_WEIGHTS,
     IDL_V1_WEIGHTS,
+    K_V1_WEIGHTS,
     LB_V1_WEIGHTS,
+    P_V1_WEIGHTS,
     QB_V1_WEIGHTS,
     RB_V1_WEIGHTS,
     S_V1_WEIGHTS,
@@ -54,7 +56,13 @@ _DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
     "EDGE": EDGE_V1_WEIGHTS,
     "iDL":  IDL_V1_WEIGHTS,
     "LB":   LB_V1_WEIGHTS,
+    "K":    K_V1_WEIGHTS,
+    "P":    P_V1_WEIGHTS,
 }
+
+# How each position's grader scores a missing Component z-score. Must match
+# the grader so preview/regrade reproduce `grade` exactly.
+_MISSING_POLICY: dict[str, scoring.MissingPolicy] = {"QB": "ungraded"}
 
 
 @dataclass(frozen=True)
@@ -114,7 +122,7 @@ def _resolve_weights(
     return main, blocking
 
 
-_FETCH_Z_FRAME_SQL = text(
+_FETCH_Z_SQL = text(
     """
     SELECT
         sc.player_id,
@@ -130,24 +138,67 @@ _FETCH_Z_FRAME_SQL = text(
     """
 )
 
-_FETCH_CURRENT_GRADES_SQL = text(
+_FETCH_GRADES_SQL = text(
     """
     SELECT
         sg.player_id,
         p.full_name,
+        sg.role,
+        sg.qualified,
         sg.composite_grade AS current_grade,
-        sg.role
+        sg.composite_z     AS current_composite_z,
+        sg.percentile      AS current_percentile
     FROM season_grades sg
     JOIN players p USING (player_id)
     WHERE sg.season   = :season
       AND sg.position = :position
-      AND sg.qualified = true
     """
 )
 
 
 def _component_prefix(position: str) -> str:
     return f"{position.lower()}_%"
+
+
+def rescore_from_components(
+    conn: Connection,
+    season: int,
+    position: str,
+    overrides: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Score every ``season_grades`` row for ``(season, position)`` from the
+    stored ``stat_components`` z-scores, through the same scoring step the
+    grader uses.
+
+    Returns one row per season_grades row with columns: player_id,
+    full_name, role, qualified, current_grade, current_composite_z,
+    current_percentile (as stored) and composite_z, grade, percentile
+    (recomputed under current weights plus ``overrides``).
+    """
+    main_weights, blocking_weights = _resolve_weights(position, overrides or {})
+    params = {"season": season, "position": position}
+    z_rows = pd.read_sql(
+        _FETCH_Z_SQL, conn, params={**params, "prefix": _component_prefix(position)}
+    )
+    grades = pd.read_sql(_FETCH_GRADES_SQL, conn, params=params).set_index("player_id")
+
+    z_wide = (
+        z_rows.pivot(index="player_id", columns="component_name", values="z_score")
+        .astype(float)
+        .reindex(grades.index)
+    )
+    formulas: dict[str, float] | pd.Series = main_weights
+    if blocking_weights is not None:
+        formulas = grades["role"].map(
+            lambda role: blocking_weights if role == TE_ROLE_BLOCKING else main_weights
+        )
+    scored = scoring.score(
+        z_wide,
+        formulas,
+        grades["qualified"].astype(bool),
+        missing=_MISSING_POLICY.get(position, "neutral"),
+    )
+    return grades.join(scored).reset_index()
 
 
 def preview_position(
@@ -161,80 +212,21 @@ def preview_position(
 
     Returns a DataFrame sorted by ``preview_grade`` (descending) with columns:
     player_id, full_name, role, current_grade, preview_grade, delta,
-    current_rank, preview_rank.
-
-    Only qualified players are included (matches the production qualified
-    cohort). The composite uses the same NaN-neutralize-to-zero convention as
-    `compute_grades` (a missing z-score contributes 0).
+    current_rank, preview_rank. Only qualified players are included.
     """
-    main_weights, blocking_weights = _resolve_weights(position, overrides)
-    eng = engine or get_engine()
+    with (engine or get_engine()).connect() as conn:
+        rescored = rescore_from_components(conn, season, position, overrides)
 
-    prefix = _component_prefix(position)
-    with eng.connect() as conn:
-        z_rows = pd.read_sql(
-            _FETCH_Z_FRAME_SQL,
-            conn,
-            params={"season": season, "position": position, "prefix": prefix},
-        )
-        cur = pd.read_sql(
-            _FETCH_CURRENT_GRADES_SQL,
-            conn,
-            params={"season": season, "position": position},
-        )
-
-    if cur.empty:
+    result = rescored.loc[
+        rescored["qualified"].astype(bool),
+        ["player_id", "full_name", "role", "current_grade", "grade"],
+    ].rename(columns={"grade": "preview_grade"})
+    if result.empty:
         raise ValueError(
             f"no qualified {position} grades found for season={season} — "
             "run the grader for this (season, position) first"
         )
 
-    z_wide = (
-        z_rows.pivot(index="player_id", columns="component_name", values="z_score")
-        .astype(float)
-    )
-
-    # Restrict to qualified player_ids only — composite normalization is
-    # within-cohort so unqualified rows don't enter z_wide.
-    z_wide = z_wide.reindex(cur["player_id"].to_numpy())
-
-    # Ensure every component in the weight dict has a column.
-    for c in main_weights:
-        if c not in z_wide.columns:
-            z_wide[c] = np.nan
-    if blocking_weights is not None:
-        for c in blocking_weights:
-            if c not in z_wide.columns:
-                z_wide[c] = np.nan
-
-    # Compute composite per row. For TE, dispatch by role; for others, single
-    # weight set across the whole cohort.
-    preview_z = pd.Series(np.nan, index=z_wide.index, dtype=float)
-    if position == "TE":
-        # Index `cur` by player_id for role lookup.
-        roles = cur.set_index("player_id")["role"]
-        main_idx = roles[roles != TE_ROLE_BLOCKING].index
-        blk_idx = roles[roles == TE_ROLE_BLOCKING].index
-        if len(main_idx):
-            preview_z.loc[main_idx] = composite.combine(
-                z_wide.loc[main_idx, list(main_weights)].fillna(0.0),
-                main_weights,
-            )
-        if len(blk_idx) and blocking_weights is not None:
-            preview_z.loc[blk_idx] = composite.combine(
-                z_wide.loc[blk_idx, list(blocking_weights)].fillna(0.0),
-                blocking_weights,
-            )
-    else:
-        preview_z = composite.combine(
-            z_wide[list(main_weights)].fillna(0.0),
-            main_weights,
-        )
-
-    preview_grade = sigmoid.to_grade(preview_z.to_numpy())
-
-    result = cur.copy()
-    result["preview_grade"] = preview_grade
     result["delta"] = result["preview_grade"] - result["current_grade"]
     result["current_rank"] = (
         result["current_grade"].rank(method="min", ascending=False).astype(int)
@@ -244,30 +236,6 @@ def preview_position(
     )
     return result.sort_values("preview_grade", ascending=False).reset_index(drop=True)
 
-
-_FETCH_ALL_Z_SQL = text(
-    """
-    SELECT
-        sc.player_id,
-        sc.component_name,
-        sc.z_score
-    FROM stat_components sc
-    JOIN season_grades sg
-      ON sg.player_id = sc.player_id
-     AND sg.season    = sc.season
-     AND sg.position  = :position
-    WHERE sc.season = :season
-      AND sc.component_name LIKE :prefix
-    """
-)
-
-_FETCH_ALL_GRADES_SQL = text(
-    """
-    SELECT sg.player_id, sg.qualified, sg.role
-    FROM season_grades sg
-    WHERE sg.season = :season AND sg.position = :position
-    """
-)
 
 _UPDATE_GRADE_SQL = text(
     """
@@ -298,100 +266,20 @@ def regrade_from_components(
 
     Returns the number of rows updated. Idempotent.
     """
-    main_weights, blocking_weights = _resolve_weights(position, overrides={})
-    eng = engine or get_engine()
-    prefix = _component_prefix(position)
-
-    with eng.begin() as conn:
-        z_rows = pd.read_sql(
-            _FETCH_ALL_Z_SQL,
-            conn,
-            params={"season": season, "position": position, "prefix": prefix},
-        )
-        all_grades = pd.read_sql(
-            _FETCH_ALL_GRADES_SQL,
-            conn,
-            params={"season": season, "position": position},
-        )
-
-        if all_grades.empty:
-            return 0
-
-        z_wide = (
-            z_rows.pivot(index="player_id", columns="component_name", values="z_score")
-            .astype(float)
-        )
-        z_wide = z_wide.reindex(all_grades["player_id"].to_numpy())
-
-        for c in main_weights:
-            if c not in z_wide.columns:
-                z_wide[c] = np.nan
-        if blocking_weights is not None:
-            for c in blocking_weights:
-                if c not in z_wide.columns:
-                    z_wide[c] = np.nan
-
-        composite_z = pd.Series(np.nan, index=z_wide.index, dtype=float)
-        if position == "TE":
-            roles = all_grades.set_index("player_id")["role"]
-            main_idx = roles[roles != TE_ROLE_BLOCKING].index
-            blk_idx = roles[roles == TE_ROLE_BLOCKING].index
-            if len(main_idx):
-                composite_z.loc[main_idx] = composite.combine(
-                    z_wide.loc[main_idx, list(main_weights)].fillna(0.0),
-                    main_weights,
-                )
-            if len(blk_idx) and blocking_weights is not None:
-                composite_z.loc[blk_idx] = composite.combine(
-                    z_wide.loc[blk_idx, list(blocking_weights)].fillna(0.0),
-                    blocking_weights,
-                )
-        else:
-            composite_z = composite.combine(
-                z_wide[list(main_weights)].fillna(0.0),
-                main_weights,
-            )
-
-        grade = sigmoid.to_grade(composite_z.to_numpy())
-
-        # Percentile is computed against the qualified cohort only (matches
-        # the production grader). Unqualified players get NaN percentile
-        # if there are <2 qualified, else their percentile against the
-        # qualified pool.
-        all_grades = all_grades.copy()
-        all_grades["composite_z"] = composite_z.to_numpy()
-        all_grades["grade"] = grade
-        q_mask = all_grades["qualified"].astype(bool)
-        q_grades = (
-            all_grades.loc[q_mask, "grade"].dropna().sort_values().to_numpy()
-        )
-        if len(q_grades) >= 2:
-            def _pct(g: float) -> float:
-                if pd.isna(g):
-                    return float("nan")
-                return 100.0 * np.searchsorted(q_grades, g, side="right") / len(q_grades)
-
-            all_grades["percentile"] = all_grades["grade"].apply(_pct)
-        else:
-            all_grades["percentile"] = 50.0
-
-        updates = []
-        for _, r in all_grades.iterrows():
-            if pd.isna(r["grade"]) or pd.isna(r["composite_z"]):
-                continue
-            pct = r["percentile"]
-            if pd.isna(pct):
-                pct = 50.0
-            updates.append(
-                {
-                    "player_id": int(r["player_id"]),
-                    "season": season,
-                    "position": position,
-                    "composite_grade": float(r["grade"]),
-                    "composite_z": float(r["composite_z"]),
-                    "percentile": float(pct),
-                }
-            )
+    with (engine or get_engine()).begin() as conn:
+        rescored = rescore_from_components(conn, season, position)
+        updates = [
+            {
+                "player_id": int(r.player_id),
+                "season": season,
+                "position": position,
+                "composite_grade": float(r.grade),
+                "composite_z": float(r.composite_z),
+                "percentile": float(r.percentile),
+            }
+            for r in rescored.itertuples()
+            if not pd.isna(r.grade)
+        ]
         if updates:
             conn.execute(_UPDATE_GRADE_SQL, updates)
     return len(updates)
@@ -402,4 +290,5 @@ __all__ = [
     "parse_weight_overrides",
     "preview_position",
     "regrade_from_components",
+    "rescore_from_components",
 ]
