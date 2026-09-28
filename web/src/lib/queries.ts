@@ -2061,7 +2061,8 @@ async function getTeamContexts(
 
     // --- Query 2: lead QB per (team, season) + their season_grades row ---
     // Dropback definition: pass attempt OR sack OR QB scramble. Matches
-    // QB v1 feature extraction (ADR-0013).
+    // QB v1 feature extraction (ADR-0013): nflverse leaves the passer null
+    // on scrambles and credits the QB as rusher.
     sql<
       {
         season: number;
@@ -2076,14 +2077,14 @@ async function getTeamContexts(
     >`
       WITH qb_team_dropbacks AS (
         SELECT
-          pl.passer_player_id AS gsis_id,
+          COALESCE(pl.passer_player_id, pl.rusher_player_id) AS gsis_id,
           pl.posteam          AS team_abbr,
           pl.season,
           COUNT(*)::int       AS n_dropbacks
         FROM plays pl
         WHERE pl.season = ANY(${seasons})
           AND pl.posteam IS NOT NULL
-          AND pl.passer_player_id IS NOT NULL
+          AND COALESCE(pl.passer_player_id, pl.rusher_player_id) IS NOT NULL
           AND (pl.pass_attempt = TRUE OR pl.sack = TRUE OR pl.qb_scramble = TRUE)
         GROUP BY 1, 2, 3
       ),

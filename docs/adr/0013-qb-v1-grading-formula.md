@@ -190,4 +190,4 @@ Source: F5 in [`docs/grading/audits/2026-09-27-system-audit.md`](../grading/audi
 
 **Other seasons:** Spearman old vs new 0.980–0.994 in every season 2016–2025. The biggest risers are the scramblers: Justin Fields 2022 (+16.1), Kaepernick 2016 (+12.8), Hurts 2021 (+8.6), Josh Allen 2022 (6 → 2).
 
-**Restatement:** QB 2016–2025 on Neon with the full `grade` path (a SQL extract change, so `regrade` can't apply it). Pending owner sign-off on the face-check.
+**Restated** QB 2016–2025 on Neon on 2026-09-28 with the full `grade` path (a SQL extract change, so `regrade` can't apply it), followed by `backfill-team-context` and `grade-teams` for every season. The web lead-QB-per-team query uses the same attribution; no team-season's lead QB changed.
