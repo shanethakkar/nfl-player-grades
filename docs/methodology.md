@@ -7,10 +7,11 @@ specific choice, each section links out to the relevant ADR.
 
 ## Scope (v1)
 
-- **Time range:** 2016-present. All ten NGS-era seasons (2016-2025) are
-  ingested and graded in the current build.
-- **Positions graded:** QB, RB, WR, TE (Tier 1). Other positions are v2+
-  (see [§Position tiers](#position-tiers)).
+- **Time range:** 2016-present. QB, RB, WR, TE, K and P are graded for
+  2016-2025; CB, S, EDGE, iDL, LB and OL for 2018-2025 (PFR advanced
+  defense and pass-rush data start in 2018).
+- **Positions graded:** QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K, P, plus
+  OL as a team-level unit (see [§Position tiers](#position-tiers)).
 - **Depth charts:** end-of-most-recent-regular-season snapshots (no live
   in-season scraping).
 - **Opponent adjustment:** not applied in v1 — v1 favors
@@ -25,13 +26,11 @@ design tier, not the per-season `data_tier` column (which tracks
 per-season feature availability; see
 [ADR-0003](#adr-0003)).
 
-| Tier | Positions             | Status in v1 | Notes                                   |
-|------|-----------------------|--------------|-----------------------------------------|
-| 1    | QB, RB, WR, TE        | Shipped      | Rich PBP + NGS data                     |
-| 2    | CB, S, EDGE           | v2+          | Decent data; needs NGS coverage tiering |
-| 3    | OL, iDL, off-ball LB, ST | v2+       | Proxy stats; directional only           |
-
-Tier-2 and Tier-3 grades will carry a badge in the UI when they ship.
+| Tier | Positions                | Status  | Notes                                     |
+|------|--------------------------|---------|-------------------------------------------|
+| 1    | QB, RB, WR, TE           | Shipped | Rich PBP + NGS data                       |
+| 2    | CB, S, EDGE              | Shipped | PFR coverage / pass-rush charting (2018+) |
+| 3    | OL, iDL, off-ball LB, K, P | Shipped | Proxy stats; OL graded per team, not per player |
 
 ## Per-season grading pipeline
 
@@ -39,24 +38,37 @@ For each `(season, position, player)` the pipeline produces one
 `season_grades` row and N `stat_components` rows (one per component):
 
 1. **Extract raw component stats** from PBP, NGS, and PFR-derived data
-   (one SQL query per position — see `pipeline/src/nfl_grades/grading/{qb,rb,wr,te}.py`).
-2. **Apply garbage-time filter** (win probability between 0.05 and
-   0.95, plus play-type gates) on efficiency components.
+   (one SQL query per position — see `pipeline/src/nfl_grades/grading/<position>.py`).
+2. **Apply garbage-time filter** on play-by-play components: plays in
+   the 4th quarter or later with a margin over 21, or in the last 5
+   minutes of the 4th with a margin over 14, are dropped
+   (`grading/filters.py`, ADR-0013). Win probability is not used.
 3. **Empirical Bayes shrinkage** toward positional mean, weighted by
    snaps / opportunities. Shrinkage strengths `k` are hand-tuned per
    component using year-over-year reliability. See
    [ADR-0013](#adr-0013), [ADR-0014](#adr-0014),
    [ADR-0015](#adr-0015), [ADR-0016](#adr-0016).
-4. **Z-score within (season, position)** using the
-   variance-weighted mean across qualified players.
+4. **Z-score within (season, position)** using the plain (unweighted)
+   mean and sample SD of the qualified players. Every player, qualified
+   or not, is z-scored against that distribution.
 5. **Hand-picked weights** combine component z-scores into a composite
    z. v1 deliberately chose explainable weights over inverse-noise /
    YoY-stability weights; see
    [ADR-0013 §Weights](#adr-0013) for the reasoning.
-6. **Composite** = signed weighted sum ÷ sum of |weights|. The
-   magnitude-sum denominator lets negative-weighted components (fumble
-   rate) contribute their designed share without inflating the overall
-   scale.
+6. **Composite** = signed weighted sum ÷ sum of |weights|, taken over
+   the components the player actually has. The magnitude-sum denominator
+   lets negative-weighted components (fumble rate) contribute their
+   designed share. A missing component (no NGS row, drops before 2022,
+   RB yards after contact before 2018) drops out and the remaining
+   weights are renormalized, rather than being scored as league average
+   ([ADR-0028](#adr-0028)).
+7. **Standardize** the composite: divide it by its SD over the qualified
+   players of that position-season, so it has unit SD at every position
+   ([ADR-0028](#adr-0028)). Without this, a position whose components
+   are weakly correlated (LB, S) has a narrow composite and can never
+   reach 90, while one with strongly correlated components (iDL) grades
+   generously. A position-season with fewer than 10 qualified players is
+   not graded at all, rather than grading everyone 50.
 
 ### Composite → grade
 
@@ -65,9 +77,10 @@ grade = 100 / (1 + exp(-k * (z - z0)))
 ```
 
 Parameters: `k = 1.15`, `z0 = 0` — tuned so `z = 0 → 50` and
-`z = +2 → ≈90`. Bounded 0–100. See
-[ADR-0008](#adr-0008) for the parameter
-selection.
+`z = +2 → ≈90`. Bounded 0–100. Because `z` is the standardized composite,
+a 90 (`z ≈ 1.91`) is about the 97th percentile of qualified players at
+every position and season. See [ADR-0008](#adr-0008) for the parameter
+selection and [ADR-0028](#adr-0028) for the standardization.
 
 ## Qualification thresholds
 
@@ -80,12 +93,22 @@ Each position has two thresholds:
   Non-qualified rows are stored for reference and shown "below the
   fold" on the leaderboard.
 
-| Pos | Min to grade | Qualified | Unit |
-|-----|--------------|-----------|------|
-| QB  | — (all)      | 200       | dropbacks |
-| RB  | 30           | 120       | touches |
-| WR  | 20           | 50        | targets |
-| TE  | 15           | 40        | targets |
+| Pos  | Min to grade | Qualified | Unit |
+|------|--------------|-----------|------|
+| QB   | 1            | 200       | dropbacks |
+| RB   | 30           | 120       | touches |
+| WR   | 20           | 50        | targets |
+| TE   | 15           | 40        | targets |
+| CB   | 25           | 30        | targets in coverage |
+| S    | 200          | 400       | defensive snaps |
+| EDGE | 200          | 400       | defensive snaps |
+| iDL  | 200          | 400       | defensive snaps |
+| LB   | 200          | 600       | defensive snaps |
+| K    | 10           | 20        | FG attempts |
+| P    | 25           | 40        | punts |
+| OL   | —            | all 32    | team units |
+
+Thresholds live in `pipeline/src/nfl_grades/grading/weights.py`.
 
 Blocking TEs (<15 targets) have no `season_grades` row; their season
 is visible on team rosters but they are not ranked against receiving
@@ -117,8 +140,9 @@ next grading workstream.
 
 ## Cross-position comparability
 
-- **Ordinally comparable**: a 92 is ~98th percentile at any graded
-  position.
+- **Ordinally comparable**: a 90 is ~97th percentile of qualified
+  players at every graded position and season, because the composite is
+  standardized before the sigmoid ([ADR-0028](#adr-0028)).
 - **NOT cardinally comparable**: a 92 QB contributes more to winning
   than a 92 TE. Positions have different leverage.
 - No combined "best player in NFL" ranking in v1.
@@ -159,7 +183,6 @@ Run on every grading rebuild:
   WR slot-vs-boundary and RB zone-vs-gap distinctions are deferred.
 - **Depth charts are end-of-season snapshots only.** Not live-updated
   in-season.
-- **Tier 2 and Tier 3 positions are not graded.**
 - **Grades within position only.** A WR 85 and a RB 85 are not the
   same quality of performance in absolute terms.
 

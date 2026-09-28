@@ -60,11 +60,6 @@ _DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
     "P":    P_V1_WEIGHTS,
 }
 
-# How each position's grader scores a missing Component z-score. Must match
-# the grader so preview/regrade reproduce `grade` exactly.
-_MISSING_POLICY: dict[str, scoring.MissingPolicy] = {"QB": "ungraded"}
-
-
 @dataclass(frozen=True)
 class PreviewRow:
     player_id: int
@@ -192,12 +187,7 @@ def rescore_from_components(
         formulas = grades["role"].map(
             lambda role: blocking_weights if role == TE_ROLE_BLOCKING else main_weights
         )
-    scored = scoring.score(
-        z_wide,
-        formulas,
-        grades["qualified"].astype(bool),
-        missing=_MISSING_POLICY.get(position, "neutral"),
-    )
+    scored = scoring.score(z_wide, formulas, grades["qualified"].astype(bool))
     return grades.join(scored).reset_index()
 
 

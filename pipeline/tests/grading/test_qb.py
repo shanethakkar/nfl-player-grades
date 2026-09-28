@@ -29,19 +29,20 @@ from nfl_grades.grading.qb import (
 # ---------------------------------------------------------------------------
 
 
-def _synth_features(n_qbs: int = 10, seed: int = 0) -> pd.DataFrame:
+def _synth_features(n_qbs: int = 16, seed: int = 0) -> pd.DataFrame:
     """Build a realistic synthetic QB cohort.
 
     Emulates 2024-ish league averages / spreads:
         - EPA/db: mean 0.05, SD 0.10
         - CPOE:   mean 0.0,  SD 2.5
         - success rate: mean 0.46, SD 0.03
-    Player volumes:
-        - 6 starters at 500-650 dropbacks each
+    Player volumes (starters form the qualified cohort, which must be at
+    least ``scoring.MIN_QUALIFIED_COHORT``):
+        - n_qbs - 4 starters at 500-650 dropbacks each
         - 4 backups  at 50-150 dropbacks each
     """
     rng = np.random.default_rng(seed)
-    starters = 6
+    starters = n_qbs - 4
     backups = n_qbs - starters
     n_dropbacks = np.concatenate(
         [
@@ -71,7 +72,7 @@ def _synth_features(n_qbs: int = 10, seed: int = 0) -> pd.DataFrame:
 
 class TestComputeGrades:
     def test_output_columns_present(self) -> None:
-        graded = compute_grades(_synth_features(10))
+        graded = compute_grades(_synth_features())
         expected = {
             "player_id",
             "qualified",
@@ -97,7 +98,7 @@ class TestComputeGrades:
         assert (graded["grade"] <= 100).all()
 
     def test_qualified_flag_follows_threshold(self) -> None:
-        graded = compute_grades(_synth_features(10, seed=2))
+        graded = compute_grades(_synth_features(seed=2))
         # Starters (500-650 dropbacks) should be qualified; backups (50-150)
         # should not.
         assert graded.loc[graded["n_dropbacks"] >= 200, "qualified"].all()
@@ -107,14 +108,14 @@ class TestComputeGrades:
         # The synth helper gives descending skill by player_id, so within
         # the qualified cohort the top player_id should have the highest
         # grade.
-        graded = compute_grades(_synth_features(10, seed=3))
+        graded = compute_grades(_synth_features(seed=3))
         qual = graded[graded["qualified"]].sort_values("player_id")
         # Skill descends by player_id, so grade should descend too.
         grades = qual["grade"].to_numpy()
         assert grades[0] > grades[-1]
 
     def test_confidence_scaling(self) -> None:
-        graded = compute_grades(_synth_features(10, seed=4))
+        graded = compute_grades(_synth_features(seed=4))
         # Confidence caps at 1.0.
         assert (graded["confidence"] <= 1.0).all()
         # QBs with 300+ dropbacks are at confidence=1.
@@ -122,7 +123,7 @@ class TestComputeGrades:
         assert (full["confidence"] == 1.0).all()
 
     def test_percentile_bounds(self) -> None:
-        graded = compute_grades(_synth_features(10, seed=5))
+        graded = compute_grades(_synth_features(seed=5))
         assert (graded["percentile"] >= 0).all()
         assert (graded["percentile"] <= 100).all()
 

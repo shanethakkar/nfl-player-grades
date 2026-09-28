@@ -4,7 +4,7 @@ Flow:
     1. ``extract_features``: reads ``pfr_def_pass_rush`` (ingested by
        ``ingest/pfr_dl.py``) + ``player_seasons`` (for snaps_defense),
        filters to EDGE players, computes per-snap rate metrics in Python.
-    2. ``compute_grades``: shrink → z-score → NaN neutralization →
+    2. ``compute_grades``: shrink → z-score →
        composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.

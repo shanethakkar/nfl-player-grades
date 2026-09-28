@@ -7,7 +7,7 @@ Flow mirrors QB v1 and RB v1:
        NGS receiving publishes WR rows cleanly (unlike RBs), so we
        can pull `avg_separation` straight from it.
     2. ``compute_grades``: pure-python —
-         shrink → z-score → (NaN z -> 0 neutralize) →
+         shrink → z-score →
          composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.
@@ -308,7 +308,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 
 
 def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
-    """Apply shrinkage → z-score → NaN neutralization → composite → sigmoid.
+    """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with per-component
     ``raw_*``/``adjusted_*``/``z_*`` columns, ``composite_z``, ``grade``,
@@ -335,8 +335,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"adjusted_{component}"] = shrunk  # v1: no opp-adj, adjusted == shrunk
         df[f"z_{component}"] = z
 
-        # ADR-0015: a NaN z-score (missing NGS separation, zero-target
-        # degenerate cases) is scored as neutral. The true NaN is kept in
+        # A NaN z-score (missing NGS separation, zero-target degenerate
+        # cases) drops out of the composite and the remaining weights are
+        # renormalized (ADR-0028). The true NaN is kept in
         # stat_components.z_score so the UI renders "-" instead of "0.0".
         z_frame[component] = z
 
@@ -412,8 +413,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
     grade_rows: list[dict[str, object]] = []
     for _, r in graded.iterrows():
         if pd.isna(r["grade"]):
-            # Shouldn't happen — NaN neutralization keeps the composite
-            # defined for every WR that made it through extract — but guard.
+            # No Component z-scores at all: nothing to grade.
             continue
         grade_rows.append(
             {

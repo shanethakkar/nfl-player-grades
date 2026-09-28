@@ -4,7 +4,7 @@ Structure matches WR v1, with TE role labels, per-role ``data_tier`` / ``data_ti
 and a blocking-TE composite that omits target earn (weight redistributed to EPA + YAC).
 
 v1.1: removed ``te_fumble_rate`` (noise), added ``te_drop_rate`` (FTN charting, 2022+).
-Pre-2022 seasons NaN-neutralize the drop component.
+Pre-2022 seasons have no drop component; it drops out of the composite (ADR-0028).
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ Flow:
        ``ingest/pfr_safety.py``) + ``player_seasons`` (for snaps_defense)
        and computes per-rate metrics from raw counts.
     2. ``compute_grades``: pure-python —
-         shrink → z-score → NaN neutralization →
+         shrink → z-score →
          composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.
@@ -25,7 +25,8 @@ Design notes:
 
 - missed_tackle_rate: derived as missed / (comb + missed) when missed_tackles
   is not NULL. If the pfr_advstats_def source does not include a missed-tackle
-  column (varies by release), this component is NaN-neutralized to 0.0.
+  column (varies by release), this component drops out of the composite and
+  the remaining weights are renormalized (ADR-0028).
 
 - backfield_disruption_per_snap: (tfl + sacks) / snaps_defense. TFL and sacks
   are combined because they measure the same underlying skill (stopping the
@@ -264,7 +265,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
-    """Apply shrinkage → z-score → NaN neutralization → composite → sigmoid.
+    """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with:
         raw_*/adjusted_*/z_* columns per component,

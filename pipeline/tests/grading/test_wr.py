@@ -168,10 +168,11 @@ class TestComputeGrades:
         assert (graded.loc[graded["n_targets"] >= 50, "qualified"]).all()
         assert not (graded.loc[graded["n_targets"] < 50, "qualified"]).any()
 
-    def test_missing_separation_neutralizes_to_zero(self) -> None:
+    def test_missing_separation_is_still_graded(self) -> None:
         """A WR below NGS's volume threshold has separation = NaN.
         The grader should still produce a finite composite by
-        neutralizing that component's z to 0, not propagating NaN."""
+        renormalizing over the other Components (ADR-0028), not
+        propagating NaN."""
         df = _synth_features(seed=3).iloc[:1].copy()
         df["separation"] = np.nan  # simulate no NGS row
         # Need a cohort so z-scores are defined.

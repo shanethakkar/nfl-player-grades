@@ -459,7 +459,7 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
 //
 // Matches the visual language used elsewhere on the page: phase-split bar
 // (mirrors the gradient bar in GradeScale), a mini "two-stage" strip
-// (mirrors ShrinkageStrip / WinProbFilter), and a card grid of the three
+// (mirrors ShrinkageStrip / GarbageTimeFilter), and a card grid of the three
 // phases (mirrors PositionGrid).
 // ---------------------------------------------------------------------------
 
@@ -696,9 +696,9 @@ function HowItsBuilt() {
         <Step
           n={1}
           title="Pull the raw numbers"
-          body="Play-by-play efficiency metrics come from nflverse, tracking data from Next Gen Stats, and pass-coverage breakdowns from Pro Football Reference. Plays with win probability below 5% or above 95% are excluded before any calculation:"
+          body="Play-by-play efficiency metrics come from nflverse, tracking data from Next Gen Stats, and pass-coverage breakdowns from Pro Football Reference. Garbage-time plays, when the game is already decided on the scoreboard, are excluded before any calculation:"
         >
-          <WinProbFilter />
+          <GarbageTimeFilter />
         </Step>
         <Step
           n={2}
@@ -710,7 +710,7 @@ function HowItsBuilt() {
         <Step
           n={3}
           title="Compare to the field"
-          body="Each stat is z-scored within its season and position group, then combined into a single composite. That composite maps to a 0–100 grade via sigmoid, where 50 is exactly average and each full z-unit shifts the grade by roughly 22 points:"
+          body="Each stat is z-scored within its season and position group, then combined into a single composite, rescaled so it has the same spread at every position. That composite maps to a 0–100 grade via sigmoid, where 50 is exactly average and a 90 is about the 97th percentile, whatever the position:"
         >
           <p className="mt-2 rounded bg-neutral-900 px-2.5 py-1.5 font-mono text-[11px] text-neutral-400">
             grade = 100 / (1 + e^(−1.15z))
@@ -747,23 +747,24 @@ function Step({
   );
 }
 
-function WinProbFilter() {
+function GarbageTimeFilter() {
+  const rules = [
+    { when: "4th quarter or OT", margin: "margin > 21" },
+    { when: "final 5 minutes", margin: "margin > 14" },
+  ];
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 font-mono text-[11px] text-center">
-      <div className="flex">
-        <div className="w-16 shrink-0 bg-red-950/30 px-1 py-3">
-          <div className="font-semibold text-red-400">&lt; 5%</div>
-          <div className="mt-0.5 text-red-700">excluded</div>
+    <div className="mt-3 overflow-hidden rounded-lg border border-neutral-800 font-mono text-[11px]">
+      {rules.map((r) => (
+        <div
+          key={r.when}
+          className="flex items-center gap-2 border-b border-neutral-800 bg-red-950/30 px-3 py-2.5"
+        >
+          <span className="text-neutral-300">{r.when}</span>
+          <span className="text-neutral-500">{r.margin}</span>
+          <span className="ml-auto text-red-400">excluded</span>
         </div>
-        <div className="flex-1 bg-neutral-900/40 px-2 py-3">
-          <div className="text-neutral-300">included plays</div>
-          <div className="mt-0.5 text-neutral-600">win probability 5% – 95%</div>
-        </div>
-        <div className="w-16 shrink-0 bg-red-950/30 px-1 py-3">
-          <div className="font-semibold text-red-400">&gt; 95%</div>
-          <div className="mt-0.5 text-red-700">excluded</div>
-        </div>
-      </div>
+      ))}
+      <div className="bg-neutral-900/40 px-3 py-2 text-neutral-500">every other play counts</div>
     </div>
   );
 }

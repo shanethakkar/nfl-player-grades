@@ -4,7 +4,7 @@ Flow:
     1. ``extract_features``: reads ``punter_stats`` (ingested by
        ``ingest/punter.py``), filters to punters with min punts,
        computes per-punt rate metrics in Python.
-    2. ``compute_grades``: shrink → z-score → NaN neutralization →
+    2. ``compute_grades``: shrink → z-score →
        composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.

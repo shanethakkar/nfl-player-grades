@@ -46,7 +46,7 @@ ADR. If it took more than 5 minutes of thought, write one.
 | 0005 | Hand-written TS types with codegen guardrail                  | Accepted |
 | 0006 | Forward-only migrations with `schema_migrations` tracking     | Accepted |
 | 0007 | Pure-function grading math, DB I/O isolated to `ingest/`      | Accepted |
-| 0008 | Sigmoid grade mapping with k=1.15, z=0->50, z=+2->90          | Accepted |
+| 0008 | Sigmoid grade mapping with k=1.15, z=0->50, z=+2->90          | Accepted (amended by 0028) |
 | 0009 | Raw nflverse data cached as parquet; typed-only in Postgres   | Accepted |
 | 0010 | Use `nflreadpy` (official nflverse) instead of `nfl_data_py`  | Accepted |
 | 0011 | Store a thin `plays` table in Postgres, not full PBP fat   | Accepted |

@@ -5,7 +5,7 @@ Flow:
        ``ingest/pfr.py``) + ``player_seasons`` (for snaps_defense) and
        computes per-rate metrics from raw counts.
     2. ``compute_grades``: pure-python —
-         shrink → z-score → NaN neutralization →
+         shrink → z-score →
          composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.
@@ -33,7 +33,8 @@ Design notes:
   and partially redundant with comp% + YAC. Noise outweighed signal.
 
 - YAC component: PFR publishes per-CB YAC allowed for most seasons. If
-  missing (``yac IS NULL``), the z-score is NaN-neutralized to 0.0.
+  missing (``yac IS NULL``), the component drops out of the composite and
+  the remaining weights are renormalized (ADR-0028).
 
 - Role classification: outside_cb / slot_cb / hybrid_cb from slot_pct.
   Label-only — z-scores computed against the full CB pool.
@@ -222,7 +223,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     )
 
     # YAC per reception: undefined when no completions, or when yac is NULL
-    # (missing from PFR for some seasons). NaN-neutralized in compute_grades.
+    # (missing from PFR for some seasons). Renormalized around in scoring.
     df["yac_per_rec_allowed"] = np.where(
         (df["completions"] > 0) & df["yac"].notna(),
         df["yac"] / df["completions"],
@@ -264,7 +265,7 @@ def _classify_role(slot_pct: float | None) -> str | None:
 
 
 def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
-    """Apply shrinkage → z-score → NaN neutralization → composite → sigmoid.
+    """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with:
         raw_*/adjusted_*/z_* columns per component,
@@ -294,9 +295,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"adjusted_{component}"] = shrunk
         df[f"z_{component}"] = z
 
-        # NaN z-scores (missing YAC or degenerate edge cases) are scored as
-        # neutral. The raw NaN is preserved in stat_components.z_score so the
-        # UI renders "—" rather than "0.0".
+        # NaN z-scores (missing YAC or degenerate edge cases) drop out of the
+        # composite (ADR-0028). The NaN is preserved in stat_components.z_score
+        # so the UI renders "—" rather than "0.0".
         z_frame[component] = z
 
     return df.assign(**scoring.score(z_frame, CB_V1_WEIGHTS, df["qualified"]))

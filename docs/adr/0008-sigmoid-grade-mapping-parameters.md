@@ -1,6 +1,6 @@
 # 0008 - Sigmoid grade mapping with k=1.15, z=0->50, z=+2->90
 
-- **Status**: Accepted
+- **Status**: Accepted — amended by [0028](0028-standardize-composite-before-sigmoid.md)
 - **Date**: 2026-04-22
 
 ## Context
@@ -28,6 +28,13 @@ Parameters chosen so that:
 
 Rough interpretation: a "90" is roughly 2 standard deviations above the
 positional mean — about the 97th percentile of qualified players.
+
+> **Amended by [ADR-0028](0028-standardize-composite-before-sigmoid.md):**
+> that interpretation assumes the composite has SD 1, which it didn't (a
+> weighted average of correlated z-scores has SD √(w′Rw), 0.47–0.99
+> depending on position). The composite is now divided by its SD over the
+> qualified cohort before this sigmoid, so the interpretation holds at
+> every position. k and z0 are unchanged.
 
 ## Consequences
 

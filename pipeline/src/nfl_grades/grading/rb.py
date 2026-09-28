@@ -8,7 +8,7 @@ Flow mirrors QB v1:
        ``plays.xyac_mean_yardage`` (nflfastR's xYAC model) directly.
        Catch % is likewise computed from ``plays``.
     2. ``compute_grades``: pure-python —
-         shrink → z-score → (n=0 -> z=0 neutralize) →
+         shrink → z-score →
          composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.
@@ -193,7 +193,7 @@ _FEATURES_SQL = text(f"""
         -- yards_after_contact_per_carry from the per-row carries denominator
         -- (which may differ slightly from rush_agg.n_carries due to PFR/PBP
         -- coverage differences — use PFR's own carries for the rate). Pre-
-        -- 2018 LEFT JOIN returns NULL → component is NaN-neutralized.
+        -- 2018 LEFT JOIN returns NULL → component drops out of the composite.
         SELECT player_id,
                carries AS pfr_carries,
                yards_after_contact
@@ -296,7 +296,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 
 
 def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
-    """Apply shrinkage → z-score → n=0 neutralization → composite → sigmoid.
+    """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with per-component
     ``raw_*``/``adjusted_*``/``z_*`` columns, ``composite_z``, ``grade``,
@@ -327,9 +327,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"adjusted_{component}"] = shrunk  # v1: no opp-adj, so adjusted == shrunk
         df[f"z_{component}"] = z
 
-        # ADR-0014: "no evidence of this skill = assume league average".
-        # A NaN z-score (n=0, missing NGS row, undefined raw metric) is
-        # scored as neutral, so every graded RB has a composite.
+        # A NaN z-score (n=0, missing NGS row, undefined raw metric) drops
+        # out of the composite and the remaining weights are renormalized
+        # (ADR-0028), so every RB with any Component has a composite.
         z_frame[component] = z
 
     return df.assign(**scoring.score(z_frame, RB_V1_WEIGHTS, df["qualified"]))
@@ -404,9 +404,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
     grade_rows: list[dict[str, object]] = []
     for _, r in graded.iterrows():
         if pd.isna(r["grade"]):
-            # Shouldn't happen in normal flow (n=0 neutralization keeps
-            # the composite defined for every row that made it this
-            # far), but guard anyway.
+            # No Component z-scores at all: nothing to grade.
             continue
         grade_rows.append(
             {

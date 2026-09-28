@@ -194,6 +194,14 @@ The `stat_components.z_score` column keeps the true NaN for these
 rows so the UI can render "—" rather than "0.0" and be honest about
 what we don't know. Only the composite calculation substitutes 0.
 
+> **Amended by [ADR-0028](0028-standardize-composite-before-sigmoid.md)
+> (2026-09-27):** missing components are no longer replaced with 0. They
+> drop out and the player's remaining weights are renormalized by |w|,
+> which was the alternative rejected above. Zero-filling pulled every
+> player missing a component toward 50 and compressed whole eras
+> (pre-2018 YAC, pre-2022 drops). `stat_components.z_score` still keeps
+> the true NaN.
+
 ### Qualified thresholds
 
 Three separate qualification concepts, because RBs have two skills:

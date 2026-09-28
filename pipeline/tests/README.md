@@ -52,9 +52,17 @@ If you fix one, delete its row. If the count goes above 7, you broke something.
 
 ## Scoring regression check
 
-`scripts/verify_scoring_regression.py` (read-only) recomputes every stored
+`scripts/verify_scoring_regression.py` (read-only) rescores every stored
 position-season from stored z-scores through `grading.scoring.score()` and
-compares against stored `composite_z` / `composite_grade` / `percentile`.
-After issue #2 it matched exactly (108 position-seasons, 8,815 rows). Changes
-that *intend* to move grades (e.g. #6's standardization) will make it fail by
-design, since it compares values, not rankings.
+compares against stored grades. Since #6 standardized the Composite
+(ADR-0028), values change by design; the check is that rankings don't.
+Among players with every Component the season has, Spearman(stored, new)
+must be 1.0. It also reports how far players missing a Component move
+(their weights now renormalize instead of zero-filling) and the share of
+qualified players at 90+ before and after.
+
+Before the #6 Neon restatement, all 108 position-seasons passed. Almost
+every player missing a Component is unqualified; the exception is 11
+qualified RBs without NGS RYOE (2019, 2021, 2022), whose percentiles
+moved by at most ~9 points. Once Neon is restated, "stored" and "new" match and the check
+passes trivially until the next scoring change.

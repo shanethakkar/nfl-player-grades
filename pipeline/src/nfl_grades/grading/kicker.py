@@ -4,7 +4,7 @@ Flow:
     1. ``extract_features``: reads ``kicker_stats`` (ingested by
        ``ingest/kicker.py``), filters to kickers with min FG attempts,
        computes per-attempt rate metrics in Python.
-    2. ``compute_grades``: shrink → z-score → NaN neutralization →
+    2. ``compute_grades``: shrink → z-score →
        composite → sigmoid → percentile rank.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.

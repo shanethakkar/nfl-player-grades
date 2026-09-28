@@ -411,6 +411,9 @@ def grade(season: int, position: str | None) -> None:
 
     summary = grading_run.run(season=season, position=position)
     for pos, result in summary.by_position.items():
+        if isinstance(result, grading_run.NotGraded):
+            click.echo(f"position={pos} season={result.season} not graded: {result.reason}")
+            continue
         # Per-position RunResult dataclasses carry position-specific
         # counters (n_qbs_total, n_rbs_total, …). Probe generically.
         _TOTAL_ATTRS = (
@@ -487,6 +490,7 @@ def preview(
       nflgrades preview --season 2024 --position RB --weight rb_rec_epa_per_target=0.05 --weight rb_yac_over_expected_per_rec=0.28
     """
     from .grading.preview import parse_weight_overrides, preview_position
+    from .grading.scoring import InsufficientCohortError
 
     overrides = parse_weight_overrides(weight_overrides)
     if not overrides:
@@ -496,7 +500,10 @@ def preview(
         for k, v in sorted(overrides.items()):
             click.echo(f"  {k} = {v:+.3f}")
 
-    df = preview_position(season=season, position=position, overrides=overrides)
+    try:
+        df = preview_position(season=season, position=position, overrides=overrides)
+    except InsufficientCohortError as exc:
+        raise click.ClickException(f"{position} {season} can't be graded: {exc}") from exc
 
     pd_repr = df.head(top)[
         ["preview_rank", "full_name", "role", "current_grade", "preview_grade", "delta"]
@@ -536,8 +543,12 @@ def regrade(season: int, position: str) -> None:
     Idempotent.
     """
     from .grading.preview import regrade_from_components
+    from .grading.scoring import InsufficientCohortError
 
-    n = regrade_from_components(season=season, position=position)
+    try:
+        n = regrade_from_components(season=season, position=position)
+    except InsufficientCohortError as exc:
+        raise click.ClickException(f"{position} {season} can't be graded: {exc}") from exc
     click.echo(f"position={position} season={season} season_grades_updated={n}")
 
 

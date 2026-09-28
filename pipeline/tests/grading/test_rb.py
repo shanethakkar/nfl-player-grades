@@ -123,6 +123,14 @@ def _synth_features(
 # ---------------------------------------------------------------------------
 
 
+def _in_cohort(subjects: pd.DataFrame) -> pd.DataFrame:
+    """Prepend ``subjects`` to a full synthetic cohort, so the qualified
+    cohort meets the scoring minimum. Subjects keep rows 0..len-1."""
+    full = pd.concat([subjects, _synth_features(seed=99)], ignore_index=True)
+    full["player_id"] = range(1, len(full) + 1)
+    return full
+
+
 class TestComputeGrades:
     def test_output_columns_present(self) -> None:
         graded = compute_grades(_synth_features(seed=0))
@@ -182,7 +190,7 @@ class TestComputeGrades:
     def test_pure_thumper_gets_valid_grade(self) -> None:
         """RB with 0 targets still receives a finite grade (not NaN).
 
-        Exercises the "n=0 -> z=0 neutralize" policy from ADR-0014.
+        Missing receiving Components drop out of the Composite (ADR-0028).
         """
         df = _synth_features(seed=4).iloc[:1].copy()
         df["n_targets"] = 0
@@ -194,12 +202,11 @@ class TestComputeGrades:
         # Fumbles only on rushes
         df["fumble_rate"] = df["n_fumbles"].astype(float) / np.maximum(df["n_touches"], 1)
 
-        graded = compute_grades(df)
+        graded = compute_grades(_in_cohort(df))
         assert not pd.isna(graded.iloc[0]["grade"])
         assert 0 <= graded.iloc[0]["grade"] <= 100
-        # All three receiving component z-scores should be NaN raw (no data)
-        # but will not have propagated NaN into composite — that's the whole
-        # point of the neutralization.
+        # The receiving component z-scores are NaN (no data), but the
+        # Composite renormalizes over the rushing Components (ADR-0028).
         assert not pd.isna(graded.iloc[0]["composite_z"])
 
     def test_pass_game_specialist_qualifies_via_touches(self) -> None:
@@ -212,7 +219,7 @@ class TestComputeGrades:
         df["n_receptions"] = 70
         df["n_rec_with_xyac"] = 70
         df["n_touches"] = df["n_carries"] + df["n_receptions"]
-        graded = compute_grades(df)
+        graded = compute_grades(_in_cohort(df))
         assert bool(graded.iloc[0]["qualified"]) is True
 
     def test_fumble_penalty_hurts_composite(self) -> None:
@@ -240,13 +247,7 @@ class TestComputeGrades:
         base.loc[1, "fumble_rate"] = 0.040
         base.loc[0, "n_fumbles"] = int(base.loc[0, "n_touches"] * 0.002)
         base.loc[1, "n_fumbles"] = int(base.loc[1, "n_touches"] * 0.040)
-        # Synth cohort of just these two + a few others so qualified SD
-        # is defined.
-        extras = _synth_features(seed=7).iloc[:6]
-        full = pd.concat([base, extras], ignore_index=True)
-        full["player_id"] = range(1, len(full) + 1)
-
-        graded = compute_grades(full)
+        graded = compute_grades(_in_cohort(base))
         clean = graded.iloc[0]
         fumbler = graded.iloc[1]
         assert clean["grade"] > fumbler["grade"]
@@ -380,7 +381,7 @@ class TestWriteResults:
     def test_roundtrip_into_tables(self, conn, has_2024_rb_data) -> None:
         # Use a sentinel season so we don't collide with real data (the
         # outer transaction rolls back anyway, but be explicit).
-        features = extract_features(conn, 2024).head(20).copy()
+        features = extract_features(conn, 2024)
         graded = compute_grades(features)
 
         n_components, n_grades = write_results(conn, graded, 1998)

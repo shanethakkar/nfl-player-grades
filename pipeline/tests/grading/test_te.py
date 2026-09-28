@@ -135,7 +135,7 @@ class TestExtractFeatures:
 
 class TestWriteResults:
     def test_roundtrip(self, conn, has_te_data) -> None:
-        f = extract_features(conn, 2024).head(12).copy()
+        f = extract_features(conn, 2024)
         g = compute_grades(f, 2024)
         n_c, n_g = write_results(conn, g, 1994)
         assert n_c == 6 * len(g)

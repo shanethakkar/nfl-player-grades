@@ -58,9 +58,9 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 # + ingest module (pipeline/ingest/pfr_rush.py).
 #
 # Coverage: PFR rush data starts 2018; for 2016-2017 seasons the
-# yards_after_contact component is NaN-neutralized (composite computed
-# from remaining 6 components). Same pre-2018 handling pattern as WR
-# drop_rate's pre-2022 NaN-neutralization.
+# yards_after_contact component is missing and the composite is computed
+# from the remaining 6 components, weights renormalized (ADR-0028). Same
+# handling as WR drop_rate pre-2022.
 # v1.1 (earlier 2026-05-14): removed rb_catch_pct (noise + redundant).
 #   Weight redistributed: rb_yac_over_expected_per_rec 0.12 → 0.15.
 #
@@ -197,8 +197,8 @@ RB_V1_CONFIDENCE_FULL_TOUCHES: int = 250
 # contested catch rate, broken-tackles-per-reception, etc.).
 #
 # FTN drop data starts 2022; for 2016-2021 the drop_rate component is
-# NaN-neutralized to 0 contribution (grade comes from the other 5
-# components only).
+# missing and the grade comes from the other 5 components, weights
+# renormalized (ADR-0028).
 
 # Component names — part of the public contract with the web app.
 WR_COMPONENT_REC_EPA_PER_TARGET: str = "wr_rec_epa_per_target"
@@ -308,7 +308,7 @@ WR_V1_CONFIDENCE_FULL_TARGETS: int = 100
 #     per_rec documented as YAC-skill gap (similar to RB's pre-v1.4 state).
 #
 # FTN drop data starts 2022; for 2016-2021 the drop_rate component is
-# NaN-neutralized to 0 contribution.
+# missing and the remaining weights are renormalized (ADR-0028).
 
 TE_COMPONENT_REC_EPA_PER_TARGET: str = "te_rec_epa_per_target"
 TE_COMPONENT_YAC_OVER_EXPECTED_PER_REC: str = "te_yac_over_expected_per_rec"
@@ -499,7 +499,7 @@ CB_V1_SLOT_HI: float = 0.65
 #   - Coverage stats (targets, completions, yards, ints): pfr_advstats_def
 #   - Pass breakups (PBU): nflverse def_pass_defended
 #   - Tackles, TFL, sacks: nflverse player_stats
-#   - Missed tackles: pfr_advstats_def (NULL-neutralized if absent)
+#   - Missed tackles: pfr_advstats_def (dropped from the composite if absent)
 #   - Defensive snaps: player_seasons.snaps_defense
 #
 # Coverage begins 2018 (PFR per-player data limitation).

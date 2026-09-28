@@ -167,9 +167,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"z_{component}"] = z
         z_frame[component] = z
 
-    # A QB missing a Component (no pass attempts -> no CPOE) is left
-    # ungraded rather than imputed (ADR-0013).
-    return df.assign(**scoring.score(z_frame, QB_V1_WEIGHTS, df["qualified"], missing="ungraded"))
+    # A QB missing a Component (no pass attempts -> no CPOE) is graded on
+    # the Components they have, with weights renormalized (ADR-0028).
+    return df.assign(**scoring.score(z_frame, QB_V1_WEIGHTS, df["qualified"]))
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +240,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
     grade_rows: list[dict[str, object]] = []
     for _, r in graded.iterrows():
         if pd.isna(r["grade"]):
-            # A QB with insufficient data to compute any z-score wouldn't
-            # land here (they'd lack pass attempts entirely), but guard
-            # just in case.
+            # No Component z-scores at all: nothing to grade.
             continue
         grade_rows.append(
             {

@@ -30,7 +30,9 @@ class TestCombine:
         out_b = combine(df, {"a": 1.0, "b": 3.0})
         assert out_a.iloc[0] == pytest.approx(out_b.iloc[0])
 
-    def test_nan_in_component_propagates(self) -> None:
+    def test_nan_component_renormalizes_over_present_components(self) -> None:
+        # ADR-0028: a missing Component drops out and the remaining weights
+        # are renormalized, rather than zero-filling or propagating NaN.
         df = pd.DataFrame(
             {
                 "a": [1.0, 2.0],
@@ -38,8 +40,13 @@ class TestCombine:
             }
         )
         out = combine(df, {"a": 0.5, "b": 0.5})
-        assert np.isnan(out.iloc[0])
+        assert out.iloc[0] == pytest.approx(1.0)
         assert out.iloc[1] == pytest.approx(3.0)
+
+    def test_all_components_nan_gives_nan(self) -> None:
+        df = pd.DataFrame({"a": [float("nan")], "b": [float("nan")]})
+        out = combine(df, {"a": 0.5, "b": 0.5})
+        assert np.isnan(out.iloc[0])
 
     def test_missing_column_raises(self) -> None:
         df = pd.DataFrame({"a": [1.0]})

@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 
 from nfl_grades.grading import cb, edge, idl, kicker, lb, ol, punter, qb, rb, safety, te, wr
+from nfl_grades.grading.scoring import InsufficientCohortError
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +42,19 @@ PositionRunResult = (
 )
 
 
+@dataclass(frozen=True)
+class NotGraded:
+    """A position-season the grader refused to grade (too few Qualified
+    players). Its existing rows are left untouched."""
+
+    season: int
+    reason: str
+
+
 @dataclass
 class GradeRunSummary:
     season: int
-    by_position: dict[str, PositionRunResult]
+    by_position: dict[str, PositionRunResult | NotGraded]
 
 
 def run(season: int, position: str | None = None) -> GradeRunSummary:
@@ -70,8 +80,13 @@ def run(season: int, position: str | None = None) -> GradeRunSummary:
             )
         positions = [pos]
 
-    results: dict[str, PositionRunResult] = {}
+    results: dict[str, PositionRunResult | NotGraded] = {}
     for pos in positions:
         logger.info("grading %s for season %d", pos, season)
-        results[pos] = POSITION_RUNNERS[pos](season)
+        try:
+            results[pos] = POSITION_RUNNERS[pos](season)
+        except InsufficientCohortError as exc:
+            # The grader's pipeline_runs row is already marked 'error'.
+            logger.warning("%s %d not graded: %s", pos, season, exc)
+            results[pos] = NotGraded(season=season, reason=str(exc))
     return GradeRunSummary(season=season, by_position=results)

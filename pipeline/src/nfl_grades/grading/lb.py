@@ -5,7 +5,7 @@ Flow:
        filters to off-ball LBs (def_targets >= 20 — excludes 3-4 OLB pass
        rushers misclassified as LB in nflverse roster data), computes
        per-snap/per-target rates.
-    2. ``compute_grades``: shrink → z-score → NaN neutralization →
+    2. ``compute_grades``: shrink → z-score →
        composite → sigmoid → percentile.
     3. ``write_results``: idempotent upsert to stat_components +
        season_grades.
