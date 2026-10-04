@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 
+import { ProvisionalBadge } from "@/components/ProvisionalBadge";
 import { TeamLeaderboardTable } from "@/components/TeamLeaderboardTable";
 import { TeamsSeasonPicker } from "@/components/TeamsSeasonPicker";
-import { getGradedTeamSeasons, getTeamsLeaderboard } from "@/lib/queries";
+import {
+  getGradedTeamSeasons,
+  getSeasonThroughWeek,
+  getTeamsLeaderboard,
+} from "@/lib/queries";
 
 // ISR — page HTML cached at the edge for an hour; underlying queries
 // share the same TTL via `unstable_cache`. Data only changes when the
@@ -35,7 +40,10 @@ export default async function TeamsIndexPage({ searchParams }: Props) {
       ? Number(requested)
       : seasons[0];
 
-  const entries = await getTeamsLeaderboard(activeSeason);
+  const [entries, throughWeek] = await Promise.all([
+    getTeamsLeaderboard(activeSeason),
+    getSeasonThroughWeek(activeSeason),
+  ]);
 
   return (
     <main className="mx-auto max-w-[1400px] px-6 py-4 sm:py-10">
@@ -49,9 +57,14 @@ export default async function TeamsIndexPage({ searchParams }: Props) {
               to its own row below "Team Grades". Description hangs
               below the title block on desktop. */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-              Team Grades
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                Team Grades
+              </h1>
+              {throughWeek !== null && (
+                <ProvisionalBadge throughWeek={throughWeek} />
+              )}
+            </div>
             <TeamsSeasonPicker seasons={seasons} activeSeason={activeSeason} />
           </div>
           {/* `w-0 min-w-full` lets the description fill the column

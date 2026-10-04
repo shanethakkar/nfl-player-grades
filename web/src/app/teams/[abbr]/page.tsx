@@ -17,6 +17,7 @@ import {
   getTeamLineup,
   getTeamRoster,
   getTeamSeasons,
+  getSeasonThroughWeek,
 } from "@/lib/queries";
 
 // ISR — page HTML cached at the edge for an hour. Queries are cached
@@ -69,7 +70,14 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       ? requested
       : (seasons[0] ?? null);
 
-  const [roster, lineup, teamGrade, teamGradeComponents, teamGradeHistory] =
+  const [
+    roster,
+    lineup,
+    teamGrade,
+    teamGradeComponents,
+    teamGradeHistory,
+    throughWeek,
+  ] =
     activeSeason !== null
       ? await Promise.all([
           getTeamRoster(abbr, activeSeason),
@@ -77,8 +85,9 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
           getTeamGrade(abbr, activeSeason),
           getTeamGradeComponents(abbr, activeSeason),
           getTeamGradeHistory(abbr),
+          getSeasonThroughWeek(activeSeason),
         ])
-      : [[], null, null, [], []];
+      : [[], null, null, [], [], null];
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-10 sm:px-6">
@@ -123,6 +132,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
             components={teamGradeComponents}
             history={teamGradeHistory}
             season={activeSeason}
+            throughWeek={throughWeek}
           />
         </section>
       )}

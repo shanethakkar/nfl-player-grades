@@ -675,6 +675,9 @@ EDGE_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
 EDGE_V1_MIN_SNAPS_TO_GRADE: int = 200
 EDGE_V1_QUALIFIED_MIN_SNAPS: int = 400
 EDGE_V1_CONFIDENCE_FULL_SNAPS: int = 700
+# OLB-gap branch: an LB-listed player enters the EDGE cohort with at least
+# this many pressures (and a coverage target rate under 3.5%).
+EDGE_V1_MIN_OLB_PRESSURES: int = 25
 
 
 # ---------------------------------------------------------------------------
@@ -1089,6 +1092,10 @@ OL_V1_SAMPLE_SIZE_COLS: dict[str, str] = {
 # We don't use a "min plays" gate the way per-player positions do because
 # all teams have full-season volume.
 OL_V1_QUALIFIED: bool = True
+
+# Rushes + dropbacks for a full season (teams run ~1,030-1,110). Used for a
+# Provisional season's confidence; a completed season has confidence 1.0.
+OL_V1_CONFIDENCE_FULL_PLAYS: int = 1000
 
 
 # ---------------------------------------------------------------------------

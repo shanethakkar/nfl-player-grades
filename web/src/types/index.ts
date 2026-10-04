@@ -409,7 +409,8 @@ export type TeamGradeSummary = {
   overall_grade: number;
   offense_grade: number;
   defense_grade: number;
-  st_grade: number;
+  /** Null in-season until a kicker or punter qualifies (ADR-0031). */
+  st_grade: number | null;
   overall_percentile: number | null;
   offense_percentile: number | null;
   defense_percentile: number | null;
@@ -447,7 +448,7 @@ export type TeamLeaderboardEntry = {
   overall_grade: number;
   offense_grade: number;
   defense_grade: number;
-  st_grade: number;
+  st_grade: number | null;
   overall_percentile: number | null;
   // Context — regular season only
   wins: number;

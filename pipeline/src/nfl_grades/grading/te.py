@@ -16,10 +16,11 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import RB_REC_FILTER_SQL
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     TE_COMPONENT_TARGET_EARN_RATE,
     TE_ROLE_BALANCED,
@@ -54,11 +55,11 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
-    engine = get_engine()
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     with pipeline_run("grading:te", season=season) as handle:
-        with engine.begin() as conn:
-            features = extract_features(conn, season)
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
+            features = extract_features(conn, season, season_progress)
             if features.empty:
                 logger.warning("no TE targets found for season %d", season)
                 result = RunResult(season, 0, 0, 0, 0)
@@ -66,9 +67,16 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features, season)
+            graded = compute_grades(
+                features,
+                season,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
 
-            n_components, n_grades = write_results(conn, graded, season)
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -210,13 +218,19 @@ _FEATURES_SQL = text(f"""
 """)
 
 
-def assign_te_role(n_targets: int, snaps_offense: int) -> str:
+def assign_te_role(
+    n_targets: int,
+    snaps_offense: int,
+    min_blocking_snaps: float = TE_V1_MIN_SNAPS_FOR_BLOCKING_LABEL,
+) -> str:
+    """TE role from target share. ``min_blocking_snaps`` is the snap bar for
+    the blocking label, pro-rated for a Provisional season."""
     tr = n_targets / max(snaps_offense, 1)
     if tr >= TE_V1_TARGET_RATE_RECEIVING:
         return TE_ROLE_RECEIVING
     if tr >= TE_V1_TARGET_RATE_BALANCED_LO:
         return TE_ROLE_BALANCED
-    if tr < TE_V1_TARGET_RATE_BALANCED_LO and snaps_offense >= TE_V1_MIN_SNAPS_FOR_BLOCKING_LABEL:
+    if tr < TE_V1_TARGET_RATE_BALANCED_LO and snaps_offense >= min_blocking_snaps:
         return TE_ROLE_BLOCKING
     return TE_ROLE_BALANCED
 
@@ -231,11 +245,13 @@ def compute_te_data_tier_and_reason(season: int, role: str) -> tuple[int, str | 
     return base_tier, base_reason
 
 
-def extract_features(conn: Connection, season: int) -> pd.DataFrame:
+def extract_features(
+    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+) -> pd.DataFrame:
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_targets": TE_V1_MIN_TARGETS_TO_GRADE},
+            {"season": season, "min_targets": progress.scale(TE_V1_MIN_TARGETS_TO_GRADE)},
         )
         .mappings()
         .all()
@@ -268,18 +284,26 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     for col in int_cols:
         df[col] = df[col].fillna(0).astype(int)
 
+    min_blocking_snaps = progress.scale(TE_V1_MIN_SNAPS_FOR_BLOCKING_LABEL)
     df["role"] = [
-        assign_te_role(int(r["n_targets"]), int(r["snaps_offense"])) for _, r in df.iterrows()
+        assign_te_role(int(r["n_targets"]), int(r["snaps_offense"]), min_blocking_snaps)
+        for _, r in df.iterrows()
     ]
     return df
 
 
-def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    season: int,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     df = features.copy()
-    df["qualified"] = df["n_targets"] >= TE_V1_QUALIFIED_MIN_TARGETS
-    df["confidence"] = (df["n_targets"].astype(float) / TE_V1_CONFIDENCE_FULL_TARGETS).clip(
-        upper=1.0
-    )
+    df["qualified"] = df["n_targets"] >= progress.scale(TE_V1_QUALIFIED_MIN_TARGETS)
+    df["confidence"] = (
+        df["n_targets"].astype(float) / progress.scale(TE_V1_CONFIDENCE_FULL_TARGETS)
+    ).clip(upper=1.0)
 
     data_t: list[int] = []
     data_r: list[str | None] = []
@@ -307,7 +331,9 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
     formulas = df["role"].map(
         lambda role: TE_V1_BLOCKING_WEIGHTS if role == TE_ROLE_BLOCKING else TE_V1_WEIGHTS
     )
-    return df.assign(**scoring.score(z_frame, formulas, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, formulas, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 _DELETE_STAT_COMPONENTS = text("""
@@ -333,14 +359,18 @@ _INSERT_STAT_COMPONENTS = text("""
 _INSERT_SEASON_GRADES = text("""
     INSERT INTO season_grades
         (player_id, season, position, composite_grade, composite_z,
-         percentile, confidence, data_tier, qualified, role, data_tier_reason)
+         percentile, confidence, data_tier, qualified, role, data_tier_reason,
+         through_week)
     VALUES
         (:player_id, :season, :position, :composite_grade, :composite_z,
-         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason)
+         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason,
+         :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
     components = list(TE_V1_RAW_VALUE_COLS.keys())
     component_rows: list[dict[str, object]] = []
     for component in components:
@@ -392,6 +422,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
                 "qualified": bool(r["qualified"]),
                 "role": str(r["role"]),
                 "data_tier_reason": reason_out,
+                "through_week": through_week,
             }
         )
 

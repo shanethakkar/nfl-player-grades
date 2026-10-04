@@ -13,8 +13,10 @@ Flow:
 Data begins 2018 (PFR rush stats start there; YBC needs PFR).
 
 There is no qualification threshold — every team that played a season is
-graded (32 teams × N seasons). Confidence is fixed at 1.0 because every
-team has full-season volume on both denominators (rushes and dropbacks).
+graded (32 teams × N seasons). Confidence is 1.0 for a completed season
+because every team has full-season volume on both denominators (rushes and
+dropbacks). In a Provisional season it is the team's plays so far against a
+full-time pace, so a team that has had its bye reads lower.
 """
 
 from __future__ import annotations
@@ -26,10 +28,12 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
+    OL_V1_CONFIDENCE_FULL_PLAYS,
     OL_V1_RAW_VALUE_COLS,
     OL_V1_SAMPLE_SIZE_COLS,
     OL_V1_SHRINKAGE_K,
@@ -51,7 +55,7 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     if season < TEAM_OL_STATS_MIN_SEASON:
         logger.warning(
             "OL grading requires season >= %d; got %d — skipping",
@@ -59,9 +63,9 @@ def run(season: int) -> RunResult:
         )
         return RunResult(season, 0, 0, 0, 0)
 
-    engine = get_engine()
     with pipeline_run("grading:ol", season=season) as handle:
-        with engine.begin() as conn:
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
             features = extract_features(conn, season)
             if features.empty:
                 logger.warning("no OL data for season %d", season)
@@ -70,8 +74,15 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features, season)
-            n_components, n_grades = write_results(conn, graded, season)
+            graded = compute_grades(
+                features,
+                season,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -135,11 +146,20 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 # 2. Compute grades
 # ---------------------------------------------------------------------------
 
-def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    season: int,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     df = features.copy()
     # Every team is qualified — no per-player snap threshold concept here.
     df["qualified"] = True
     df["confidence"] = 1.0
+    if progress.is_provisional:
+        plays = (df["rushes"] + df["dropbacks"]).astype(float)
+        df["confidence"] = (plays / progress.scale(OL_V1_CONFIDENCE_FULL_PLAYS)).clip(upper=1.0)
 
     data_tier, data_tier_reason = _era_tier_for_season(season)
     df["data_tier"] = data_tier
@@ -158,7 +178,9 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
         df[f"z_{component}"] = z
         z_frame[component] = z
 
-    return df.assign(**scoring.score(z_frame, OL_V1_WEIGHTS, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, OL_V1_WEIGHTS, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -180,14 +202,16 @@ _INSERT_COMPONENTS = text("""
 _INSERT_GRADES = text("""
     INSERT INTO team_ol_grades
         (team_id, season, composite_grade, composite_z, percentile,
-         confidence, data_tier, qualified, data_tier_reason)
+         confidence, data_tier, qualified, data_tier_reason, through_week)
     VALUES
         (:team_id, :season, :composite_grade, :composite_z, :percentile,
-         :confidence, :data_tier, :qualified, :data_tier_reason)
+         :confidence, :data_tier, :qualified, :data_tier_reason, :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
     components = list(OL_V1_RAW_VALUE_COLS.keys())
     component_rows: list[dict[str, object]] = []
     for component in components:
@@ -229,6 +253,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
             "data_tier":        int(r["data_tier"]),
             "qualified":        bool(r["qualified"]),
             "data_tier_reason": reason_out,
+            "through_week":     through_week,
         })
 
     conn.execute(_DELETE_GRADES, {"season": season})

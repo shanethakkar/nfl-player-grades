@@ -25,9 +25,10 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     LB_V1_CONFIDENCE_FULL_SNAPS,
     LB_V1_MIN_SNAPS_TO_GRADE,
@@ -55,7 +56,7 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     if season < PFR_DEF_LB_MIN_SEASON:
         logger.warning(
             "LB grading requires season >= %d; got %d — skipping",
@@ -63,10 +64,10 @@ def run(season: int) -> RunResult:
         )
         return RunResult(season, 0, 0, 0, 0)
 
-    engine = get_engine()
     with pipeline_run("grading:lb", season=season) as handle:
-        with engine.begin() as conn:
-            features = extract_features(conn, season)
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
+            features = extract_features(conn, season, season_progress)
             if features.empty:
                 logger.warning("no LB players found for season %d", season)
                 result = RunResult(season, 0, 0, 0, 0)
@@ -74,8 +75,15 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features, season)
-            n_components, n_grades = write_results(conn, graded, season)
+            graded = compute_grades(
+                features,
+                season,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -129,14 +137,16 @@ _FEATURES_SQL = text("""
 """)
 
 
-def extract_features(conn: Connection, season: int) -> pd.DataFrame:
+def extract_features(
+    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+) -> pd.DataFrame:
     rows = (
         conn.execute(
             _FEATURES_SQL,
             {
                 "season": season,
-                "min_snaps": LB_V1_MIN_SNAPS_TO_GRADE,
-                "min_targets": LB_V1_MIN_TARGETS_FOR_OFFBALL,
+                "min_snaps": progress.scale(LB_V1_MIN_SNAPS_TO_GRADE),
+                "min_targets": progress.scale(LB_V1_MIN_TARGETS_FOR_OFFBALL),
                 "min_target_rate": LB_V1_MIN_TARGET_RATE_FOR_OFFBALL,
             },
         )
@@ -191,11 +201,17 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 # 2. Compute grades
 # ---------------------------------------------------------------------------
 
-def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    season: int,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     df = features.copy()
-    df["qualified"] = df["snaps_defense"] >= LB_V1_QUALIFIED_MIN_SNAPS
+    df["qualified"] = df["snaps_defense"] >= progress.scale(LB_V1_QUALIFIED_MIN_SNAPS)
     df["confidence"] = (
-        df["snaps_defense"].astype(float) / LB_V1_CONFIDENCE_FULL_SNAPS
+        df["snaps_defense"].astype(float) / progress.scale(LB_V1_CONFIDENCE_FULL_SNAPS)
     ).clip(upper=1.0)
 
     data_tier, data_tier_reason = _era_tier_for_season(season)
@@ -215,7 +231,9 @@ def compute_grades(features: pd.DataFrame, season: int) -> pd.DataFrame:
         df[f"z_{component}"] = z
         z_frame[component] = z
 
-    return df.assign(**scoring.score(z_frame, LB_V1_WEIGHTS, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, LB_V1_WEIGHTS, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -245,15 +263,19 @@ _INSERT_STAT_COMPONENTS = text("""
 _INSERT_SEASON_GRADES = text("""
     INSERT INTO season_grades
         (player_id, season, position, composite_grade, composite_z,
-         percentile, confidence, data_tier, qualified, role, data_tier_reason)
+         percentile, confidence, data_tier, qualified, role, data_tier_reason,
+         through_week)
     VALUES
         (:player_id, :season, :position, :composite_grade, :composite_z,
          :percentile, :confidence, :data_tier, :qualified, :role,
-         :data_tier_reason)
+         :data_tier_reason,
+         :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
     components = list(LB_V1_RAW_VALUE_COLS.keys())
     component_rows: list[dict[str, object]] = []
     for component in components:
@@ -297,6 +319,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
             "qualified":       bool(r["qualified"]),
             "role":            None,
             "data_tier_reason": reason_out,
+            "through_week": through_week,
         })
 
     conn.execute(_DELETE_SEASON_GRADES, {"season": season, "position": POSITION})

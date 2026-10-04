@@ -52,9 +52,10 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     CB_ROLE_HYBRID,
     CB_ROLE_OUTSIDE,
@@ -85,7 +86,7 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     """Run the full CB v1 grading pipeline for one season.
 
     Idempotent: re-writes all stat_components and season_grades rows
@@ -103,10 +104,10 @@ def run(season: int) -> RunResult:
         )
         return RunResult(season, 0, 0, 0, 0)
 
-    engine = get_engine()
     with pipeline_run("grading:cb", season=season) as handle:
-        with engine.begin() as conn:
-            features = extract_features(conn, season)
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
+            features = extract_features(conn, season, season_progress)
             if features.empty:
                 logger.warning("no CB coverage data found in pfr_def_coverage for season %d", season)
                 result = RunResult(season, 0, 0, 0, 0)
@@ -114,8 +115,14 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features)
-            n_components, n_grades = write_results(conn, graded, season)
+            graded = compute_grades(
+                features,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -166,7 +173,9 @@ _FEATURES_SQL = text("""
 """)
 
 
-def extract_features(conn: Connection, season: int) -> pd.DataFrame:
+def extract_features(
+    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+) -> pd.DataFrame:
     """Pull per-CB raw coverage stats from pfr_def_coverage.
 
     Returns a DataFrame with one row per CB who reached
@@ -183,7 +192,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_targets": CB_V1_MIN_TARGETS_TO_GRADE},
+            {"season": season, "min_targets": progress.scale(CB_V1_MIN_TARGETS_TO_GRADE)},
         )
         .mappings()
         .all()
@@ -264,7 +273,12 @@ def _classify_role(slot_pct: float | None) -> str | None:
     return CB_ROLE_HYBRID
 
 
-def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with:
@@ -274,10 +288,10 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
     df = features.copy()
 
     # --- qualification + confidence ---
-    df["qualified"] = df["targets"] >= CB_V1_QUALIFIED_MIN_TARGETS
-    df["confidence"] = (df["targets"].astype(float) / CB_V1_CONFIDENCE_FULL_TARGETS).clip(
-        upper=1.0
-    )
+    df["qualified"] = df["targets"] >= progress.scale(CB_V1_QUALIFIED_MIN_TARGETS)
+    df["confidence"] = (
+        df["targets"].astype(float) / progress.scale(CB_V1_CONFIDENCE_FULL_TARGETS)
+    ).clip(upper=1.0)
 
     # --- role classification (label-only; doesn't affect z-score pooling) ---
     df["role"] = df["slot_pct"].apply(_classify_role)
@@ -300,7 +314,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         # so the UI renders "—" rather than "0.0".
         z_frame[component] = z
 
-    return df.assign(**scoring.score(z_frame, CB_V1_WEIGHTS, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, CB_V1_WEIGHTS, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -330,14 +346,18 @@ _INSERT_STAT_COMPONENTS = text("""
 _INSERT_SEASON_GRADES = text("""
     INSERT INTO season_grades
         (player_id, season, position, composite_grade, composite_z,
-         percentile, confidence, data_tier, qualified, role, data_tier_reason)
+         percentile, confidence, data_tier, qualified, role, data_tier_reason,
+         through_week)
     VALUES
         (:player_id, :season, :position, :composite_grade, :composite_z,
-         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason)
+         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason,
+         :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
     """Upsert stat_components + season_grades. Returns (n_components, n_grades)."""
     components = list(CB_V1_RAW_VALUE_COLS.keys())
     era_tier, era_reason = _era_tier_for_season(season)
@@ -385,6 +405,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
                 "qualified": bool(r["qualified"]),
                 "role": r["role"],
                 "data_tier_reason": era_reason,
+                "through_week": through_week,
             }
         )
 

@@ -36,6 +36,7 @@ from nfl_grades.grading.weights import (
     IDL_V1_WEIGHTS,
     K_V1_WEIGHTS,
     LB_V1_WEIGHTS,
+    OL_V1_WEIGHTS,
     P_V1_WEIGHTS,
     QB_V1_WEIGHTS,
     RB_V1_WEIGHTS,
@@ -197,6 +198,30 @@ def _load_stored_cohort(
     return grades, z_wide, formulas
 
 
+_OL_COMPLETED_Z_SQL = text(
+    """
+    SELECT g.season, g.team_id, g.qualified, c.component_name, c.z_score
+    FROM team_ol_grades g
+    JOIN team_ol_components c
+      ON c.team_id = g.team_id AND c.season = g.season
+    WHERE g.through_week IS NULL
+    """
+)
+
+
+def _load_completed_ol_cohort(
+    conn: Connection,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float]]:
+    """Completed-season OL units (team-level, ADR-0025), shaped like
+    :func:`_load_stored_cohort`."""
+    rows = pd.read_sql(_OL_COMPLETED_Z_SQL, conn)
+    z_wide = rows.pivot(
+        index=["season", "team_id"], columns="component_name", values="z_score"
+    ).astype(float)
+    grades = rows.groupby(["season", "team_id"])[["qualified"]].first().reindex(z_wide.index)
+    return grades, z_wide, OL_V1_WEIGHTS
+
+
 def pooled_composite_sd(
     conn: Connection,
     position: str,
@@ -205,9 +230,19 @@ def pooled_composite_sd(
     """Pooled within-season SD of the raw Composite over the Qualified
     players of every completed season of ``position``, under current
     weights plus ``overrides``. Provisional grades are standardized by it.
+    OL takes no overrides.
     """
-    seasons = [int(s) for s in conn.execute(_COMPLETED_SEASONS_SQL, {"position": position}).scalars()]
-    grades, z_wide, formulas = _load_stored_cohort(conn, seasons, position, overrides or {})
+    grades: pd.DataFrame
+    z_wide: pd.DataFrame
+    formulas: dict[str, float] | pd.Series
+    if position == "OL":
+        grades, z_wide, formulas = _load_completed_ol_cohort(conn)
+    else:
+        seasons = [
+            int(s)
+            for s in conn.execute(_COMPLETED_SEASONS_SQL, {"position": position}).scalars()
+        ]
+        grades, z_wide, formulas = _load_stored_cohort(conn, seasons, position, overrides or {})
     raw = scoring.raw_composite(z_wide, formulas)
     season = pd.Series(grades.index.get_level_values("season"), index=grades.index)
     return scoring.pooled_sd(raw, grades["qualified"].astype(bool), season)

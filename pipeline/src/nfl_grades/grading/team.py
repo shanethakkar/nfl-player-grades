@@ -30,13 +30,13 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import sigmoid
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import composite, progress, sigmoid
 from nfl_grades.grading.weights import (
-    TEAM_V1_OFFENSE_WEIGHTS,
     TEAM_V1_DEFENSE_WEIGHTS,
-    TEAM_V1_ST_WEIGHTS,
+    TEAM_V1_OFFENSE_WEIGHTS,
     TEAM_V1_PHASE_WEIGHTS,
+    TEAM_V1_ST_WEIGHTS,
 )
 
 logger = logging.getLogger(__name__)
@@ -240,16 +240,22 @@ def compute_grades(
         out[f"{phase}_grade"] = sigmoid.to_grade(z.values)
         out[f"{phase}_percentile"] = z.rank(pct=True) * 100.0
 
-    # Overall: phase-weighted sum of phase z-scores → standardize → sigmoid.
-    overall_raw = sum(
-        out[f"{phase}_z"] * w for phase, w in TEAM_V1_PHASE_WEIGHTS.items()
+    # Overall: phase-weighted mean of phase z-scores → standardize → sigmoid.
+    # A phase with no grades (in-season, before any K/P qualifies) drops out
+    # and the remaining phase weights are renormalized.
+    phase_z = out[[f"{phase}_z" for phase in TEAM_V1_PHASE_WEIGHTS]].rename(
+        columns=lambda c: c.removesuffix("_z")
     )
-    overall_z = _standardize(overall_raw)
+    overall_z = _standardize(composite.combine(phase_z, TEAM_V1_PHASE_WEIGHTS))
     out["overall_z"] = overall_z
     out["overall_grade"] = sigmoid.to_grade(overall_z.values)
     out["overall_percentile"] = overall_z.rank(pct=True) * 100.0
 
-    out["data_tier_reason"] = None  # populated below if any team had a missing position
+    missing = phase_z.isna()
+    out["data_tier_reason"] = [
+        f"no {', '.join(missing.columns[row])} grades" if row.any() else None
+        for row in missing.to_numpy()
+    ]
     out = out.reset_index().rename(columns={"index": "team_id"})
 
     # Build the components DataFrame.
@@ -278,13 +284,20 @@ def compute_grades(
 # ---------------------------------------------------------------------------
 
 
+def _float_or_none(x: object) -> float | None:
+    return None if pd.isna(x) else float(x)  # type: ignore[arg-type]
+
+
 def write_results(
     conn: Connection,
     team_grades: pd.DataFrame,
     components: pd.DataFrame,
     season: int,
+    *,
+    through_week: int | None = None,
 ) -> tuple[int, int]:
-    """Idempotent — delete-then-insert for the season."""
+    """Idempotent — delete-then-insert for the season. ``through_week``
+    marks the grades Provisional (None: completed season)."""
     conn.execute(text("DELETE FROM team_grade_components WHERE season = :s"), {"s": season})
     conn.execute(text("DELETE FROM team_grades WHERE season = :s"), {"s": season})
 
@@ -298,13 +311,13 @@ def write_results(
                     overall_grade, offense_grade, defense_grade, st_grade,
                     overall_z, offense_z, defense_z, st_z,
                     overall_percentile, offense_percentile, defense_percentile, st_percentile,
-                    data_tier_reason
+                    data_tier_reason, through_week
                 ) VALUES (
                     :team_id, :season,
                     :overall_grade, :offense_grade, :defense_grade, :st_grade,
                     :overall_z, :offense_z, :defense_z, :st_z,
                     :overall_percentile, :offense_percentile, :defense_percentile, :st_percentile,
-                    :data_tier_reason
+                    :data_tier_reason, :through_week
                 )
                 """
             ),
@@ -314,16 +327,17 @@ def write_results(
                 "overall_grade": float(row["overall_grade"]),
                 "offense_grade": float(row["offense_grade"]),
                 "defense_grade": float(row["defense_grade"]),
-                "st_grade": float(row["st_grade"]),
+                "st_grade": _float_or_none(row["st_grade"]),
                 "overall_z": float(row["overall_z"]),
                 "offense_z": float(row["offense_z"]),
                 "defense_z": float(row["defense_z"]),
-                "st_z": float(row["st_z"]),
-                "overall_percentile": float(row["overall_percentile"]),
-                "offense_percentile": float(row["offense_percentile"]),
-                "defense_percentile": float(row["defense_percentile"]),
-                "st_percentile": float(row["st_percentile"]),
+                "st_z": _float_or_none(row["st_z"]),
+                "overall_percentile": _float_or_none(row["overall_percentile"]),
+                "offense_percentile": _float_or_none(row["offense_percentile"]),
+                "defense_percentile": _float_or_none(row["defense_percentile"]),
+                "st_percentile": _float_or_none(row["st_percentile"]),
                 "data_tier_reason": row["data_tier_reason"],
+                "through_week": through_week,
             },
         )
         n_grades += 1
@@ -358,11 +372,12 @@ def write_results(
     return n_grades, n_components
 
 
-def run(season: int) -> RunResult:
-    """Grade every team for one season. Idempotent."""
-    engine = get_engine()
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
+    """Grade every team for one season. Idempotent. Pass ``conn`` to write
+    inside the caller's transaction."""
     with pipeline_run("grading:team", season=season) as handle:
-        with engine.begin() as conn:
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
             player_df = _load_player_position_data(conn, season)
             ol_df = _load_ol_grades(conn, season)
             if player_df.empty or ol_df.empty:
@@ -374,7 +389,20 @@ def run(season: int) -> RunResult:
                 return RunResult(season=season, n_teams=0, n_components=0)
 
             team_grades, components = compute_grades(player_df, ol_df)
-            n_grades, n_components = write_results(conn, team_grades, components, season)
+            # Offense and Defense are NOT NULL; a team can't be graded
+            # without both (only possible in the first weeks of a season).
+            gradable = team_grades[["offense_grade", "defense_grade"]].notna().all(axis=1)
+            if not gradable.all():
+                logger.warning(
+                    "team grading %d: %d teams lack offense or defense grades — skipped",
+                    season, int((~gradable).sum()),
+                )
+            team_grades = team_grades[gradable]
+            components = components[components["team_id"].isin(team_grades["team_id"])]
+            n_grades, n_components = write_results(
+                conn, team_grades, components, season,
+                through_week=season_progress.through_week,
+            )
 
         handle.rows_written = n_grades
         handle.note(f"teams_graded={n_grades} components={n_components}")

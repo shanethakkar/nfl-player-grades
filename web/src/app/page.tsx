@@ -294,18 +294,33 @@ export default async function HomePage({ searchParams }: Props) {
           </p>
         )}
 
-        <section
-          className={
-            (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") +
-            " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
-          }
-        >
-          <LeaderboardTable
-            entries={qualified}
-            position={activePosition}
-            season={activeSeason}
-          />
-        </section>
+        {throughWeek !== null && entries.length === 0 ? (
+          // A Provisional season publishes a position only once enough
+          // players qualify (ADR-0031), instead of a wall of 50s.
+          <section className="mt-6 rounded-xl border border-neutral-800 px-6 py-10 text-center">
+            <p className="text-base font-semibold text-neutral-200">
+              Not enough games yet
+            </p>
+            <p className="mt-2 text-sm text-neutral-500">
+              Fewer than ten {activePosition}s have enough volume through
+              week {throughWeek} to grade the position. Check back after
+              another week of games.
+            </p>
+          </section>
+        ) : (
+          <section
+            className={
+              (activePosition === "OL" ? "mt-2" : "mt-3 sm:mt-6") +
+              " -ml-6 -mr-6 sm:ml-0 sm:mr-0"
+            }
+          >
+            <LeaderboardTable
+              entries={qualified}
+              position={activePosition}
+              season={activeSeason}
+            />
+          </section>
+        )}
 
         {unqualified.length > 0 && (
           // Section sits INSIDE the centered `w-max` column so its

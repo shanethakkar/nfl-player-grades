@@ -76,6 +76,21 @@ def _synth_te_cohort(
     return df
 
 
+class TestAssignRole:
+    def test_low_target_share_on_full_time_snaps_is_blocking(self) -> None:
+        assert assign_te_role(n_targets=10, snaps_offense=400) == TE_ROLE_BLOCKING
+
+    def test_low_snap_count_is_not_labeled_blocking(self) -> None:
+        assert assign_te_role(n_targets=3, snaps_offense=100) != TE_ROLE_BLOCKING
+
+    def test_blocking_snap_bar_is_supplied_in_season(self) -> None:
+        # Four games in, 100 snaps is a full-time blocker's workload.
+        assert (
+            assign_te_role(n_targets=3, snaps_offense=100, min_blocking_snaps=200 * 4 / 17)
+            == TE_ROLE_BLOCKING
+        )
+
+
 class TestComputeGrades:
     def test_blocking_uses_different_composite(self) -> None:
         base = _synth_te_cohort(seed=1)

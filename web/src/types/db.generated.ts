@@ -406,16 +406,17 @@ export type TeamGradesRow = {
   overall_grade: number;
   offense_grade: number;
   defense_grade: number;
-  st_grade: number;
+  st_grade: number | null;
   overall_z: number;
   offense_z: number;
   defense_z: number;
-  st_z: number;
+  st_z: number | null;
   overall_percentile: number | null;
   offense_percentile: number | null;
   defense_percentile: number | null;
   st_percentile: number | null;
   data_tier_reason: string | null;
+  through_week: number | null;
 };
 
 export type TeamOlComponentsRow = {
@@ -439,6 +440,7 @@ export type TeamOlGradesRow = {
   data_tier: number | null;
   qualified: boolean;
   data_tier_reason: string | null;
+  through_week: number | null;
 };
 
 export type TeamOlStatsRow = {

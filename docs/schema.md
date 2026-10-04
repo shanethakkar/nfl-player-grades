@@ -10,6 +10,10 @@ doc summarizes the shape and relationships; read the SQL for exact types and ind
   `era_and_role`); `through_week` (SMALLINT, nullable, migration 0026) — the
   last regular-season week a Provisional grade covers; `NULL` for a completed
   season (ADR-0031).
+- **`team_grades`**, **`team_ol_grades`**: `through_week` (SMALLINT, nullable,
+  migration 0027), as on `season_grades`. `team_grades.st_grade` / `st_z` are
+  nullable: early in a season no kicker or punter has qualified, and Overall
+  renormalizes over Offense and Defense (ADR-0031).
 - **`stat_components`**: `used_in_composite` (boolean, default true) — false when
   a component was stored for audit/debug but omitted from the headline composite
   (e.g. TE `te_target_earn_rate` for `blocking_te` rows; ADR-0016).

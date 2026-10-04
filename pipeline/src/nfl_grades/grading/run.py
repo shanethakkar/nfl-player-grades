@@ -11,12 +11,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from sqlalchemy.engine import Connection
+
 from nfl_grades.grading import cb, edge, idl, kicker, lb, ol, punter, qb, rb, safety, te, wr
 from nfl_grades.grading.scoring import InsufficientCohortError
 
 logger = logging.getLogger(__name__)
 
-# Each value is the position-specific ``run(season)`` function.
+# Each value is the position-specific ``run(season, *, conn=None)`` function.
 POSITION_RUNNERS = {
     "QB":   qb.run,
     "RB":   rb.run,
@@ -57,13 +59,16 @@ class GradeRunSummary:
     by_position: dict[str, PositionRunResult | NotGraded]
 
 
-def run(season: int, position: str | None = None) -> GradeRunSummary:
+def run(
+    season: int, position: str | None = None, *, conn: Connection | None = None
+) -> GradeRunSummary:
     """Run grading for one season, optionally restricted to a single position.
 
     Args:
         season: NFL season year (e.g. 2024).
-        position: single position to grade, or None for all available
-            (currently QB and RB).
+        position: single position to grade, or None for all.
+        conn: write inside the caller's transaction instead of one per
+            position (the weekly refresh commits every grade at once).
     """
     if position is None:
         positions = list(POSITION_RUNNERS)
@@ -84,7 +89,7 @@ def run(season: int, position: str | None = None) -> GradeRunSummary:
     for pos in positions:
         logger.info("grading %s for season %d", pos, season)
         try:
-            results[pos] = POSITION_RUNNERS[pos](season)
+            results[pos] = POSITION_RUNNERS[pos](season, conn=conn)
         except InsufficientCohortError as exc:
             # The grader's pipeline_runs row is already marked 'error'.
             logger.warning("%s %d not graded: %s", pos, season, exc)

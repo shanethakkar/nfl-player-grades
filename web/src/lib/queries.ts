@@ -130,7 +130,7 @@ async function _getTeamGrade(
     overall_grade: Number(row.overall_grade),
     offense_grade: Number(row.offense_grade),
     defense_grade: Number(row.defense_grade),
-    st_grade: Number(row.st_grade),
+    st_grade: row.st_grade == null ? null : Number(row.st_grade),
     overall_percentile: row.overall_percentile == null ? null : Number(row.overall_percentile),
     offense_percentile: row.offense_percentile == null ? null : Number(row.offense_percentile),
     defense_percentile: row.defense_percentile == null ? null : Number(row.defense_percentile),
@@ -285,7 +285,7 @@ async function _getTeamsLeaderboard(
     overall_grade: Number(r.overall_grade),
     offense_grade: Number(r.offense_grade),
     defense_grade: Number(r.defense_grade),
-    st_grade: Number(r.st_grade),
+    st_grade: r.st_grade == null ? null : Number(r.st_grade),
     overall_percentile:
       r.overall_percentile == null ? null : Number(r.overall_percentile),
     wins: Number(r.wins),

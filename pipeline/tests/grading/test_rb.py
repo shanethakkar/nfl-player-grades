@@ -15,6 +15,7 @@ from sqlalchemy.exc import OperationalError
 
 from nfl_grades.db import get_engine
 from nfl_grades.grading.era_tier import REASON_ERA_PRE_NGS, _era_tier_for_season
+from nfl_grades.grading.progress import SeasonProgress
 from nfl_grades.grading.rb import (
     POSITION,
     compute_grades,
@@ -186,6 +187,18 @@ class TestComputeGrades:
         assert not (graded.loc[graded["n_carries"] < 80, "rushing_sub_qualified"]).any()
         assert (graded.loc[graded["n_targets"] >= 40, "receiving_sub_qualified"]).all()
         assert not (graded.loc[graded["n_targets"] < 40, "receiving_sub_qualified"]).any()
+
+    def test_sub_grade_thresholds_pro_rate_in_season(self) -> None:
+        # Six games in: 80 carries / 40 targets pro-rate to ~28.2 / ~14.1.
+        six_weeks = SeasonProgress(through_week=6, games=6.0)
+        features = _synth_features(seed=3)
+        graded = compute_grades(features, progress=six_weeks)
+        assert graded["rushing_sub_qualified"].tolist() == (
+            features["n_carries"] >= 80 * 6 / 17
+        ).tolist()
+        assert graded["receiving_sub_qualified"].tolist() == (
+            features["n_targets"] >= 40 * 6 / 17
+        ).tolist()
 
     def test_pure_thumper_gets_valid_grade(self) -> None:
         """RB with 0 targets still receives a finite grade (not NaN).

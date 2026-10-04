@@ -47,9 +47,10 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     S_V1_CONFIDENCE_FULL_SNAPS,
     S_V1_MIN_SNAPS_TO_GRADE,
@@ -75,7 +76,7 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     """Run the full Safety v1 grading pipeline for one season.
 
     Idempotent: re-writes all stat_components and season_grades rows
@@ -92,10 +93,10 @@ def run(season: int) -> RunResult:
         )
         return RunResult(season, 0, 0, 0, 0)
 
-    engine = get_engine()
     with pipeline_run("grading:safety", season=season) as handle:
-        with engine.begin() as conn:
-            features = extract_features(conn, season)
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
+            features = extract_features(conn, season, season_progress)
             if features.empty:
                 logger.warning("no Safety data found in pfr_def_coverage_s for season %d", season)
                 result = RunResult(season, 0, 0, 0, 0)
@@ -103,8 +104,14 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features)
-            n_components, n_grades = write_results(conn, graded, season)
+            graded = compute_grades(
+                features,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -160,7 +167,9 @@ _FEATURES_SQL = text("""
 """)
 
 
-def extract_features(conn: Connection, season: int) -> pd.DataFrame:
+def extract_features(
+    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+) -> pd.DataFrame:
     """Pull per-safety raw stats from pfr_def_coverage_s.
 
     Returns a DataFrame filtered to safeties with at least
@@ -177,7 +186,7 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_snaps": S_V1_MIN_SNAPS_TO_GRADE},
+            {"season": season, "min_snaps": progress.scale(S_V1_MIN_SNAPS_TO_GRADE)},
         )
         .mappings()
         .all()
@@ -264,7 +273,12 @@ def extract_features(conn: Connection, season: int) -> pd.DataFrame:
 # 2. Compute grades
 # ---------------------------------------------------------------------------
 
-def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     """Apply shrinkage → z-score → composite → sigmoid.
 
     Returns the input DataFrame augmented with:
@@ -273,10 +287,10 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
     """
     df = features.copy()
 
-    df["qualified"] = df["snaps_defense"] >= S_V1_QUALIFIED_MIN_SNAPS
-    df["confidence"] = (df["snaps_defense"].astype(float) / S_V1_CONFIDENCE_FULL_SNAPS).clip(
-        upper=1.0
-    )
+    df["qualified"] = df["snaps_defense"] >= progress.scale(S_V1_QUALIFIED_MIN_SNAPS)
+    df["confidence"] = (
+        df["snaps_defense"].astype(float) / progress.scale(S_V1_CONFIDENCE_FULL_SNAPS)
+    ).clip(upper=1.0)
 
     z_frame = pd.DataFrame(index=df.index)
     for component, raw_col in S_V1_RAW_VALUE_COLS.items():
@@ -291,7 +305,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         df[f"z_{component}"] = z
         z_frame[component] = z
 
-    return df.assign(**scoring.score(z_frame, S_V1_WEIGHTS, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, S_V1_WEIGHTS, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -321,14 +337,18 @@ _INSERT_STAT_COMPONENTS = text("""
 _INSERT_SEASON_GRADES = text("""
     INSERT INTO season_grades
         (player_id, season, position, composite_grade, composite_z,
-         percentile, confidence, data_tier, qualified, role, data_tier_reason)
+         percentile, confidence, data_tier, qualified, role, data_tier_reason,
+         through_week)
     VALUES
         (:player_id, :season, :position, :composite_grade, :composite_z,
-         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason)
+         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason,
+         :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
     """Upsert stat_components + season_grades. Returns (n_components, n_grades)."""
     components = list(S_V1_RAW_VALUE_COLS.keys())
     era_tier, era_reason = _era_tier_for_season(season)
@@ -374,6 +394,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
                 "qualified": bool(r["qualified"]),
                 "role": None,
                 "data_tier_reason": era_reason,
+                "through_week": through_week,
             }
         )
 

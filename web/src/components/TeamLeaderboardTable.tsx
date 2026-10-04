@@ -246,8 +246,10 @@ function Row({
       <Td className={`text-right font-mono ${gradeColor(e.defense_grade)}`}>
         {e.defense_grade.toFixed(1)}
       </Td>
-      <Td className={`text-right font-mono ${gradeColor(e.st_grade)}`}>
-        {e.st_grade.toFixed(1)}
+      <Td
+        className={`text-right font-mono ${e.st_grade === null ? "text-neutral-600" : gradeColor(e.st_grade)}`}
+      >
+        {e.st_grade === null ? "\u2014" : e.st_grade.toFixed(1)}
       </Td>
       <Td className="text-right font-mono text-neutral-300">{recordText}</Td>
       <Td className={`text-right font-mono ${e.point_diff >= 0 ? "text-neutral-200" : "text-neutral-500"}`}>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ProvisionalBadge } from "@/components/ProvisionalBadge";
 import { TeamCareerGradeChart } from "@/components/TeamCareerGradeChart";
 import { gradeColor } from "@/lib/grades";
 import type { TeamGradeComponent, TeamGradeSummary } from "@/types";
@@ -10,6 +11,8 @@ type Props = {
   /** Full overall_grade history (every graded season) for the trend chart. */
   history: { season: number; overall_grade: number }[];
   season: number;
+  /** Set when the season is in progress (Provisional grades). */
+  throughWeek: number | null;
 };
 
 const PHASE_LABEL: Record<TeamGradeComponent["phase"], string> = {
@@ -35,7 +38,13 @@ const PHASE_LABEL: Record<TeamGradeComponent["phase"], string> = {
  * sits at the bottom of the card so the curious reader can verify the
  * weights without crowding the headline UI.
  */
-export function TeamGradeCard({ summary, components, history, season }: Props) {
+export function TeamGradeCard({
+  summary,
+  components,
+  history,
+  season,
+  throughWeek,
+}: Props) {
   // Group components by phase, preserving the SQL ordering
   // (weight desc within each phase).
   const byPhase: Record<TeamGradeComponent["phase"], TeamGradeComponent[]> = {
@@ -47,8 +56,9 @@ export function TeamGradeCard({ summary, components, history, season }: Props) {
 
   return (
     <section className="rounded-xl border border-neutral-800 bg-neutral-950/70 p-4 sm:p-8">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-500">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-500">
         Team grade · {season}
+        {throughWeek !== null && <ProvisionalBadge throughWeek={throughWeek} />}
       </div>
 
       {/* Top row: big Overall + 3 phase chips */}
@@ -147,15 +157,17 @@ function PhaseChip({
   percentile,
 }: {
   label: string;
-  grade: number;
+  /** Null when the phase has no grades yet (ST early in a season). */
+  grade: number | null;
   percentile: number | null;
 }) {
   return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-3 text-right sm:min-w-[120px]">
       <div
-        className={`font-mono text-2xl font-bold leading-none tracking-tight sm:text-3xl ${gradeColor(grade)}`}
+        className={`font-mono text-2xl font-bold leading-none tracking-tight sm:text-3xl ${grade === null ? "text-neutral-600" : gradeColor(grade)}`}
+        title={grade === null ? "Not enough games yet" : undefined}
       >
-        {grade.toFixed(1)}
+        {grade === null ? "\u2014" : grade.toFixed(1)}
       </div>
       <div className="mt-1.5 text-[10px] uppercase tracking-wider text-neutral-500">
         {label}
