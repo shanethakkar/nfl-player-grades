@@ -206,3 +206,42 @@ def canonical_position(
         return _DIRECT_GROUP[p]  # type: ignore[return-value]
 
     raise UnknownPositionError(position_group, position)
+
+
+# PFF's career position code for an interior defender (vs "ED" for edge).
+_PFF_INTERIOR: Final[str] = "DI"
+
+
+def season_dl_position(
+    roster_position: CanonicalPosition,
+    master_position: str | None,
+    pff_position: str | None,
+) -> CanonicalPosition:
+    """Correct a roster EDGE that is really a 3-4 interior lineman.
+
+    Rosters label every defensive end ``DE``, and in a 3-4 front the DE is a
+    5-technique who lines up inside (Derrick Brown and A'Shawn Robinson on
+    CAR 2024-25, Dexter Lawrence, DeForest Buckner). The roster can't tell
+    those from edge rushers, so the career-level sources decide: the player
+    master's ``position`` must be interior (DT/NT/DI/DL) AND PFF's
+    ``pff_position`` must be ``DI``. Requiring both keeps edge rushers whose
+    master position went stale late in a career (Al-Quadin Muhammad, Mario
+    Addison: master DT, PFF ED) and hybrids PFF calls interior but the
+    master still calls DE (J.J. Watt) in EDGE.
+
+    Args:
+        roster_position: ``canonical_position`` of the season's roster row.
+        master_position: Specific label from ``load_players.position``.
+        pff_position: ``load_players.pff_position`` (``DI``, ``ED``, ...).
+
+    Returns:
+        ``"iDL"`` for a roster EDGE with an interior career, otherwise
+        ``roster_position`` unchanged.
+    """
+    if roster_position != "EDGE":
+        return roster_position
+    master = (master_position or "").strip().upper()
+    pff = (pff_position or "").strip().upper()
+    if master in _DL_INTERIOR and pff == _PFF_INTERIOR:
+        return "iDL"
+    return roster_position

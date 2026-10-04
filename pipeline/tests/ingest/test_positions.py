@@ -12,6 +12,7 @@ from nfl_grades.ingest._positions import (
     CANONICAL_POSITIONS,
     UnknownPositionError,
     canonical_position,
+    season_dl_position,
 )
 
 
@@ -64,6 +65,41 @@ class TestDLSplit:
             canonical_position("DL", "WTF")
         assert exc.value.position_group == "DL"
         assert exc.value.position == "WTF"
+
+
+class TestSeasonDLPosition:
+    """A roster 'DE' in a 3-4 front is a 5-technique interior lineman.
+
+    The roster's ``depth_chart_position`` can't tell a 3-4 end from an edge
+    rusher, so the career-level master position and PFF position decide.
+    Both must say interior before a roster EDGE becomes iDL (#4).
+    """
+
+    def test_3_4_end_with_interior_career_is_idl(self) -> None:
+        # Derrick Brown, CAR 2025: roster DE, master DT, PFF DI.
+        assert season_dl_position("EDGE", "DT", "DI") == "iDL"
+
+    def test_nose_tackle_master_counts_as_interior(self) -> None:
+        assert season_dl_position("EDGE", "NT", "DI") == "iDL"
+
+    def test_edge_rusher_with_stale_master_stays_edge(self) -> None:
+        # Al-Quadin Muhammad, DET 2025: roster DE, master DT, PFF ED.
+        assert season_dl_position("EDGE", "DT", "ED") == "EDGE"
+
+    def test_master_de_stays_edge_even_if_pff_says_interior(self) -> None:
+        # J.J. Watt 2018: roster DE, master DE, PFF DI. One source isn't enough.
+        assert season_dl_position("EDGE", "DE", "DI") == "EDGE"
+
+    def test_missing_career_data_keeps_roster_position(self) -> None:
+        assert season_dl_position("EDGE", None, None) == "EDGE"
+        assert season_dl_position("EDGE", "DT", None) == "EDGE"
+
+    def test_case_and_whitespace_tolerated(self) -> None:
+        assert season_dl_position("EDGE", " dt ", "di") == "iDL"
+
+    @pytest.mark.parametrize("roster", ["iDL", "LB", "CB", "QB"])
+    def test_non_edge_roster_positions_unchanged(self, roster: str) -> None:
+        assert season_dl_position(roster, "DE", "ED") == roster  # type: ignore[arg-type]
 
 
 class TestDBSplit:

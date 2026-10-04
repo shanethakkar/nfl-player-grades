@@ -119,6 +119,7 @@ from nfl_grades.ingest._positions import (
     CanonicalPosition,
     UnknownPositionError,
     canonical_position,
+    season_dl_position,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,8 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
             gsis_to_player_id = _read_gsis_to_player_id(conn)
 
             ps_rows, skipped_unknown_pos_r, skipped_unknown_team = _transform_player_seasons(
-                df_rosters, season, team_lookup, gsis_to_player_id
+                df_rosters, season, team_lookup, gsis_to_player_id,
+                df_players_master=df_players,
             )
             ps_n = _upsert_player_seasons(conn, ps_rows, season)
 
@@ -352,8 +354,14 @@ def _transform_player_seasons(
     season: int,
     team_abbr_to_id: dict[str, int],
     gsis_to_player_id: dict[str, int],
+    *,
+    df_players_master: pd.DataFrame,
 ) -> tuple[list[dict[str, object]], int, int]:
     """Reshape ``load_rosters([season])`` into ``player_seasons`` rows.
+
+    ``df_players_master`` (``load_players()``) supplies the career-level
+    positions that move 3-4 defensive ends from EDGE to iDL; see
+    ``season_dl_position`` and ADR-0030.
 
     Returns:
         (list of row dicts ready to insert, skipped_unknown_pos, skipped_unknown_team)
@@ -363,6 +371,7 @@ def _transform_player_seasons(
     skipped_unknown_pos = 0
     skipped_unknown_team = 0
     dropped_dupes = 0
+    career_positions = _career_positions(df_players_master, df_rosters["gsis_id"])
 
     for _, r in df_rosters.iterrows():
         gsis = str(r["gsis_id"])
@@ -385,6 +394,8 @@ def _transform_player_seasons(
         if pos is None:
             skipped_unknown_pos += 1
             continue
+        master_pos, pff_pos = career_positions.get(gsis, (None, None))
+        pos = season_dl_position(pos, master_pos, pff_pos)
 
         key = (player_id, season, team_id)
         if key in seen_keys:
@@ -413,6 +424,19 @@ def _transform_player_seasons(
             season,
         )
     return rows, skipped_unknown_pos, skipped_unknown_team
+
+
+def _career_positions(
+    df_players_master: pd.DataFrame,
+    gsis_ids: pd.Series,
+) -> dict[str, tuple[str | None, str | None]]:
+    """gsis_id -> (master position, pff_position) for the given players."""
+    master = df_players_master[df_players_master["gsis_id"].isin(set(gsis_ids.astype(str)))]
+    pff = master["pff_position"] if "pff_position" in master else pd.Series(None, index=master.index)
+    return {
+        str(gsis): (_to_str_or_none(pos), _to_str_or_none(pff_pos))
+        for gsis, pos, pff_pos in zip(master["gsis_id"], master["position"], pff, strict=True)
+    }
 
 
 def _upsert_players(conn: Connection, rows: list[dict[str, object]]) -> int:

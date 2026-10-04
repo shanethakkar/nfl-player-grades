@@ -202,6 +202,7 @@ class TestTransformPlayers:
 class TestTransformPlayerSeasons:
     def test_basic_mapping(
         self,
+        players_master: pd.DataFrame,
         rosters_2024: pd.DataFrame,
         team_lookup: dict[str, int],
     ) -> None:
@@ -215,6 +216,7 @@ class TestTransformPlayerSeasons:
             2024,
             team_lookup,
             gsis_to_id,
+            df_players_master=players_master,
         )
         assert sk_pos == 0 and sk_team == 0
         assert len(rows) == 3
@@ -227,6 +229,7 @@ class TestTransformPlayerSeasons:
 
     def test_unknown_team_skipped(
         self,
+        players_master: pd.DataFrame,
         rosters_2024: pd.DataFrame,
     ) -> None:
         gsis_to_id = {gid: i for i, gid in enumerate(rosters_2024["gsis_id"])}
@@ -236,12 +239,14 @@ class TestTransformPlayerSeasons:
             2024,
             partial_lookup,
             gsis_to_id,
+            df_players_master=players_master,
         )
         assert sk_team == 1
         assert len(rows) == 2
 
     def test_unknown_player_skipped_silently(
         self,
+        players_master: pd.DataFrame,
         rosters_2024: pd.DataFrame,
         team_lookup: dict[str, int],
     ) -> None:
@@ -251,12 +256,14 @@ class TestTransformPlayerSeasons:
             2024,
             team_lookup,
             gsis_to_id,
+            df_players_master=players_master,
         )
         assert len(rows) == 1
         assert sk_pos == 0 and sk_team == 0
 
     def test_duplicates_dropped(
         self,
+        players_master: pd.DataFrame,
         team_lookup: dict[str, int],
     ) -> None:
         dupes = pd.DataFrame(
@@ -277,5 +284,60 @@ class TestTransformPlayerSeasons:
                 },
             ]
         )
-        rows, _, _ = _transform_player_seasons(dupes, 2024, team_lookup, {"X": 99})
+        rows, _, _ = _transform_player_seasons(
+            dupes, 2024, team_lookup, {"X": 99}, df_players_master=players_master
+        )
         assert len(rows) == 1
+
+
+class TestPlayerSeasonsDLSplit:
+    """A roster DE whose career positions both say interior lands in iDL (#4)."""
+
+    @pytest.fixture
+    def dl_rosters(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"season": 2025, "gsis_id": "BROWN", "team": "KC",
+                 "position": "DL", "depth_chart_position": "DE"},
+                {"season": 2025, "gsis_id": "MUHAMMAD", "team": "KC",
+                 "position": "DL", "depth_chart_position": "DE"},
+                {"season": 2025, "gsis_id": "GARRETT", "team": "KC",
+                 "position": "DL", "depth_chart_position": "DE"},
+            ]
+        )
+
+    @pytest.fixture
+    def dl_master(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"gsis_id": "BROWN", "position": "DT", "pff_position": "DI"},
+                {"gsis_id": "MUHAMMAD", "position": "DT", "pff_position": "ED"},
+                {"gsis_id": "GARRETT", "position": "DE", "pff_position": "ED"},
+            ]
+        )
+
+    def test_interior_career_de_is_idl_and_edge_rushers_stay_edge(
+        self,
+        dl_rosters: pd.DataFrame,
+        dl_master: pd.DataFrame,
+        team_lookup: dict[str, int],
+    ) -> None:
+        gsis_to_id = {"BROWN": 1, "MUHAMMAD": 2, "GARRETT": 3}
+        rows, _, _ = _transform_player_seasons(
+            dl_rosters, 2025, team_lookup, gsis_to_id, df_players_master=dl_master
+        )
+        by_id = {r["player_id"]: r["position_played"] for r in rows}
+        assert by_id == {1: "iDL", 2: "EDGE", 3: "EDGE"}
+
+    def test_master_without_pff_column_keeps_roster_label(
+        self,
+        dl_rosters: pd.DataFrame,
+        dl_master: pd.DataFrame,
+        team_lookup: dict[str, int],
+    ) -> None:
+        gsis_to_id = {"BROWN": 1, "MUHAMMAD": 2, "GARRETT": 3}
+        rows, _, _ = _transform_player_seasons(
+            dl_rosters, 2025, team_lookup, gsis_to_id,
+            df_players_master=dl_master.drop(columns="pff_position"),
+        )
+        assert {r["position_played"] for r in rows} == {"EDGE"}
