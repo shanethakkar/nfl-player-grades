@@ -117,6 +117,10 @@ Same pattern as EDGE (see [ADR-0020 § Component Overlap](0020-edge-v1-grading-f
 
 ## Revision History
 
+### Cohort fix (2026-10-04, #4) — 3-4 defensive ends move to iDL
+
+Roster `DE`s whose master position is DT/NT and whose `pff_position` is DI are now classified iDL at roster ingest (ADR-0030). They left the EDGE cohort and are graded with iDL. Per season over 2018–2025, 5–9 qualified players moved. No player is in both cohorts, and rank order among unmoved EDGE and iDL players is unchanged (Spearman ≥ 0.999). Neon restated 2016–2025. The residual (master `DE` + PFF DI) is tracked in #20.
+
 ### v1.2 (2026-05-14) — exhaustive audit rebalance + tackle-volume add
 
 Two-part change driven by the exhaustive candidate audit ([../grading/audits/2026-05-14-exhaustive-idl.md](../grading/audits/2026-05-14-exhaustive-idl.md)). Ten candidates were scored against four criteria.

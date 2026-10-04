@@ -115,6 +115,10 @@ See [../grading/audits/2026-05-14-correlation.md](../grading/audits/2026-05-14-c
 
 ## Revision History
 
+### Cohort fix (2026-10-04, #4) — 3-4 defensive ends move to iDL
+
+Roster `DE`s whose master position is DT/NT and whose `pff_position` is DI are now classified iDL at roster ingest (ADR-0030). They left the EDGE cohort and are graded with iDL. Per season over 2018–2025, 5–9 qualified players moved. No player is in both cohorts, and rank order among unmoved EDGE and iDL players is unchanged (Spearman ≥ 0.999). Neon restated 2016–2025. The residual (master `DE` + PFF DI) is tracked in #20.
+
 ### v1.2 (2026-05-14) — tackle-volume add from exhaustive audit
 
 Added `edge_tackles_per_snap` at +0.05 after the exhaustive candidate audit ([../grading/audits/2026-05-14-exhaustive-edge.md](../grading/audits/2026-05-14-exhaustive-edge.md)). Ten candidates were scored against four criteria (YoY reliability, cross-sectional discrimination, independence, predictive validity vs next-year Pro Bowl). `edge_tackles_per_snap` returned YoY r=+0.520, validity r=+0.216, and max correlation with existing components +0.468 (with `edge_tfl_rate`). It is an **independent signal** capturing chase-tackles / ahead-of-LOS plays that the existing 89%-behind-LOS formula misses. Voter mechanism: elite EDGEs show up in the box score as tackle volume too, not only as pressure events.
