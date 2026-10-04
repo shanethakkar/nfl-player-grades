@@ -58,7 +58,8 @@ import os
 os.environ.setdefault("NFLREADPY_CACHE", "off")
 os.environ.setdefault("NFLREADPY_VERBOSE", "False")
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,6 +68,7 @@ from typing import Final, Literal
 import pandas as pd
 
 from nfl_grades.config import settings
+from nfl_grades.ingest._weeks import cap_regular_season
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,25 @@ SourceName = Literal[
     "pfr_advstats_def",  # PFR advanced defensive coverage stats (CBs, 2018+)
     "pfr_advstats_rush",  # PFR advanced rushing stats (RBs, 2018+) — yards after contact, broken tackles
     "nflvs_player_stats",  # nflverse weekly player stats (def_pass_defended for PBU)
+    "schedules",  # game schedule + results (team records, last completed week)
 ]
+
+# Sources with one row per (game or week), which the weekly refresh caps at
+# the last completed week. Rosters, depth charts and players are snapshots.
+WEEK_KEYED_SOURCES: Final[frozenset[str]] = frozenset(
+    {
+        "pbp",
+        "snap_counts",
+        "ngs_passing",
+        "ngs_rushing",
+        "ngs_receiving",
+        "ftn",
+        "pfr_advstats_def",
+        "pfr_advstats_rush",
+        "nflvs_player_stats",
+        "schedules",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -173,6 +193,10 @@ def _build_registry() -> dict[str, SourceSpec]:
         "nflvs_player_stats": SourceSpec(
             season_keyed=True,
             fetch=lambda s: nfl.load_player_stats(seasons=[s]),
+        ),
+        "schedules": SourceSpec(
+            season_keyed=True,
+            fetch=lambda s: nfl.load_schedules(seasons=[s]),
         ),
     }
 
@@ -293,6 +317,43 @@ def _nflreadpy_version() -> str:
         return "unknown"
 
 
+# Per-process state for the weekly refresh. ``None`` outside
+# ``one_fetch_per_source``; inside it, the cache keys downloaded so far.
+_fetched_this_block: set[str] | None = None
+# season -> last regular-season week to return, set by ``capped_at_week``.
+_week_caps: dict[int, int] = {}
+
+
+@contextmanager
+def one_fetch_per_source() -> Iterator[None]:
+    """Within this block, ``refresh=True`` downloads each (source, season) at
+    most once; later calls read the parquet just written. Lets every ingest
+    stage keep asking for fresh data while a refresh downloads pbp and
+    player stats once instead of once per stage."""
+    global _fetched_this_block
+    previous, _fetched_this_block = _fetched_this_block, set()
+    try:
+        yield
+    finally:
+        _fetched_this_block = previous
+
+
+@contextmanager
+def capped_at_week(season: int, week: int) -> Iterator[None]:
+    """Within this block, week-keyed sources for ``season`` return no
+    regular-season rows after ``week``, so every table is written through
+    the same week even if a source already has part of the next one."""
+    previous = _week_caps.get(season)
+    _week_caps[season] = week
+    try:
+        yield
+    finally:
+        if previous is None:
+            del _week_caps[season]
+        else:
+            _week_caps[season] = previous
+
+
 def cache_or_fetch(
     source: SourceName,
     season: int | None = None,
@@ -301,8 +362,21 @@ def cache_or_fetch(
 ) -> pd.DataFrame:
     """Get a DataFrame for ``(source, season)``, using the parquet cache.
 
-    See module docstring for full behavior.
+    See module docstring for full behavior, and ``one_fetch_per_source`` /
+    ``capped_at_week`` for the weekly refresh.
     """
+    df = _cache_or_fetch(source, season, refresh=refresh)
+    if season in _week_caps and source in WEEK_KEYED_SOURCES:
+        df = cap_regular_season(df, season, _week_caps[season]).reset_index(drop=True)
+    return df
+
+
+def _cache_or_fetch(
+    source: SourceName,
+    season: int | None,
+    *,
+    refresh: bool,
+) -> pd.DataFrame:
     sources = _get_sources()
     if source not in sources:
         raise ValueError(f"Unknown source {source!r}; known: {sorted(sources)}")
@@ -313,6 +387,9 @@ def cache_or_fetch(
         raise ValueError(f"source {source!r} is season-agnostic; pass season=None")
 
     path = cache_path(source, season)
+    key = f"{source}/{season if season is not None else 'all'}"
+    if refresh and _fetched_this_block is not None and key in _fetched_this_block:
+        refresh = False  # already downloaded in this refresh
 
     if path.exists() and not refresh:
         logger.debug("cache hit: %s", path)
@@ -338,6 +415,8 @@ def cache_or_fetch(
     entries = read_manifest()
     entries[entry.manifest_key] = entry
     _write_manifest(entries)
+    if _fetched_this_block is not None:
+        _fetched_this_block.add(key)
     logger.info("wrote %s (%d rows, %.1f KB)", path, entry.row_count, entry.bytes / 1024)
     return df
 

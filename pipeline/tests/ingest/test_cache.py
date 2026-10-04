@@ -125,3 +125,51 @@ class TestManifest:
         for entry in manifest.values():
             assert isinstance(entry, CacheEntry)
             assert entry.path.exists()
+
+
+class TestOneFetchPerSource:
+    def test_refresh_downloads_each_source_once(
+        self, tmp_cache: Path, fake_sources: dict[str, list[int]]
+    ) -> None:
+        with _cache.one_fetch_per_source():
+            cache_or_fetch("rosters", season=2024, refresh=True)
+            cache_or_fetch("rosters", season=2024, refresh=True)
+            cache_or_fetch("rosters", season=2025, refresh=True)
+        assert fake_sources["season_keyed"] == [2024, 2025]
+
+    def test_first_refresh_in_the_block_still_downloads(
+        self, tmp_cache: Path, fake_sources: dict[str, list[int]]
+    ) -> None:
+        cache_or_fetch("rosters", season=2024)
+        with _cache.one_fetch_per_source():
+            cache_or_fetch("rosters", season=2024, refresh=True)
+        assert fake_sources["season_keyed"] == [2024, 2024]
+
+    def test_outside_the_block_refresh_always_downloads(
+        self, tmp_cache: Path, fake_sources: dict[str, list[int]]
+    ) -> None:
+        with _cache.one_fetch_per_source():
+            cache_or_fetch("rosters", season=2024, refresh=True)
+        cache_or_fetch("rosters", season=2024, refresh=True)
+        assert fake_sources["season_keyed"] == [2024, 2024]
+
+
+class TestCappedAtWeek:
+    @pytest.fixture
+    def weekly_source(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fetch(season: int | None) -> pl.DataFrame:
+            return pl.DataFrame(
+                {"season": [season] * 3, "season_type": ["REG"] * 3, "week": [3, 4, 5]}
+            )
+
+        monkeypatch.setattr(
+            _cache, "_get_sources", lambda: {"pbp": SourceSpec(season_keyed=True, fetch=fetch)}
+        )
+
+    def test_week_keyed_source_is_capped_for_that_season(
+        self, tmp_cache: Path, weekly_source: None
+    ) -> None:
+        with _cache.capped_at_week(2026, 4):
+            assert cache_or_fetch("pbp", season=2026)["week"].tolist() == [3, 4]
+            assert cache_or_fetch("pbp", season=2025)["week"].tolist() == [3, 4, 5]
+        assert cache_or_fetch("pbp", season=2026)["week"].tolist() == [3, 4, 5]

@@ -113,7 +113,7 @@ def _assign_slugs_for_new_players(
         r["slug"] = chosen
         used_slugs.add(chosen)
 
-from nfl_grades.db import get_engine, pipeline_run
+from nfl_grades.db import pipeline_run, transaction
 from nfl_grades.ingest._cache import cache_or_fetch
 from nfl_grades.ingest._positions import (
     CanonicalPosition,
@@ -142,10 +142,12 @@ class RunResult:
     rows_skipped_unknown_team: int  # dropped because team abbr didn't resolve via team_aliases
 
 
-def run(season: int, *, refresh: bool = False) -> RunResult:
+def run(season: int, *, refresh: bool = False, conn: Connection | None = None) -> RunResult:
     """Ingest rosters + player master for one season.
 
-    Idempotent. See module docstring for details.
+    Idempotent. See module docstring for details. Recreates the season's
+    ``player_seasons`` rows with zero snaps, so run ``snap_counts`` after it;
+    pass the same ``conn`` to both to make that one commit.
     """
     if season < 2002:
         raise ValueError(f"season {season} predates our coverage (>=2002)")
@@ -160,9 +162,8 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     skipped_no_gsis = int(df_rosters["gsis_id"].isna().sum())
     df_rosters = df_rosters[df_rosters["gsis_id"].notna()].copy()
 
-    engine = get_engine()
     with pipeline_run("ingest:rosters", season=season) as handle:
-        with engine.begin() as conn:
+        with transaction(conn) as conn:
             team_lookup = _team_abbr_to_id(conn)
 
             players_rows, skipped_unknown_pos_p = _transform_players(

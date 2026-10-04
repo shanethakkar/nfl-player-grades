@@ -1,7 +1,8 @@
 """Ingest regular-season team records (W-L, points for/against, point diff).
 
-Source: ``nflreadpy.load_schedules`` — same source used in the team-weight
-audit. Filters to ``game_type == 'REG'`` and aggregates per team-season.
+Source: ``nflreadpy.load_schedules`` (the ``schedules`` cache source) — same
+source used in the team-weight audit. Filters to ``game_type == 'REG'`` and
+aggregates per team-season.
 
 Used by the team leaderboard on /teams as context columns. Not part of
 the grading pipeline — these are denormalized so the web layer can
@@ -20,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from nfl_grades.db import get_engine, pipeline_run
+from nfl_grades.ingest._cache import cache_or_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +32,13 @@ class RunResult:
     teams_written: int
 
 
-def run(season: int, *, refresh: bool = False) -> RunResult:
+def run(season: int, *, refresh: bool = True) -> RunResult:
     """Build per-team regular-season record rows for ``season``.
 
-    `refresh` is accepted for API symmetry with other ingest modules but
-    is a no-op here — we always pull fresh schedule data because the
-    schedules feed updates continuously through the offseason.
+    Refreshes by default: the schedules feed updates every game day and
+    through the offseason, so a cached copy goes stale fast.
     """
-    del refresh  # unused; we always re-pull
-
-    import nflreadpy as nfl  # local import — heavy dep
-
-    sched = nfl.load_schedules([season]).to_pandas()
+    sched = cache_or_fetch("schedules", season=season, refresh=refresh)
     sched = sched[sched["game_type"] == "REG"].copy()
     # Drop unplayed games (in-progress seasons or scheduling oddities).
     sched = sched.dropna(subset=["home_score", "away_score"])

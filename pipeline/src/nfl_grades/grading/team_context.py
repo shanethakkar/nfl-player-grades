@@ -12,6 +12,8 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from nfl_grades.db import pipeline_run, transaction
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -95,4 +97,17 @@ def compute_team_epa(conn: Connection, season: int) -> int:
     return int(n)
 
 
-__all__ = ["backfill_team_abbr", "compute_team_epa"]
+def run(season: int, *, conn: Connection | None = None) -> tuple[int, int]:
+    """Backfill team_abbr and team_season_epa for a season, logged to
+    ``pipeline_runs``. Returns (team_abbr rows updated, teams written).
+    Pass ``conn`` to write inside the caller's transaction."""
+    with pipeline_run("backfill:team_context", season=season) as handle:
+        with transaction(conn) as conn:
+            n_abbr = backfill_team_abbr(conn, season)
+            n_epa = compute_team_epa(conn, season)
+        handle.rows_written = n_abbr
+        handle.note(f"team_abbr_updated={n_abbr} team_epa_written={n_epa}")
+    return n_abbr, n_epa
+
+
+__all__ = ["backfill_team_abbr", "compute_team_epa", "run"]

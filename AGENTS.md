@@ -11,7 +11,7 @@ NFL Player Grades — a web app that grades every NFL player on a 0–100 scale
 using advanced stats, with depth charts and per-season + career grades for
 all 32 teams.
 
-- Data: `nfl_data_py` (PBP, NGS, rosters, depth charts, snaps) + Pro Football Reference
+- Data: `nflreadpy` (PBP, NGS, rosters, depth charts, snaps, FTN charting, PFR advanced stats)
 - Pipeline: Python (pandas, numpy, scipy, scikit-learn) -> Postgres
 - Web: Next.js 15 App Router on Vercel, reads from Postgres
 - Time range: 2016–present (NGS era)
@@ -35,26 +35,23 @@ was already considered.
 | Component | Status | Notes |
 |---|---|---|
 | Repo scaffolding | DONE | Monorepo with `pipeline/`, `web/`, `db/`, `docs/` |
-| Database schema | DONE (migrations 0001–0006) | `db/migrations/` |
+| Database schema | DONE (migrations 0001–0027) | `db/migrations/` |
 | Migration tooling | DONE | `nflgrades migrate [--seeds]` |
 | TS type codegen | DONE | `nflgrades gen-types [--check]` |
-| `pipeline/ingest/*` | STUB | Empty `__init__.py` only — build step 1 |
-| `pipeline/components/*` | STUB | Empty `__init__.py` only — build step 2+ |
-| `pipeline/grading/sigmoid.py` | DONE | Tested |
-| `pipeline/grading/empirical_bayes.py` | STUB | `NotImplementedError` — build step 2 |
-| `pipeline/grading/composite.py` | STUB | `NotImplementedError` — build step 2 |
+| `pipeline/ingest/*` | DONE | One module per nflverse source, all through `ingest._cache` |
+| `pipeline/grading/*` | DONE | Graders for QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K, P, OL (team-level) and team grades (ADRs 0013–0026). All score through `grading.scoring` (ADR-0028) |
+| Provisional grades | DONE | In-season grades "through week N", pro-rated thresholds (ADR-0031) |
+| Weekly refresh | DONE | `nflgrades weekly --season N`; GitHub Actions schedule in `.github/workflows/weekly.yml` |
+| `pipeline/components/*` | UNUSED | Graders compute Components inline |
 | `pipeline/career/kalman.py` | STUB | `NotImplementedError` — build step 8 |
 | `pipeline/validation/*` | STUB | Empty `__init__.py` only |
 | `pipeline/adjust/*` | STUB | Empty `__init__.py` only — build step 7 |
-| Web: layout + routes | STUB | Renders, but no data yet |
-| Web: `/api/teams` | DONE | Returns from Postgres |
-| Web: `/api/teams/[abbr]` etc. | NOT STARTED | Build step 4 |
-| `pipeline/grading/{qb,rb,wr,te}.py` | DONE (v1) | See ADR 0013–0016; TE blocking path drops earn from composite |
-| Season grades coverage | DONE | 2016–2025 (ten NGS-era seasons) ingested + graded for QB/RB/WR/TE. ~3,570 `season_grades` rows total. |
+| Web | DONE | Leaderboards, player and team pages, methodology, OG images |
+| Season grades coverage | DONE | 2016–2025 completed for every position (OL, CB/S/EDGE/iDL/LB from 2018); in-progress season Provisional |
 | Tests | PARTIAL | Grading + composite + scoring + some integration (`pipeline/tests/`). **Read `pipeline/tests/README.md` before running pytest**: DB tests hit Neon via root `.env`, and 7 known pre-existing failures are listed there |
 | Env / tooling | DONE | `uv` system-wide; `pipeline/.venv` on Python 3.13; `uv sync --extra ingest --extra dev` clean; `.vscode/settings.json` pins the interpreter |
-| Git | INITIALIZED | Local repo on `main`, one initial commit, no remote yet |
-| CI | NOT STARTED | Add when there's something worth testing (post step 2) |
+| Git | DONE | `main`, remote `origin` on GitHub |
+| CI | PARTIAL | Weekly grading workflow only; no test CI yet |
 
 ## Conventions you must follow
 
@@ -70,11 +67,18 @@ was already considered.
 4. **Every pipeline stage logs a row to `pipeline_runs`** (status `running` ->
    `ok`/`error`, with `rows_written`). The web app uses this for freshness.
 5. **Raw downloads cache as parquet under `PIPELINE_CACHE_DIR/raw/{source}/{season}.parquet`**
-   (gitignored). All `nfl_data_py` calls go through `ingest._cache.cache_or_fetch`;
-   never call `nfl_data_py` directly from a transform or a notebook. Only
+   (gitignored). All `nflreadpy` calls go through `ingest._cache.cache_or_fetch`;
+   never call `nflreadpy` directly from a transform or a notebook. Only
    typed tables live in Postgres — no `raw_*` tables. See ADR 0009.
 6. **Use `from __future__ import annotations`** at the top of every module
    (already idiomatic in this repo).
+
+7. **Refresh an in-progress season with `nflgrades weekly --season N`**, not
+   individual `ingest` / `grade` commands. It downloads every source once,
+   caps them at the last completed week, refuses to run if a source lags,
+   and writes every grade in one transaction (ADR-0031). It runs every
+   Wednesday in season on GitHub Actions against Neon; re-run it by hand
+   from the Actions tab ("Weekly grades" → Run workflow).
 
 ### Database
 

@@ -17,12 +17,13 @@ Invoked via `nflgrades migrate [--seeds] [--dry-run]`.
 from __future__ import annotations
 
 import hashlib
+from contextlib import nullcontext
 from pathlib import Path
 
 from sqlalchemy import text
 
 from .config import REPO_ROOT
-from .db import get_engine
+from .db import get_engine, pipeline_run
 from .logging import get_logger
 
 log = get_logger(__name__)
@@ -65,6 +66,10 @@ def run(seeds: bool = False, dry_run: bool = False) -> int:
             row.filename: row.sha256
             for row in conn.execute(text("SELECT filename, sha256 FROM schema_migrations"))
         }
+        # A brand-new database has no pipeline_runs until 0001 is applied.
+        can_log = bool(
+            conn.execute(text("SELECT to_regclass('pipeline_runs') IS NOT NULL")).scalar()
+        )
 
     pending: list[Path] = []
     for path in _list_migrations():
@@ -87,21 +92,25 @@ def run(seeds: bool = False, dry_run: bool = False) -> int:
     if dry_run:
         return 0
 
-    for path in pending:
-        log.info("Applying %s", path.name)
-        sql = path.read_text(encoding="utf-8")
-        with engine.begin() as conn:
-            conn.execute(text(sql))
-            conn.execute(
-                text("INSERT INTO schema_migrations (filename, sha256) VALUES (:f, :s)"),
-                {"f": path.name, "s": _sha256(path)},
-            )
-
-    if seeds:
-        for path in _list_seeds():
-            log.info("Seeding %s", path.name)
+    with pipeline_run("migrate") if can_log else nullcontext() as handle:
+        for path in pending:
+            log.info("Applying %s", path.name)
             sql = path.read_text(encoding="utf-8")
             with engine.begin() as conn:
                 conn.execute(text(sql))
+                conn.execute(
+                    text("INSERT INTO schema_migrations (filename, sha256) VALUES (:f, :s)"),
+                    {"f": path.name, "s": _sha256(path)},
+                )
+            if handle is not None:
+                handle.rows_written += 1
+                handle.note(path.name)
+
+        if seeds:
+            for path in _list_seeds():
+                log.info("Seeding %s", path.name)
+                sql = path.read_text(encoding="utf-8")
+                with engine.begin() as conn:
+                    conn.execute(text(sql))
 
     return len(pending)

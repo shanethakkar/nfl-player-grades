@@ -651,6 +651,27 @@ def audit_candidates(position: str) -> None:
     click.echo(format_results_table(results))
 
 
+@main.command()
+@click.option("--season", type=int, required=True)
+def weekly(season: int) -> None:
+    """Refresh a season end-to-end: fresh data, every ingest stage, then
+    every grade in one transaction (ADR-0031).
+
+    Fails without writing anything if a source isn't through the last
+    completed regular-season week on the schedule. Run weekly in season
+    (GitHub Actions) or by hand to re-run after a fix.
+    """
+    from . import weekly as weekly_mod
+
+    result = weekly_mod.run(season)
+    if result.through_week is None:
+        click.echo(f"season={season}: no regular-season week completed yet; nothing to do")
+        return
+    click.echo(
+        f"season={season} through_week={result.through_week} stages={len(result.stages)}"
+    )
+
+
 @main.command(name="backfill-team-context")
 @click.option("--season", type=int, required=True)
 def backfill_team_context(season: int) -> None:
@@ -658,13 +679,9 @@ def backfill_team_context(season: int) -> None:
 
     Run after grading. Idempotent — safe to re-run.
     """
-    from .db import get_engine
-    from .grading.team_context import backfill_team_abbr, compute_team_epa
+    from .grading.team_context import run as backfill_run
 
-    engine = get_engine()
-    with engine.begin() as conn:
-        n_abbr = backfill_team_abbr(conn, season)
-        n_epa = compute_team_epa(conn, season)
+    n_abbr, n_epa = backfill_run(season)
     click.echo(f"season={season} team_abbr_updated={n_abbr} team_epa_written={n_epa}")
 
 

@@ -43,7 +43,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
+from nfl_grades.db import pipeline_run, transaction
 from nfl_grades.ingest._cache import cache_or_fetch
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class RunResult:
     rows_ingested: int  # rows in the raw snap_counts dataframe (REG-only)
 
 
-def run(season: int, *, refresh: bool = False) -> RunResult:
+def run(season: int, *, refresh: bool = False, conn: Connection | None = None) -> RunResult:
     """Fetch snap counts for ``season``, aggregate to (player, season),
     and UPDATE the matching ``player_seasons`` rows.
 
@@ -71,7 +71,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     has been backfilled.
 
     Idempotent: re-running overwrites the snap columns with freshly
-    computed totals.
+    computed totals. Pass ``conn`` to write inside the caller's transaction.
     """
     if season < 2012:
         raise ValueError(f"snap_counts coverage begins in 2012; got {season}")
@@ -82,9 +82,8 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     df_reg = df[df["game_type"] == "REG"].copy()
     total_rows = len(df_reg)
 
-    engine = get_engine()
     with pipeline_run("ingest:snap_counts", season=season) as handle:
-        with engine.begin() as conn:
+        with transaction(conn) as conn:
             pfr_to_player_id = _pfr_to_player_id(conn)
             agg_rows, skipped_no_match = _aggregate(df_reg, season, pfr_to_player_id)
             updated = _update_player_seasons(conn, agg_rows, season)
