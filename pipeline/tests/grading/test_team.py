@@ -65,3 +65,15 @@ class TestMissingPhase:
             sum(grades[f"{phase}_z"] * w for phase, w in TEAM_V1_PHASE_WEIGHTS.items())
         )
         assert grades["overall_z"].to_numpy() == pytest.approx(expected.to_numpy())
+
+
+class TestUngradableTeams:
+    def test_team_without_defense_grades_is_left_out_of_the_cohort(self) -> None:
+        players = _players(OFFENSE + DEFENSE + SPECIAL)
+        players = players[~((players["team_id"] == 1) & players["position"].isin(DEFENSE))]
+        grades, components = compute_grades(players, _ol())
+        assert 1 not in set(grades["team_id"])
+        assert 1 not in set(components["team_id"])
+        # The 31 graded teams alone set the Overall scale.
+        assert grades["overall_z"].mean() == pytest.approx(0.0, abs=1e-9)
+        assert grades["overall_z"].std(ddof=1) == pytest.approx(1.0)

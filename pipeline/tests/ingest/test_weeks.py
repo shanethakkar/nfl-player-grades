@@ -12,6 +12,7 @@ from nfl_grades.ingest._weeks import (
     check_alignment,
     last_completed_week,
     max_regular_season_week,
+    summary_ahead,
 )
 
 
@@ -75,6 +76,20 @@ class TestCapRegularSeason:
     def test_source_without_a_week_column_is_unchanged(self) -> None:
         df = pd.DataFrame({"team": ["BUF"]})
         assert cap_regular_season(df, 2026, 4).equals(df)
+
+
+class TestSummaryAhead:
+    def test_summary_source_with_rows_past_the_week_is_ahead(self) -> None:
+        df = pd.DataFrame({"season_type": ["REG"] * 3, "week": [0, 3, 4]})
+        assert summary_ahead(df, 2026, 3)
+
+    def test_source_without_a_summary_row_is_never_ahead(self) -> None:
+        df = pd.DataFrame({"season_type": ["REG"] * 2, "week": [3, 4]})
+        assert not summary_ahead(df, 2026, 3)
+
+    def test_summary_source_through_the_week_is_fine(self) -> None:
+        df = pd.DataFrame({"season_type": ["REG"] * 2, "week": [0, 3]})
+        assert not summary_ahead(df, 2026, 3)
 
 
 class TestCheckAlignment:

@@ -46,10 +46,15 @@ GitHub emails you; the previous week's grades are still live.
 - **`sources not through week N ... ngs_passing at week N-1`**: an nflverse
   source hasn't published the last week yet. Re-run the workflow later in
   the day.
+- **`... season summaries already include games after week N`**: NGS has
+  started the next week, and its season-summary row can't be capped. Re-run
+  once that week is complete (the Wednesday schedule avoids this).
 - **Anything else**: the grade transaction rolled back, so grades are
   unchanged. Ingest tables may already hold the new week; the next
   successful run overwrites them. The failing stage is in `pipeline_runs`
-  (`status = 'error'`, traceback in `notes`).
+  (`status = 'error'`, traceback in `notes`). The `weekly` row is the one
+  to trust: `grading:*` rows from the same run can read `ok` even though
+  the transaction they wrote into was rolled back.
 
 Before week 1 is complete the command does nothing and succeeds. After the
 final regular-season week, the next run writes the season as complete

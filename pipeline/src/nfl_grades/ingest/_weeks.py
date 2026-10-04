@@ -18,7 +18,8 @@ from nfl_grades.grading.progress import final_regular_season_week
 
 
 class SourceLagError(RuntimeError):
-    """A source hasn't reached the last completed week on the schedule."""
+    """A source isn't aligned with the last completed week on the schedule:
+    it hasn't reached it, or its season summary already runs past it."""
 
 
 def _regular_season(df: pd.DataFrame, season: int) -> pd.Series:
@@ -47,6 +48,17 @@ def cap_regular_season(df: pd.DataFrame, season: int, week: int) -> pd.DataFrame
         return df
     after = _regular_season(df, season) & (df["week"] > week)
     return df.loc[~after]
+
+
+def summary_ahead(df: pd.DataFrame, season: int, week: int) -> bool:
+    """True if a source with a ``week = 0`` season-summary row (NGS) already
+    has regular-season games after ``week``. Capping can drop those weekly
+    rows but not their contribution to the summary, which graders read (RB
+    RYOE)."""
+    if "week" not in df.columns or not (df["week"] == 0).any():
+        return False
+    latest = max_regular_season_week(df, season)
+    return latest is not None and latest > week
 
 
 def last_completed_week(schedule: pd.DataFrame) -> int | None:

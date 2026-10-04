@@ -11,9 +11,25 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.grading import cb, edge, idl, kicker, lb, ol, punter, qb, rb, safety, te, wr
+from nfl_grades.db import transaction
+from nfl_grades.grading import (
+    cb,
+    edge,
+    idl,
+    kicker,
+    lb,
+    ol,
+    progress,
+    punter,
+    qb,
+    rb,
+    safety,
+    te,
+    wr,
+)
 from nfl_grades.grading.scoring import InsufficientCohortError
 
 logger = logging.getLogger(__name__)
@@ -47,7 +63,8 @@ PositionRunResult = (
 @dataclass(frozen=True)
 class NotGraded:
     """A position-season the grader refused to grade (too few Qualified
-    players). Its existing rows are left untouched."""
+    players). A completed season keeps its existing rows; a Provisional
+    season's are deleted, so last week's grades aren't shown as current."""
 
     season: int
     reason: str
@@ -94,4 +111,29 @@ def run(
             # The grader's pipeline_runs row is already marked 'error'.
             logger.warning("%s %d not graded: %s", pos, season, exc)
             results[pos] = NotGraded(season=season, reason=str(exc))
+            _clear_if_provisional(season, pos, conn)
     return GradeRunSummary(season=season, by_position=results)
+
+
+def _clear_if_provisional(season: int, position: str, conn: Connection | None) -> None:
+    """Delete a Provisional position-season that can no longer be graded."""
+    with transaction(conn) as conn:
+        if not progress.load(conn, season).is_provisional:
+            return
+        params = {"season": season, "position": position}
+        if position == "OL":
+            conn.execute(text("DELETE FROM team_ol_components WHERE season = :season"), params)
+            conn.execute(text("DELETE FROM team_ol_grades WHERE season = :season"), params)
+            return
+        conn.execute(
+            text(
+                "DELETE FROM stat_components "
+                "WHERE season = :season AND component_name LIKE :prefix"
+            ),
+            # "_" is a LIKE wildcard: escape it so "s_%" only matches S Components.
+            {**params, "prefix": position.lower() + r"\_%"},
+        )
+        conn.execute(
+            text("DELETE FROM season_grades WHERE season = :season AND position = :position"),
+            params,
+        )

@@ -6,7 +6,8 @@ One command, in dependency order, with fresh data:
     2. Find the last completed regular-season week on the schedule and cap
        every week-keyed source there (``_cache.capped_at_week``), so a run
        on a Friday doesn't pick up Thursday night's game.
-    3. Refuse to write anything unless every source is through that week.
+    3. Refuse to write anything unless every source is through that week,
+       and no season summary (NGS week 0) already includes the next one.
     4. Ingest stages, each its own commit. Rosters and snap counts share
        one, since rosters recreate ``player_seasons`` with zero snaps.
     5. Grade every position, OL, team grades and team context in a single
@@ -26,9 +27,11 @@ from nfl_grades.db import get_engine, pipeline_run
 from nfl_grades.ingest import _cache
 from nfl_grades.ingest._cache import SourceName, cache_or_fetch
 from nfl_grades.ingest._weeks import (
+    SourceLagError,
     check_alignment,
     last_completed_week,
     max_regular_season_week,
+    summary_ahead,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,6 +164,17 @@ def run(
             handle.note("no regular-season week completed yet; nothing to do")
             return WeeklyResult(season, None, [])
         handle.note(f"through_week={through_week}")
+
+        ahead = [
+            source
+            for source in aligned_sources(season)
+            if summary_ahead(cache_or_fetch(source, season, refresh=True), season, through_week)
+        ]
+        if ahead:
+            raise SourceLagError(
+                f"{', '.join(ahead)} season summaries already include games after week "
+                f"{through_week}; re-run once week {through_week + 1} is complete"
+            )
 
         with _cache.capped_at_week(season, through_week):
             source_weeks: dict[str, int | None] = {

@@ -232,7 +232,11 @@ def compute_grades(
 
     # Standardize each phase's raw composite within the 32-team cohort,
     # then sigmoid to a 0-100 phase grade.
-    team_ids = pd.Index(sorted(set().union(*[s.index for s in phase_raw.values()])))
+    # Only teams with both Offense and Defense grades are graded (the
+    # columns are NOT NULL; it matters only in a season's first weeks), and
+    # only they set the standardization scale.
+    offense_teams = phase_raw["offense"].dropna().index
+    team_ids = pd.Index(sorted(offense_teams.intersection(phase_raw["defense"].dropna().index)))
     out = pd.DataFrame(index=team_ids)
     for phase, raw in phase_raw.items():
         z = _standardize(raw.reindex(team_ids))
@@ -262,7 +266,7 @@ def compute_grades(
     rows = []
     for phase, weights in PHASES.items():
         for pos, w in weights.items():
-            sub = per_pos[per_pos["position"] == pos]
+            sub = per_pos[(per_pos["position"] == pos) & per_pos["team_id"].isin(team_ids)]
             for _, r in sub.iterrows():
                 rows.append(
                     {
@@ -389,16 +393,12 @@ def run(season: int, *, conn: Connection | None = None) -> RunResult:
                 return RunResult(season=season, n_teams=0, n_components=0)
 
             team_grades, components = compute_grades(player_df, ol_df)
-            # Offense and Defense are NOT NULL; a team can't be graded
-            # without both (only possible in the first weeks of a season).
-            gradable = team_grades[["offense_grade", "defense_grade"]].notna().all(axis=1)
-            if not gradable.all():
+            n_skipped = player_df["team_id"].nunique() - len(team_grades)
+            if n_skipped:
                 logger.warning(
                     "team grading %d: %d teams lack offense or defense grades — skipped",
-                    season, int((~gradable).sum()),
+                    season, n_skipped,
                 )
-            team_grades = team_grades[gradable]
-            components = components[components["team_id"].isin(team_grades["team_id"])]
             n_grades, n_components = write_results(
                 conn, team_grades, components, season,
                 through_week=season_progress.through_week,

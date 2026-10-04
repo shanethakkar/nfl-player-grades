@@ -42,23 +42,28 @@ completed season of the position, under current weights
 (`preview.pooled_composite_sd`). `preview` and `regrade` do the same for a
 Provisional season, so preview still matches `grade`. The minimum Qualified
 cohort (`MIN_QUALIFIED_COHORT = 10`, ADR-0028) still applies; a position
-below it is not graded and the site shows "Not enough games yet".
+below it is not graded, its rows for the season are deleted, and the site
+shows "Not enough games yet". (A completed season below the minimum keeps
+its rows, as before.)
 
 **Team grades renormalize over the phases that exist.** With no K/P grades
 yet, ST is NULL and Overall is the Offense/Defense mix with its weights
-renormalized, instead of NaN.
+renormalized, instead of NaN. A team without Offense or Defense grades is
+not graded and doesn't count toward the 32-team standardization.
 
 **One command refreshes a season** (`nflgrades weekly`). It fetches every
 nflverse source once, caps week-keyed sources at the schedule's last
 completed regular-season week, and refuses to write anything if a source
-lags that week. Grading, OL, team grades and team context are written in one
+lags that week, or if an NGS season-summary row (which can't be capped)
+already includes the next week. Grading, OL, team grades and team context
+are written in one
 transaction, so the site never sees a half-graded season (no NULL
 `team_abbr`, no mixed weeks). Rosters and snap counts are written together
 for the same reason: rosters recreate `player_seasons` with zero snaps.
 
 **It runs weekly on GitHub Actions** (Wednesday morning ET, after Monday
 Night Football and the nflverse refresh), against Neon's direct endpoint,
-with no persistent cache.
+with no persistent cache. Setup and failure handling: `docs/weekly-refresh.md`.
 
 **Provisional seasons stay out of career summaries.** Career average, best
 season, the headline grade, the career chart, grade-tier examples, the
@@ -76,8 +81,10 @@ methodology "current top" lists and OG images skip rows with a
 - `MAX(week)` in `plays` defines "through week". A manual `grade` run on a
   Sunday sees a partial week. The weekly command is the supported path: it
   caps sources at the last completed week first.
-- A position that drops below the cohort minimum in a later week keeps its
-  previous week's rows (with their own `through_week`) rather than being
-  deleted. In practice cohorts only grow during a season.
+- A position that drops below the cohort minimum in a later week disappears
+  until it qualifies again, rather than showing last week's grades as
+  current.
+- One lagging source blocks every position that week. That is deliberate:
+  a run never mixes weeks. Re-running later in the day is the fix.
 - Completed seasons are untouched: progress is 17/17, the cohort SD is used,
   `through_week` is NULL.

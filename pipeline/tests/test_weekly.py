@@ -163,6 +163,22 @@ class TestRun:
         weekly.run(SEASON, ingest=[weekly.Stage("pbp", read_pbp)], grade=lambda _s: None)
         assert seen == [3]
 
+    def test_season_summary_that_includes_the_next_week_fails(
+        self, local_db: None, fake_sources: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # NGS keeps a week=0 season-summary row. Capping can't remove a
+        # partial week 4 from it, so the run refuses rather than mixing weeks.
+        registry = _cache._get_sources()
+        summary_through_4 = pl.DataFrame(
+            {"season_type": ["REG"] * 5, "week": [0, 1, 2, 3, 4]}
+        )
+        registry["ngs_rushing"] = SourceSpec(season_keyed=True, fetch=lambda _s: summary_through_4)
+        monkeypatch.setattr(_cache, "_get_sources", lambda: registry)
+        calls: list[str] = []
+        with pytest.raises(SourceLagError, match="ngs_rushing"):
+            weekly.run(SEASON, ingest=[_record(calls, "a")], grade=lambda _s: None)
+        assert calls == []
+
     def test_before_any_week_is_complete_nothing_runs(
         self, local_db: None, fake_sources: dict[str, int], monkeypatch: pytest.MonkeyPatch
     ) -> None:

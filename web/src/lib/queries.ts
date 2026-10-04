@@ -144,9 +144,9 @@ export const getTeamGrade = unstable_cache(
 );
 
 /**
- * Full overall-grade history for a team — one row per season the team
- * was graded (2018+ in v1). Drives the career-grade chart on the team
- * page; mirrors what the player page renders from season_grades.
+ * Full overall-grade history for a team — one row per completed season the
+ * team was graded (2018+ in v1). Drives the career-grade chart on the team
+ * page; like the player chart, it leaves out a Provisional season.
  */
 async function _getTeamGradeHistory(
   teamAbbr: string,
@@ -156,6 +156,7 @@ async function _getTeamGradeHistory(
     FROM team_grades tg
     JOIN teams t ON t.team_id = tg.team_id
     WHERE t.abbr = ${teamAbbr}
+      AND tg.through_week IS NULL
     ORDER BY tg.season ASC
   `;
   return rows.map((r) => ({
@@ -1857,7 +1858,13 @@ export async function searchPlayers(
           PARTITION BY p.player_id
           ORDER BY sg.season DESC
         ) AS recency_rank,
-        MAX(sg.composite_grade) OVER (PARTITION BY p.player_id) AS best_grade,
+        -- Best completed season; a player with only a Provisional season
+        -- (a rookie in season) falls back to it.
+        COALESCE(
+          MAX(sg.composite_grade) FILTER (WHERE sg.through_week IS NULL)
+            OVER (PARTITION BY p.player_id),
+          MAX(sg.composite_grade) OVER (PARTITION BY p.player_id)
+        ) AS best_grade,
         MAX(sg.season) OVER (PARTITION BY p.player_id) AS latest_season
       FROM players p
       JOIN season_grades sg ON sg.player_id = p.player_id
