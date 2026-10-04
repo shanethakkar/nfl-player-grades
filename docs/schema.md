@@ -7,7 +7,9 @@ doc summarizes the shape and relationships; read the SQL for exact types and ind
 - **`season_grades`**: `role` (TEXT, app convention — TE uses `receiving_te` /
   `balanced_te` / `blocking_te`; `NULL` for other positions);
   `data_tier_reason` (TEXT, nullable — e.g. `era_pre_ngs`, `role_blocking_te`,
-  `era_and_role`).
+  `era_and_role`); `through_week` (SMALLINT, nullable, migration 0026) — the
+  last regular-season week a Provisional grade covers; `NULL` for a completed
+  season (ADR-0031).
 - **`stat_components`**: `used_in_composite` (boolean, default true) — false when
   a component was stored for audit/debug but omitted from the headline composite
   (e.g. TE `te_target_earn_rate` for `blocking_te` rows; ADR-0016).

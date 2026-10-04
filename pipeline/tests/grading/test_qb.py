@@ -17,12 +17,14 @@ from sqlalchemy.exc import OperationalError
 
 from nfl_grades.db import get_engine
 from nfl_grades.grading.era_tier import REASON_ERA_PRE_NGS, _era_tier_for_season
+from nfl_grades.grading.progress import SeasonProgress
 from nfl_grades.grading.qb import (
     POSITION,
     compute_grades,
     extract_features,
     write_results,
 )
+from nfl_grades.grading.scoring import InsufficientCohortError
 
 # ---------------------------------------------------------------------------
 # Pure-python: compute_grades
@@ -131,6 +133,43 @@ class TestComputeGrades:
         a = compute_grades(_synth_features(15, seed=42))
         b = compute_grades(_synth_features(15, seed=42))
         pd.testing.assert_frame_equal(a, b)
+
+
+def _three_game_sample(seed: int) -> pd.DataFrame:
+    """The synthetic cohort with every volume cut to three games' worth."""
+    features = _synth_features(seed=seed)
+    for col in ("n_dropbacks", "n_pass_attempts"):
+        features[col] = (features[col] * 3 / 17).astype(int)
+    return features
+
+
+class TestProvisional:
+    THREE_WEEKS = SeasonProgress(through_week=3, games=3.0)
+
+    def test_three_game_sample_qualifies_starters_at_three_weeks(self) -> None:
+        features = _three_game_sample(seed=6)
+        graded = compute_grades(features, progress=self.THREE_WEEKS)
+        # Starters (500-650 dropbacks a season) are at 88+ after three games;
+        # backups (50-150) at 26 or fewer. The pro-rated bar is 200 * 3/17 = 35.
+        is_starter = graded["n_dropbacks"] >= 88
+        assert graded.loc[is_starter, "qualified"].all()
+        assert not graded.loc[~is_starter, "qualified"].any()
+
+    def test_same_sample_judged_as_a_full_season_is_not_graded(self) -> None:
+        with pytest.raises(InsufficientCohortError):
+            compute_grades(_three_game_sample(seed=6))
+
+    def test_confidence_is_relative_to_volume_to_date(self) -> None:
+        graded = compute_grades(_three_game_sample(seed=7), progress=self.THREE_WEEKS)
+        assert (graded.loc[graded["qualified"], "confidence"] == 1.0).all()
+
+    def test_supplied_composite_sd_sets_the_scale(self) -> None:
+        features = _three_game_sample(seed=8)
+        unit = compute_grades(features, progress=self.THREE_WEEKS, composite_sd=1.0)
+        halved = compute_grades(features, progress=self.THREE_WEEKS, composite_sd=2.0)
+        pd.testing.assert_series_equal(
+            halved["composite_z"], unit["composite_z"] / 2, check_names=False
+        )
 
 
 class TestDataTier:

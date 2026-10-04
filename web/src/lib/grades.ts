@@ -4,6 +4,14 @@ export function formatGrade(grade: number): string {
   return grade.toFixed(0);
 }
 
+/**
+ * Label for a Provisional grade: a season still in progress, graded from
+ * games through ``throughWeek`` and restated every week.
+ */
+export function provisionalLabel(throughWeek: number): string {
+  return `Provisional · Through week ${throughWeek}`;
+}
+
 export function formatCareer(grade: number, uncertainty: number): string {
   return `${grade.toFixed(0)} \u00B1 ${uncertainty.toFixed(0)}`;
 }

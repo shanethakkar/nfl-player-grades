@@ -12,6 +12,22 @@ export type CareerGradesRow = {
   n_seasons: number;
 };
 
+export type DefensivePlayerSeasonStatsRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  tackles_solo: number | null;
+  tackle_assists: number | null;
+  tackles_for_loss: number | null;
+  sacks: number | null;
+  qb_hits: number | null;
+  pass_defended: number | null;
+  interceptions: number | null;
+  int_yards: number | null;
+  forced_fumbles: number | null;
+  def_tds: number | null;
+};
+
 export type DepthChartsRow = {
   team_id: number;
   season: number;
@@ -19,6 +35,42 @@ export type DepthChartsRow = {
   position: string;
   depth_order: number;
   player_id: number;
+};
+
+export type FtnReceivingChartingRow = {
+  player_id: number;
+  season: number;
+  catchable_balls: number | null;
+  drops: number | null;
+  contested_balls: number | null;
+  created_receptions: number | null;
+};
+
+export type KickerStatsRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  fg_att: number | null;
+  fg_made: number | null;
+  fg_blocked: number | null;
+  fg_long: number | null;
+  fg_att_0_19: number | null;
+  fg_made_0_19: number | null;
+  fg_att_20_29: number | null;
+  fg_made_20_29: number | null;
+  fg_att_30_39: number | null;
+  fg_made_30_39: number | null;
+  fg_att_40_49: number | null;
+  fg_made_40_49: number | null;
+  fg_att_50_59: number | null;
+  fg_made_50_59: number | null;
+  fg_att_60_plus: number | null;
+  fg_made_60_plus: number | null;
+  pat_att: number | null;
+  pat_made: number | null;
+  pat_blocked: number | null;
+  gwfg_att: number | null;
+  gwfg_made: number | null;
 };
 
 export type NgsPassingRow = {
@@ -86,6 +138,79 @@ export type NgsRushingRow = {
   rush_pct_over_expected: number | null;
 };
 
+export type PfrDefCoverageRow = {
+  player_id: number;
+  season: number;
+  games: number;
+  targets: number | null;
+  completions: number | null;
+  yards: number | null;
+  yac: number | null;
+  tds: number | null;
+  ints: number | null;
+  pass_breakups: number | null;
+  slot_pct: number | null;
+};
+
+export type PfrDefCoverageSRow = {
+  player_id: number;
+  season: number;
+  games: number;
+  targets: number | null;
+  completions: number | null;
+  yards: number | null;
+  ints: number | null;
+  pass_breakups: number | null;
+  comb_tackles: number | null;
+  tfl: number | null;
+  sacks: number | null;
+  missed_tackles: number | null;
+  tds_allowed: number | null;
+};
+
+export type PfrDefLbRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  comb_tackles: number | null;
+  missed_tackles: number | null;
+  tfl: number | null;
+  pressures: number | null;
+  sacks: number | null;
+  qb_hits: number | null;
+  hurries: number | null;
+  targets: number | null;
+  completions_allowed: number | null;
+  yards_allowed: number | null;
+  ints: number | null;
+  pbu: number | null;
+  fumbles_forced: number | null;
+  tds_allowed: number | null;
+};
+
+export type PfrDefPassRushRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  pressures: number | null;
+  sacks: number | null;
+  qb_hits: number | null;
+  hurries: number | null;
+  comb_tackles: number | null;
+  missed_tackles: number | null;
+  tfl: number | null;
+};
+
+export type PfrRbRushRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  carries: number | null;
+  yards_after_contact: number | null;
+  yards_before_contact: number | null;
+  broken_tackles: number | null;
+};
+
 export type PipelineRunsRow = {
   run_id: number;
   stage: string;
@@ -123,6 +248,7 @@ export type PlayersRow = {
   current_team_id: number | null;
   last_updated: string;
   pfr_id: string | null;
+  slug: string;
 };
 
 export type PlaysRow = {
@@ -179,6 +305,38 @@ export type PlaysRow = {
   xyac_mean_yardage: number | null;
 };
 
+export type PunterStatsRow = {
+  player_id: number;
+  season: number;
+  punts: number | null;
+  gross_yards: number | null;
+  return_yards: number | null;
+  net_yards: number | null;
+  inside_20: number | null;
+  touchbacks: number | null;
+  blocked: number | null;
+  fair_catches: number | null;
+  out_of_bounds: number | null;
+  downed: number | null;
+  epa_total: number | null;
+  long_punt: number | null;
+};
+
+export type QbSeasonStatsRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  pass_attempts: number | null;
+  pass_completions: number | null;
+  pass_yards: number | null;
+  pass_tds: number | null;
+  interceptions: number | null;
+  sacks_taken: number | null;
+  rush_attempts: number | null;
+  rush_yards: number | null;
+  rush_tds: number | null;
+};
+
 export type SchemaMigrationsRow = {
   filename: string;
   sha256: string;
@@ -198,6 +356,21 @@ export type SeasonGradesRow = {
   computed_at: string;
   role: string | null;
   data_tier_reason: string | null;
+  team_abbr: string | null;
+  through_week: number | null;
+};
+
+export type SkillPlayerSeasonStatsRow = {
+  player_id: number;
+  season: number;
+  games: number | null;
+  rush_attempts: number | null;
+  rush_yards: number | null;
+  rush_tds: number | null;
+  targets: number | null;
+  receptions: number | null;
+  rec_yards: number | null;
+  rec_tds: number | null;
 };
 
 export type StatComponentsRow = {
@@ -214,6 +387,96 @@ export type StatComponentsRow = {
 export type TeamAliasesRow = {
   alias: string;
   team_id: number;
+};
+
+export type TeamGradeComponentsRow = {
+  team_id: number;
+  season: number;
+  phase: string;
+  position: string;
+  position_grade: number;
+  weight: number;
+  n_players: number;
+  total_snaps: number;
+};
+
+export type TeamGradesRow = {
+  team_id: number;
+  season: number;
+  overall_grade: number;
+  offense_grade: number;
+  defense_grade: number;
+  st_grade: number;
+  overall_z: number;
+  offense_z: number;
+  defense_z: number;
+  st_z: number;
+  overall_percentile: number | null;
+  offense_percentile: number | null;
+  defense_percentile: number | null;
+  st_percentile: number | null;
+  data_tier_reason: string | null;
+};
+
+export type TeamOlComponentsRow = {
+  team_id: number;
+  season: number;
+  component_name: string;
+  raw_value: number | null;
+  adjusted_value: number | null;
+  z_score: number | null;
+  sample_size: number | null;
+  used_in_composite: boolean;
+};
+
+export type TeamOlGradesRow = {
+  team_id: number;
+  season: number;
+  composite_grade: number;
+  composite_z: number;
+  percentile: number | null;
+  confidence: number | null;
+  data_tier: number | null;
+  qualified: boolean;
+  data_tier_reason: string | null;
+};
+
+export type TeamOlStatsRow = {
+  team_id: number;
+  season: number;
+  dropbacks: number | null;
+  sacks_allowed: number | null;
+  qb_hits_allowed: number | null;
+  pressures_allowed: number | null;
+  rushes: number | null;
+  rush_yards: number | null;
+  yards_before_contact: number | null;
+  rush_epa_total: number | null;
+  rushes_success: number | null;
+  rushes_stuffed: number | null;
+  rushes_explosive: number | null;
+  false_starts: number | null;
+  holdings: number | null;
+};
+
+export type TeamSeasonEpaRow = {
+  season: number;
+  team_abbr: string;
+  epa_per_play: number;
+  epa_rank: number;
+  n_teams: number;
+};
+
+export type TeamSeasonRecordsRow = {
+  team_id: number;
+  season: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  points_for: number;
+  points_against: number;
+  point_diff: number;
+  n_games: number;
 };
 
 export type TeamsRow = {

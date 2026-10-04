@@ -9,7 +9,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from nfl_grades.grading.scoring import MIN_QUALIFIED_COHORT, InsufficientCohortError, score
+from nfl_grades.grading.scoring import (
+    MIN_QUALIFIED_COHORT,
+    InsufficientCohortError,
+    pooled_sd,
+    score,
+)
 
 
 def _all_qualified(z: pd.DataFrame) -> pd.Series:
@@ -200,3 +205,32 @@ class TestPerPlayerFormula:
         formulas = pd.Series([full] * 10 + [blocking])
         out = score(z, formulas, _all_qualified(z))
         assert out["percentile"].iloc[-1] == pytest.approx(100 * 7 / 11)
+
+
+class TestPooledSd:
+    def test_pools_spread_within_each_season_not_between_seasons(self) -> None:
+        # Two seasons with SD 1 each but very different means: the pooled
+        # SD is 1, not the SD of all six values.
+        raw = pd.Series([1.0, 2.0, 3.0, 11.0, 12.0, 13.0])
+        season = pd.Series([2024, 2024, 2024, 2025, 2025, 2025])
+        assert pooled_sd(raw, _all_qualified(raw.to_frame()), season) == pytest.approx(1.0)
+
+    def test_weights_each_season_by_its_degrees_of_freedom(self) -> None:
+        # Season A: SD 1 over 3 players (2 df). Season B: SD 2 over 5 (4 df).
+        a = pd.Series([1.0, 2.0, 3.0])
+        b = pd.Series([0.0, 2.0, 4.0, 2.0 - np.sqrt(2), 2.0 + np.sqrt(2)])
+        raw = pd.concat([a, b], ignore_index=True)
+        season = pd.Series([1] * 3 + [2] * 5)
+        expected = np.sqrt((2 * a.var() + 4 * b.var()) / 6)
+        assert pooled_sd(raw, _all_qualified(raw.to_frame()), season) == pytest.approx(expected)
+
+    def test_ignores_unqualified_and_ungraded_players(self) -> None:
+        raw = pd.Series([1.0, 2.0, 3.0, 50.0, float("nan")])
+        cohort = pd.Series([True, True, True, False, True])
+        season = pd.Series([1] * 5)
+        assert pooled_sd(raw, cohort, season) == pytest.approx(1.0)
+
+    def test_no_cohort_raises(self) -> None:
+        raw = pd.Series([1.0])
+        with pytest.raises(InsufficientCohortError):
+            pooled_sd(raw, _all_qualified(raw.to_frame()), pd.Series([1]))

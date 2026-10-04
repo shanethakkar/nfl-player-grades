@@ -30,6 +30,7 @@ from scipy.stats import spearmanr
 from sqlalchemy import text
 
 from nfl_grades.db import get_engine
+from nfl_grades.grading import preview, progress
 from nfl_grades.grading.run import POSITION_RUNNERS
 
 _STORED_SQL = text(
@@ -62,12 +63,24 @@ def main() -> None:
 
     position, module = _grader(args.position)
     with get_engine().connect() as conn:
-        features = module.extract_features(conn, args.season)
-        n_params = len(inspect.signature(module.compute_grades).parameters)
-        new = (
-            module.compute_grades(features, args.season)
-            if n_params > 1
-            else module.compute_grades(features)
+        # Same progress, thresholds and Composite SD as `nflgrades grade`.
+        season_progress = progress.load(conn, args.season)
+        extract_kwargs = (
+            {"progress": season_progress}
+            if "progress" in inspect.signature(module.extract_features).parameters
+            else {}
+        )
+        features = module.extract_features(conn, args.season, **extract_kwargs)
+        positional = [
+            p
+            for p in inspect.signature(module.compute_grades).parameters.values()
+            if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        ]
+        new = module.compute_grades(
+            features,
+            *([args.season] if len(positional) > 1 else []),
+            progress=season_progress,
+            composite_sd=preview.composite_sd_for(conn, position, season_progress),
         )
         stored = pd.DataFrame(
             conn.execute(_STORED_SQL, {"season": args.season, "position": position})

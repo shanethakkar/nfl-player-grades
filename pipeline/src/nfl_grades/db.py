@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
@@ -44,6 +44,21 @@ def session() -> Iterator[Session]:
         raise
     finally:
         s.close()
+
+
+@contextmanager
+def transaction(conn: Connection | None = None) -> Iterator[Connection]:
+    """Yield ``conn`` unchanged if given (the caller owns the transaction),
+    else a new connection in a transaction that commits on exit.
+
+    Lets a stage run on its own or inside a larger transaction, e.g. the
+    weekly refresh writes every grade in one commit.
+    """
+    if conn is not None:
+        yield conn
+        return
+    with get_engine().begin() as own:
+        yield own
 
 
 # ---------------------------------------------------------------------------

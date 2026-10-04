@@ -29,6 +29,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from nfl_grades.db import get_engine
 from nfl_grades.grading import scoring
+from nfl_grades.grading.progress import SeasonProgress
 from nfl_grades.grading.weights import (
     CB_V1_WEIGHTS,
     EDGE_V1_WEIGHTS,
@@ -120,6 +121,7 @@ def _resolve_weights(
 _FETCH_Z_SQL = text(
     """
     SELECT
+        sc.season,
         sc.player_id,
         sc.component_name,
         sc.z_score
@@ -128,7 +130,7 @@ _FETCH_Z_SQL = text(
       ON sg.player_id = sc.player_id
      AND sg.season    = sc.season
      AND sg.position  = :position
-    WHERE sc.season = :season
+    WHERE sc.season = ANY(:seasons)
       AND sc.component_name LIKE :prefix
     """
 )
@@ -136,23 +138,86 @@ _FETCH_Z_SQL = text(
 _FETCH_GRADES_SQL = text(
     """
     SELECT
+        sg.season,
         sg.player_id,
         p.full_name,
         sg.role,
         sg.qualified,
+        sg.through_week,
         sg.composite_grade AS current_grade,
         sg.composite_z     AS current_composite_z,
         sg.percentile      AS current_percentile
     FROM season_grades sg
     JOIN players p USING (player_id)
-    WHERE sg.season   = :season
+    WHERE sg.season   = ANY(:seasons)
       AND sg.position = :position
+    """
+)
+
+_COMPLETED_SEASONS_SQL = text(
+    """
+    SELECT DISTINCT season
+    FROM season_grades
+    WHERE position = :position AND through_week IS NULL
     """
 )
 
 
 def _component_prefix(position: str) -> str:
     return f"{position.lower()}_%"
+
+
+def _load_stored_cohort(
+    conn: Connection,
+    seasons: list[int],
+    position: str,
+    overrides: dict[str, float],
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float] | pd.Series]:
+    """Stored ``season_grades`` rows for ``(seasons, position)``, their
+    Component z-scores (wide) and each player's Formula, all indexed by
+    ``(season, player_id)``."""
+    main_weights, blocking_weights = _resolve_weights(position, overrides)
+    params = {"seasons": seasons, "position": position}
+    z_rows = pd.read_sql(
+        _FETCH_Z_SQL, conn, params={**params, "prefix": _component_prefix(position)}
+    )
+    grades = pd.read_sql(_FETCH_GRADES_SQL, conn, params=params).set_index(
+        ["season", "player_id"]
+    )
+    z_wide = (
+        z_rows.pivot(index=["season", "player_id"], columns="component_name", values="z_score")
+        .astype(float)
+        .reindex(grades.index)
+    )
+    formulas: dict[str, float] | pd.Series = main_weights
+    if blocking_weights is not None:
+        formulas = grades["role"].map(
+            lambda role: blocking_weights if role == TE_ROLE_BLOCKING else main_weights
+        )
+    return grades, z_wide, formulas
+
+
+def pooled_composite_sd(
+    conn: Connection,
+    position: str,
+    overrides: dict[str, float] | None = None,
+) -> float:
+    """Pooled within-season SD of the raw Composite over the Qualified
+    players of every completed season of ``position``, under current
+    weights plus ``overrides``. Provisional grades are standardized by it.
+    """
+    seasons = [int(s) for s in conn.execute(_COMPLETED_SEASONS_SQL, {"position": position}).scalars()]
+    grades, z_wide, formulas = _load_stored_cohort(conn, seasons, position, overrides or {})
+    raw = scoring.raw_composite(z_wide, formulas)
+    season = pd.Series(grades.index.get_level_values("season"), index=grades.index)
+    return scoring.pooled_sd(raw, grades["qualified"].astype(bool), season)
+
+
+def composite_sd_for(conn: Connection, position: str, progress: SeasonProgress) -> float | None:
+    """The Composite SD a grader passes to ``scoring.score``: the pooled
+    completed-season SD for a Provisional season, None (the cohort's own SD)
+    otherwise."""
+    return pooled_composite_sd(conn, position) if progress.is_provisional else None
 
 
 def rescore_from_components(
@@ -163,31 +228,20 @@ def rescore_from_components(
 ) -> pd.DataFrame:
     """Score every ``season_grades`` row for ``(season, position)`` from the
     stored ``stat_components`` z-scores, through the same scoring step the
-    grader uses.
+    grader uses (including the pooled SD for a Provisional season).
 
-    Returns one row per season_grades row with columns: player_id,
-    full_name, role, qualified, current_grade, current_composite_z,
-    current_percentile (as stored) and composite_z, grade, percentile
-    (recomputed under current weights plus ``overrides``).
+    Returns one row per season_grades row with columns: season, player_id,
+    full_name, role, qualified, through_week, current_grade,
+    current_composite_z, current_percentile (as stored) and composite_z,
+    grade, percentile (recomputed under current weights plus ``overrides``).
     """
-    main_weights, blocking_weights = _resolve_weights(position, overrides or {})
-    params = {"season": season, "position": position}
-    z_rows = pd.read_sql(
-        _FETCH_Z_SQL, conn, params={**params, "prefix": _component_prefix(position)}
+    grades, z_wide, formulas = _load_stored_cohort(conn, [season], position, overrides or {})
+    composite_sd = None
+    if grades["through_week"].notna().any():
+        composite_sd = pooled_composite_sd(conn, position, overrides)
+    scored = scoring.score(
+        z_wide, formulas, grades["qualified"].astype(bool), composite_sd=composite_sd
     )
-    grades = pd.read_sql(_FETCH_GRADES_SQL, conn, params=params).set_index("player_id")
-
-    z_wide = (
-        z_rows.pivot(index="player_id", columns="component_name", values="z_score")
-        .astype(float)
-        .reindex(grades.index)
-    )
-    formulas: dict[str, float] | pd.Series = main_weights
-    if blocking_weights is not None:
-        formulas = grades["role"].map(
-            lambda role: blocking_weights if role == TE_ROLE_BLOCKING else main_weights
-        )
-    scored = scoring.score(z_wide, formulas, grades["qualified"].astype(bool))
     return grades.join(scored).reset_index()
 
 
@@ -277,6 +331,8 @@ def regrade_from_components(
 
 __all__ = [
     "PreviewRow",
+    "composite_sd_for",
+    "pooled_composite_sd",
     "parse_weight_overrides",
     "preview_position",
     "regrade_from_components",

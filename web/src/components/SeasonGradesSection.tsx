@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ComponentBreakdownTable } from "@/components/ComponentBreakdownTable";
 import { GradeBadge } from "@/components/GradeBadge";
+import { ProvisionalBadge } from "@/components/ProvisionalBadge";
 import { TeamContextPanel } from "@/components/TeamContextPanel";
 import { TeamLogo } from "@/components/TeamLogo";
 import {
@@ -90,6 +91,9 @@ function SeasonGradeCard({
               <span className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400">
                 {roleText}
               </span>
+            )}
+            {g.through_week !== null && (
+              <ProvisionalBadge throughWeek={g.through_week} />
             )}
             {/* Data-tier indicator. Hidden entirely for tier 1 ("Rich
                 data") — the default, no need to flag it. For tier 2

@@ -52,6 +52,25 @@ export const getGradedSeasons = unstable_cache(
 );
 
 /**
+ * The week a season's grades run through if the season is still in
+ * progress (Provisional grades), or null for a completed season.
+ */
+async function _getSeasonThroughWeek(season: number): Promise<number | null> {
+  const rows = await sql<{ through_week: number | null }[]>`
+    SELECT MAX(through_week) AS through_week
+    FROM season_grades
+    WHERE season = ${season}
+  `;
+  const week = rows[0]?.through_week;
+  return week == null ? null : Number(week);
+}
+export const getSeasonThroughWeek = unstable_cache(
+  _getSeasonThroughWeek,
+  ["season-through-week"],
+  { revalidate: 3600 },
+);
+
+/**
  * All 32 teams, ordered by conference → division → name. Used by the
  * /teams index page to render the grouped logo grid.
  */
@@ -1919,6 +1938,7 @@ async function _getPlayerDetail(
         data_tier: number;
         role: string | null;
         team_abbr: string | null;
+        through_week: number | null;
       }[]
     >`
       SELECT
@@ -1931,7 +1951,8 @@ async function _getPlayerDetail(
         sg.confidence,
         sg.data_tier,
         sg.role,
-        sg.team_abbr
+        sg.team_abbr,
+        sg.through_week
       FROM season_grades sg
       WHERE sg.player_id = ${playerId}
       ORDER BY sg.season DESC, sg.position
@@ -1993,6 +2014,7 @@ async function _getPlayerDetail(
     data_tier: g.data_tier,
     role: g.role,
     team_abbr: g.team_abbr,
+    through_week: g.through_week === null ? null : Number(g.through_week),
     components: componentsBySeason.get(g.season) ?? [],
     context:
       g.team_abbr && g.position !== "QB"

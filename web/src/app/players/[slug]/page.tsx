@@ -48,8 +48,11 @@ export default async function PlayerPage({ params }: PageProps) {
   // standalone <CareerSummary /> with 3 stat boxes — now folded into
   // the hero header as a one-line stat strip so it doesn't waste
   // vertical space). Only qualified seasons count for the headline
-  // numbers; below-volume grades are too noisy to average over.
-  const qualified = grades.filter((g) => g.qualified);
+  // numbers; below-volume grades are too noisy to average over. A
+  // Provisional season (still in progress) stays out of the career
+  // numbers, headline and chart until it's complete.
+  const completed = grades.filter((g) => g.through_week === null);
+  const qualified = completed.filter((g) => g.qualified);
   const avg =
     qualified.length === 0
       ? null
@@ -170,7 +173,7 @@ export default async function PlayerPage({ params }: PageProps) {
         </p>
       ) : (
         <>
-          <CareerGradeChart grades={grades} />
+          <CareerGradeChart grades={completed} />
           <SeasonGradesSection grades={grades} />
         </>
       )}

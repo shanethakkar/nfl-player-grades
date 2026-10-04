@@ -61,18 +61,7 @@ def score(
             Qualified players have a Composite, or their Composites are all
             equal.
     """
-    if isinstance(weights, pd.Series):
-        formulas = weights.reindex(component_z.index)
-    else:
-        formulas = pd.Series([weights] * len(component_z), index=component_z.index, dtype=object)
-
-    raw = pd.Series(np.nan, index=component_z.index, dtype=float)
-    formula_key = formulas.map(lambda w: tuple(w.items()))
-    for key, rows in formula_key.groupby(formula_key, sort=False).groups.items():
-        formula = dict(key)
-        z = component_z.loc[rows].reindex(columns=list(formula))
-        raw.loc[rows] = composite.combine(z, formula)
-
+    raw = raw_composite(component_z, weights)
     in_cohort = qualified.reindex(component_z.index).fillna(False).astype(bool) & raw.notna()
     n_cohort = int(in_cohort.sum())
     if n_cohort < MIN_QUALIFIED_COHORT:
@@ -96,6 +85,47 @@ def score(
         },
         index=component_z.index,
     )
+
+
+def raw_composite(
+    component_z: pd.DataFrame, weights: Mapping[str, float] | pd.Series
+) -> pd.Series:
+    """Each player's unstandardized Composite: the Formula's weighted mean
+    of their Component z-scores, renormalized over the Components they have.
+    ``weights`` is as for :func:`score`."""
+    if isinstance(weights, pd.Series):
+        formulas = weights.reindex(component_z.index)
+    else:
+        formulas = pd.Series([weights] * len(component_z), index=component_z.index, dtype=object)
+
+    raw = pd.Series(np.nan, index=component_z.index, dtype=float)
+    formula_key = formulas.map(lambda w: tuple(w.items()))
+    for key, rows in formula_key.groupby(formula_key, sort=False).groups.items():
+        formula = dict(key)
+        z = component_z.loc[rows].reindex(columns=list(formula))
+        raw.loc[rows] = composite.combine(z, formula)
+    return raw
+
+
+def pooled_sd(raw: pd.Series, qualified: pd.Series, season: pd.Series) -> float:
+    """Pooled within-season SD of the raw Composite over Qualified players.
+
+    Provisional grades divide by this (computed over completed seasons)
+    instead of the SD of a small in-season cohort. Each season's spread is
+    weighted by its degrees of freedom; differences between season means
+    don't count.
+
+    Raises:
+        InsufficientCohortError: no season has two Qualified players with a
+            Composite.
+    """
+    in_cohort = qualified.reindex(raw.index).fillna(False).astype(bool) & raw.notna()
+    groups = raw[in_cohort].groupby(season.reindex(raw.index)[in_cohort])
+    sum_sq = float(groups.apply(lambda g: ((g - g.mean()) ** 2).sum()).sum())
+    dof = int((groups.size() - 1).clip(lower=0).sum())
+    if dof == 0:
+        raise InsufficientCohortError("no completed-season cohort to pool a Composite SD from")
+    return float(np.sqrt(sum_sq / dof))
 
 
 def _percentile(grade: pd.Series, cohort_mask: pd.Series) -> pd.Series:

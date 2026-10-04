@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { InfoDisclosure } from "@/components/InfoDisclosure";
 import { LeaderboardTable } from "@/components/LeaderboardTable";
 import { PositionPicker } from "@/components/PositionPicker";
+import { ProvisionalBadge } from "@/components/ProvisionalBadge";
 import { SeasonPicker } from "@/components/SeasonPicker";
 import {
   getGradedPositions,
   getGradedSeasons,
   getLeaderboard,
+  getSeasonThroughWeek,
 } from "@/lib/queries";
 
 // ISR — Vercel caches the rendered HTML at the edge for an hour;
@@ -201,7 +203,10 @@ export default async function HomePage({ searchParams }: Props) {
       ? DEFAULT_POSITION
       : pickerPositions[0]);
 
-  const entries = await getLeaderboard(activeSeason, activePosition);
+  const [entries, throughWeek] = await Promise.all([
+    getLeaderboard(activeSeason, activePosition),
+    getSeasonThroughWeek(activeSeason),
+  ]);
   const qualified = entries.filter((e) => e.qualified);
   const unqualified = entries.filter((e) => !e.qualified);
 
@@ -231,6 +236,9 @@ export default async function HomePage({ searchParams }: Props) {
                 <span className="hidden md:inline">{activePosition} </span>
                 Grades
               </h1>
+              {throughWeek !== null && (
+                <ProvisionalBadge throughWeek={throughWeek} />
+              )}
               <span className="md:hidden">
                 <InfoDisclosure label="About these grades">
                   {qualified.length}{" "}
@@ -324,6 +332,8 @@ export default async function HomePage({ searchParams }: Props) {
               </summary>
               <p className="mb-3 mt-3 text-xs text-neutral-500">
                 {lowVolume.threshold}
+                {throughWeek !== null &&
+                  " While the season is in progress, thresholds are pro-rated to games played."}
               </p>
               {/* Same `-ml-6 -mr-6 sm:ml-0 sm:mr-0` treatment as the
                   qualified table so mobile gets viewport-edge bleed

@@ -19,10 +19,11 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from nfl_grades.db import get_engine, pipeline_run
-from nfl_grades.grading import empirical_bayes, scoring, zscore
+from nfl_grades.db import pipeline_run, transaction
+from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
 from nfl_grades.grading.filters import QB_DROPBACK_FILTER_SQL, QB_DROPBACK_PLAYER_SQL
+from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     QB_V1_CONFIDENCE_FULL_DROPBACKS,
     QB_V1_QUALIFIED_MIN_DROPBACKS,
@@ -44,15 +45,17 @@ class RunResult:
     season_grades_written: int
 
 
-def run(season: int) -> RunResult:
+def run(season: int, *, conn: Connection | None = None) -> RunResult:
     """Run the full QB v1 grading pipeline for one season.
 
     Idempotent: re-writes all stat_components and season_grades rows
-    that belong to (season, position='QB').
+    that belong to (season, position='QB'). A season still in progress
+    gets Provisional grades (see ``progress``). Pass ``conn`` to write
+    inside the caller's transaction.
     """
-    engine = get_engine()
     with pipeline_run("grading:qb", season=season) as handle:
-        with engine.begin() as conn:
+        with transaction(conn) as conn:
+            season_progress = progress.load(conn, season)
             features = extract_features(conn, season)
             if features.empty:
                 logger.warning("no QB dropbacks found for season %d", season)
@@ -61,9 +64,15 @@ def run(season: int) -> RunResult:
                 handle.note("no data")
                 return result
 
-            graded = compute_grades(features)
+            graded = compute_grades(
+                features,
+                progress=season_progress,
+                composite_sd=preview.composite_sd_for(conn, POSITION, season_progress),
+            )
 
-            n_components, n_grades = write_results(conn, graded, season)
+            n_components, n_grades = write_results(
+                conn, graded, season, through_week=season_progress.through_week
+            )
 
         result = RunResult(
             season=season,
@@ -143,8 +152,16 @@ _COMPONENT_SPECS: dict[str, tuple[str, str]] = {
 }
 
 
-def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
+def compute_grades(
+    features: pd.DataFrame,
+    *,
+    progress: SeasonProgress = COMPLETE,
+    composite_sd: float | None = None,
+) -> pd.DataFrame:
     """Apply shrinkage, z-score, composite, sigmoid, percentile rank.
+
+    Volume thresholds pro-rate to ``progress``; ``composite_sd`` is passed
+    to ``scoring.score`` (the pooled SD for a Provisional season).
 
     Input:  one row per player, columns per ``extract_features``.
     Output: same rows plus columns:
@@ -153,10 +170,10 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
         - qualified, confidence
     """
     df = features.copy()
-    df["qualified"] = df["n_dropbacks"] >= QB_V1_QUALIFIED_MIN_DROPBACKS
-    df["confidence"] = (df["n_dropbacks"].astype(float) / QB_V1_CONFIDENCE_FULL_DROPBACKS).clip(
-        upper=1.0
-    )
+    df["qualified"] = df["n_dropbacks"] >= progress.scale(QB_V1_QUALIFIED_MIN_DROPBACKS)
+    df["confidence"] = (
+        df["n_dropbacks"].astype(float) / progress.scale(QB_V1_CONFIDENCE_FULL_DROPBACKS)
+    ).clip(upper=1.0)
 
     # --- per-component: shrink + z-score ---
     z_frame = pd.DataFrame(index=df.index)
@@ -173,7 +190,9 @@ def compute_grades(features: pd.DataFrame) -> pd.DataFrame:
 
     # A QB missing a Component (no pass attempts -> no CPOE) is graded on
     # the Components they have, with weights renormalized (ADR-0028).
-    return df.assign(**scoring.score(z_frame, QB_V1_WEIGHTS, df["qualified"]))
+    return df.assign(
+        **scoring.score(z_frame, QB_V1_WEIGHTS, df["qualified"], composite_sd=composite_sd)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -204,15 +223,22 @@ _INSERT_STAT_COMPONENTS = text("""
 _INSERT_SEASON_GRADES = text("""
     INSERT INTO season_grades
         (player_id, season, position, composite_grade, composite_z,
-         percentile, confidence, data_tier, qualified, role, data_tier_reason)
+         percentile, confidence, data_tier, qualified, role, data_tier_reason,
+         through_week)
     VALUES
         (:player_id, :season, :position, :composite_grade, :composite_z,
-         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason)
+         :percentile, :confidence, :data_tier, :qualified, :role, :data_tier_reason,
+         :through_week)
 """)
 
 
-def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[int, int]:
-    """Upsert stat_components + season_grades. Returns (n_components, n_grades)."""
+def write_results(
+    conn: Connection, graded: pd.DataFrame, season: int, *, through_week: int | None = None
+) -> tuple[int, int]:
+    """Upsert stat_components + season_grades. Returns (n_components, n_grades).
+
+    ``through_week`` marks the grades Provisional (None: completed season).
+    """
     components = list(_COMPONENT_SPECS.keys())
     era_tier, era_reason = _era_tier_for_season(season)
 
@@ -259,6 +285,7 @@ def write_results(conn: Connection, graded: pd.DataFrame, season: int) -> tuple[
                 "qualified": bool(r["qualified"]),
                 "role": None,
                 "data_tier_reason": era_reason,
+                "through_week": through_week,
             }
         )
 

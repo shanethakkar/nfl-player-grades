@@ -239,6 +239,8 @@ export type SeasonGradeDetail = {
   team_abbr: string | null;
   /** TE role string (receiving_te / balanced_te / blocking_te), null otherwise. */
   role: string | null;
+  /** Last week covered by a Provisional grade; null for a completed season. */
+  through_week: number | null;
   components: StatComponentDetail[];
   /**
    * Offense context for ADR-0017 mitigation. Populated for WR/TE/RB
