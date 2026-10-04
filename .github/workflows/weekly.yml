@@ -1,0 +1,73 @@
+# Weekly Provisional grades (ADR-0031): refresh the in-progress season
+# against Neon every Wednesday morning in season, after Monday Night
+# Football and the nflverse overnight update. Re-run any time from the
+# Actions tab (Run workflow), optionally for a specific season.
+#
+# A failed run fails the workflow (GitHub emails the owner) and leaves the
+# previous week's grades in place: `nflgrades weekly` writes nothing if a
+# source lags, and writes every grade in one transaction.
+#
+# Needs the DATABASE_URL repository secret: Neon's *direct* endpoint (the
+# host without "-pooler"), with sslmode=require. See docs/weekly-refresh.md.
+
+name: Weekly grades
+
+on:
+  schedule:
+    # Wednesdays 12:00 UTC (8am EDT / 7am EST), September through January.
+    - cron: "0 12 * 9-12,1 3"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to refresh (blank: the current NFL season)"
+        required: false
+        type: string
+
+concurrency:
+  group: weekly-grades
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install pipeline
+        # uv installs the project itself in editable mode.
+        run: uv sync --extra ingest --locked
+
+      - name: Resolve season
+        id: season
+        env:
+          INPUT_SEASON: ${{ inputs.season }}
+        run: |
+          if [ -n "$INPUT_SEASON" ]; then
+            season="$INPUT_SEASON"
+          elif [ "$(date -u +%-m)" -le 2 ]; then
+            # January/February belong to the previous season.
+            season=$(( $(date -u +%Y) - 1 ))
+          else
+            season=$(date -u +%Y)
+          fi
+          if ! [[ "$season" =~ ^[0-9]{4}$ ]]; then
+            echo "season must be a year, got '$season'" >&2
+            exit 1
+          fi
+          echo "season=$season" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh season ${{ steps.season.outputs.season }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Fresh runner, fresh data: no cache is restored or saved.
+          PIPELINE_CACHE_DIR: ${{ runner.temp }}/nflgrades-cache
+          SEASON: ${{ steps.season.outputs.season }}
+        run: uv run --locked nflgrades weekly --season "$SEASON"
