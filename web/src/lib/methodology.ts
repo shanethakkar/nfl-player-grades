@@ -119,6 +119,7 @@ async function _getGradeTierExamples(): Promise<TierBucket[]> {
       FROM season_grades sg
       JOIN players p ON p.player_id = sg.player_id
       WHERE sg.qualified = TRUE
+        AND sg.through_week IS NULL  -- completed seasons only (ADR-0031)
     ),
     deduped AS (
       SELECT DISTINCT ON (tier_id, player_id)
@@ -175,7 +176,8 @@ export type CurrentTopEntry = {
 };
 
 /**
- * Top N qualified players at `position` for the latest graded season.
+ * Top N qualified players at `position` for the latest completed season
+ * (a Provisional season in progress is skipped).
  *
  * Used by the position cards on /methodology — every card renders
  * "see current top N" links so the page stays anchored to live data
@@ -188,7 +190,8 @@ async function _getCurrentTopAtPosition(
   // OL is team-level (ADR-0025) and lives in team_ol_grades, not season_grades.
   if (position === "OL") {
     const seasonRows = await sql<{ season: number | null }[]>`
-      SELECT MAX(season) AS season FROM team_ol_grades WHERE qualified = TRUE
+      SELECT MAX(season) AS season FROM team_ol_grades
+      WHERE qualified = TRUE AND through_week IS NULL
     `;
     const season = seasonRows[0]?.season ?? null;
     if (season === null) return { season: null, entries: [] };
@@ -227,6 +230,7 @@ async function _getCurrentTopAtPosition(
     FROM season_grades
     WHERE position = ${position}
       AND qualified = TRUE
+      AND through_week IS NULL
   `;
   const season = seasonRows[0]?.season ?? null;
   if (season === null) return { season: null, entries: [] };
@@ -279,7 +283,7 @@ export type CurrentTopTeam = {
 };
 
 /**
- * Top N teams at a phase (offense / defense / st) for the latest graded
+ * Top N teams at a phase (offense / defense / st) for the latest completed
  * season. Mirrors {@link getCurrentTopAtPosition} but reads team_grades
  * and selects the column matching the requested phase. Used by the
  * team-grades section on /methodology to anchor each phase card to a
@@ -290,7 +294,7 @@ async function _getCurrentTopTeamsByPhase(
   limit = 3,
 ): Promise<{ season: number | null; entries: CurrentTopTeam[] }> {
   const seasonRows = await sql<{ season: number | null }[]>`
-    SELECT MAX(season) AS season FROM team_grades
+    SELECT MAX(season) AS season FROM team_grades WHERE through_week IS NULL
   `;
   const season = seasonRows[0]?.season ?? null;
   if (season === null) return { season: null, entries: [] };

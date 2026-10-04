@@ -211,11 +211,13 @@ async function getScalePlayers(): Promise<
   Array<{ player_id: number; full_name: string; position: string; grade: number }>
 > {
   try {
-    // Pick the latest season with QB grades. Then sample 4 players
+    // Pick the latest completed season (Provisional grades are a partial
+    // sample, not a showcase). Then sample 4 players
     // spread across the grade range using percentile thresholds, so the
     // card always lands a low / mid-low / mid-high / elite pin.
     const seasonRow = await sql<{ s: number | null }[]>`
-      SELECT MAX(season) AS s FROM season_grades WHERE qualified = TRUE
+      SELECT MAX(season) AS s FROM season_grades
+      WHERE qualified = TRUE AND through_week IS NULL
     `;
     const season = seasonRow[0]?.s;
     if (!season) return [];

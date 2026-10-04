@@ -51,7 +51,7 @@ export default async function PlayerPage({ params }: PageProps) {
   // numbers; below-volume grades are too noisy to average over. A
   // Provisional season (still in progress) stays out of the career
   // numbers, headline and chart until it's complete.
-  const completed = grades.filter((g) => g.through_week === null);
+  const completed = grades.filter((g) => g.through_week == null);
   const qualified = completed.filter((g) => g.qualified);
   const avg =
     qualified.length === 0

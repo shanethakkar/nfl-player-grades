@@ -342,8 +342,13 @@ export const getTeamsLeaderboard = unstable_cache(
 
 
 /**
- * Seasons we have any player_seasons rows for this team — used to
- * populate the year selector on the team page. Ordered newest first.
+ * Graded seasons this team has a roster for — the year selector on the
+ * team page. Ordered newest first.
+ *
+ * Restricted to graded seasons (the same list as the leaderboards), which
+ * the weekly refresh writes in the same transaction as team grades. A
+ * season whose rosters are ingested but not yet graded would otherwise be
+ * the default and show an empty, 0-0 team page.
  */
 async function _getTeamSeasons(teamAbbr: string): Promise<number[]> {
   const rows = await sql<{ season: number }[]>`
@@ -351,6 +356,7 @@ async function _getTeamSeasons(teamAbbr: string): Promise<number[]> {
     FROM player_seasons ps
     JOIN teams t ON t.team_id = ps.team_id
     WHERE t.abbr = ${teamAbbr}
+      AND ps.season IN (SELECT DISTINCT season FROM season_grades)
     ORDER BY ps.season DESC
   `;
   return rows.map((r) => Number(r.season));
@@ -521,8 +527,10 @@ async function _getTeamLineup(
   teamAbbr: string,
   season: number,
 ): Promise<TeamLineup> {
-  // One query: depth chart rows (week=99 end-of-season snapshot) joined
-  // with each player's best-graded season_grades row.
+  // One query: depth chart rows (week=99: the latest snapshot, i.e. the
+  // current depth chart for a season in progress and the end-of-season one
+  // for a completed season) joined with each player's best-graded
+  // season_grades row.
   // Grade lookup prefers the current-season row but falls back to the
   // player's most recent prior-season grade when there isn't one yet
   // (rookies, mid-season callups, in-progress seasons). The render layer
@@ -2014,7 +2022,7 @@ async function _getPlayerDetail(
     data_tier: g.data_tier,
     role: g.role,
     team_abbr: g.team_abbr,
-    through_week: g.through_week === null ? null : Number(g.through_week),
+    through_week: g.through_week == null ? null : Number(g.through_week),
     components: componentsBySeason.get(g.season) ?? [],
     context:
       g.team_abbr && g.position !== "QB"
@@ -2257,7 +2265,7 @@ export const getLeaderboard = unstable_cache(
 
 export const getPlayerDetail = unstable_cache(
   _getPlayerDetail,
-  ["player-detail"],
+  ["player-detail-v2"],  // v2: grades carry through_week (ADR-0031)
   { revalidate: 3600 },
 );
 
@@ -2279,7 +2287,7 @@ async function _getPlayerDetailBySlug(
 
 export const getPlayerDetailBySlug = unstable_cache(
   _getPlayerDetailBySlug,
-  ["player-detail-by-slug"],
+  ["player-detail-by-slug-v2"],
   { revalidate: 3600 },
 );
 

@@ -1,8 +1,11 @@
-"""Ingest end-of-regular-season depth charts.
+"""Ingest the latest depth chart for each team.
 
 V1 scope: one snapshot per team per season, stored as ``week=99`` (per the
 schema comment in 0001_init.sql which reserves 99 for the end-of-season
-snapshot). We use the latest available depth-chart data as the snapshot.
+snapshot). We use the latest available depth-chart data as the snapshot:
+for a completed season that is the end-of-season chart, and for a season in
+progress it is the current week's, refreshed by ``nflgrades weekly``
+(ADR-0031).
 
 Two source schemas — nflverse changed formats starting in 2025:
 

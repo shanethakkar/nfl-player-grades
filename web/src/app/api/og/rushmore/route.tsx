@@ -212,7 +212,10 @@ async function getTopFourQBs(): Promise<
       LEFT JOIN player_seasons ps ON ps.player_id = sg.player_id AND ps.season = sg.season
       LEFT JOIN teams t ON t.team_id = ps.team_id
       WHERE sg.position = 'QB' AND sg.qualified = TRUE
-        AND sg.season = (SELECT MAX(season) FROM season_grades WHERE position = 'QB' AND qualified = TRUE)
+        AND sg.season = (
+          SELECT MAX(season) FROM season_grades
+          WHERE position = 'QB' AND qualified = TRUE AND through_week IS NULL
+        )
       ORDER BY sg.composite_grade DESC
       LIMIT 4
     `;

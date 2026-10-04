@@ -92,7 +92,7 @@ function SeasonGradeCard({
                 {roleText}
               </span>
             )}
-            {g.through_week !== null && (
+            {g.through_week != null && (
               <ProvisionalBadge throughWeek={g.through_week} />
             )}
             {/* Data-tier indicator. Hidden entirely for tier 1 ("Rich
