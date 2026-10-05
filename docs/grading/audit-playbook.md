@@ -1,146 +1,169 @@
-# Grading Formula Methodology — Audit + Design Process
+# Grading Formula Methodology: Audit + Design Process
 
-The playbook for designing, auditing, and revising any position's grading formula. Originally developed during WR v1.1 research (2026-05-14), refined after the cross-position YoY audit, the pairwise correlation audit, and the validity baseline. Formalized into the current four-criterion framework on 2026-05-14.
+How to design, audit and change any position's Formula. Rewritten 2026-10-04
+(#12) after the [2026-09-27 system audit](audits/2026-09-27-system-audit.md)
+found the previous process unsound. Decisions: [ADR-0027](../adr/0027-grade-measures-attributable-performance.md)
+(what a Grade measures), [ADR-0029](../adr/0029-reputation-free-evaluation.md)
+(how changes are judged).
 
-**The framing principle:** Weights are reasoned. Data informs reasoning, never replaces it. We accept that our grades may disagree with consensus in ways an automated system would correct toward; this is intentional, because the grading system's value is the *defined-good* it represents, not its match to crowd-sourced ground truth.
+**The framing principle:** a Grade measures season performance *attributable
+to the player* (ADR-0027). Weights are reasoned from the skill tree, then
+**tested** for whether they measure the player reliably. Reputation (Pro Bowl
+voting, consensus top-10 lists) is a sanity check, never a target.
 
-## The four criteria
+## What changed, and why
 
-Every component currently in a formula AND every candidate stat considered for inclusion is scored on these four:
+The 2026-05-14 framework scored every Component on four criteria (YoY r,
+cross-sectional spread, independence, next-year Pro Bowl r) and let
+"context-dependent skill" keep low-YoY Components at full weight. Both are
+**retired**:
 
-| # | Criterion | What it measures | Threshold |
-|---|---|---|---:|
-| 1 | **Reliability** (YoY r) | Does the metric persist as skill across seasons? | r ≥ 0.20 modest, ≥ 0.40 strong |
-| 2 | **Cross-sectional discrimination** | Does it meaningfully separate players in a single season? | Real spread (not constant) |
-| 3 | **Independence** (max \|r\| with existing) | Does it add new information vs current components? | \|r\| < 0.60 |
-| 4 | **Predictive validity** (Pro Bowl r) | Does it predict consensus-elite selection next year? | r ≥ 0.15 positive |
+- **Next-year Pro Bowl r can't resolve the changes it justified.** Its SE is
+  0.03–0.07; the deltas used to ship changes were +0.005–0.02. Its labels had
+  bugs (name-only join, unlabeled seasons counted as "not selected"), and it
+  mostly measures persistence plus reputation.
+- **"Context-dependent skill" was the loophole that kept team context in the
+  grade.** Wide spread in a noisy Component *is* the noise, and the YoY that
+  survived was largely the team (QB EPA/db YoY .43 for stayers, .10 for team
+  changers).
+- **"Cross-sectional discrimination"** was a raw-unit SD: unit-dependent and
+  not a measure of skill.
+- **No hold-out was ever run.**
 
-A component or candidate that **passes all four** is a strong inclusion. A component that **fails one** needs decision logic — see below.
+## The ship rule
 
-## Decision tree from the four criteria
+Every Formula change (a weight change, a removed Component or a Candidate) is
+judged with `nflgrades evaluate` on three reputation-free criteria:
 
-After scoring a component/candidate on the four criteria:
+| Criterion | What it measures | How |
+|---|---|---|
+| **Reliability** | How much of the Composite is signal rather than sampling noise within one season | Odd-week vs even-week Composite r, stepped up to a full season with Spearman-Brown |
+| **Portability** | Whether the grade measures the player rather than the team | Composite YoY for players who changed teams |
+| **Next-season prediction** | Whether the grade carries forward | Composite N → Composite N+1, and Composite N → the primary Component in N+1 |
 
-- **All four good** (YoY ≥ 0.20, real spread, independent, validity ≥ 0.15) → **ADD or KEEP at full weight.**
-- **High YoY r + high redundancy** (max \|r\| ≥ 0.60) → Decide: keep the *stronger* of the redundant pair (by YoY r or validity), drop the weaker, or treat as one effective component when sizing.
-- **Low YoY r + low cross-sectional + low validity** → **NOISE, reject** (or weight tiny ≤0.05 if removing requires schema change).
-- **Low YoY r BUT high cross-sectional + high validity** → **Context-dependent skill.** Keep at chosen weight; document that YoY noise is structural team-context dependence, not measurement failure. (Example: WR rec_epa_per_target — YoY r 0.171, real spread, real validity.)
-- **High YoY r but negative or zero validity** → Investigate; may be measuring style/usage rather than skill. (Example: QB aggressiveness — high YoY r 0.43 but validity −0.21; reflects style, not "good QB.")
+Each is estimated on a **2016–2022 fit window** and a **2023–2025 hold-out**.
+A window only sees its own seasons; YoY pairs straddling 2022→2023 belong to
+neither. Use the fit window to explore. **The decision is made on the
+hold-out.**
 
-## The six-step audit process
+A change **ships** only if, on the hold-out:
 
-For any new component proposal or existing component review:
+1. neither Reliability nor Portability falls beyond noise (the paired delta's
+   95% CI is not entirely below zero), **and**
+2. at least one of Reliability, Portability or next-season prediction
+   improves with a paired-delta CI excluding zero, **and**
+3. it passes the skill-tree review and face check below.
 
-### Step 1 — Skill-Tree Mapping
+`nflgrades evaluate` prints a PASS/FAIL for (1) and (2). Paired deltas use a
+player-clustered bootstrap (all of a player's seasons resample together), so
+the CI reflects player-to-player variation, not just row count.
 
-List the distinct skills a great player at this position needs. Map each existing formula component to one or more skills. Identify:
+### Reading the numbers
 
-- **Gaps**: skills with NO component covering them.
-- **Redundancy**: multiple components covering the same skill.
+- Per-metric CIs are Fisher-z and treat player-seasons as independent, so
+  they run a little narrow. Trust the paired-delta CIs for decisions.
+- Portability rests on few rows (QB: ~24 team changers in the fit window,
+  ~11 in the hold-out). A wide Portability CI is normal; the rule only blocks
+  a change if Portability falls *beyond* noise.
+- Next-season prediction against the primary Component favours that
+  Component. Read it alongside Composite YoY.
+- Split-half Reliability is an *upper* bound on individual skill: both halves
+  share the QB and the scheme. Portability is the check against that.
+- Same-season, position-matched **Pro Bowl r** is printed as face validity.
+  It never gates a change.
 
-Example (WR): separation, hands/drops, YAC, earning targets, ball security, big plays, consistency, red zone, contested catches.
+## The design process
 
-### Step 2 — Pairwise Correlation Audit (independence check)
+### Step 1: Skill-tree mapping
 
-For each pair of components in the current formula, compute the Pearson correlation across all qualified player-seasons (z_score, pooled across seasons). Threshold convention:
+List the distinct skills a great player at the position needs. Map each
+Component to one or more skills. Identify:
 
-- **\|r\| ≥ 0.85** — strong redundancy (essentially the same metric).
-- **0.60 ≤ \|r\| < 0.85** — meaningful overlap. Decide.
-- **0.40 ≤ \|r\| < 0.60** — modest. Document, usually keep.
-- **\|r\| < 0.40** — independent enough.
+- **Gaps**: skills with no Component.
+- **Redundancy**: several Components covering the same skill.
+- **Attribution**: for each Component, how much belongs to the player and how
+  much to the QB, scheme or teammates (ADR-0027). Prefer Components that
+  isolate the player (K FGOE, OL YBC vs RB yards after contact) over raw
+  outcome efficiency.
 
-**Classic redundancy patterns to watch for:**
+### Step 2: Redundancy check
 
-1. **EPA per X ↔ success rate per X** — mathematically related (success rate ≈ "fraction of plays with positive EPA"). Wherever both appear, success_rate is largely smoothed EPA. Observed in QB (r=0.88), RB rush (r=0.75), WR (r=0.76), TE (r=0.75).
-2. **Pressure / sack / TFL** for DL positions — all measure "backfield disruption." Observed at r=0.57-0.78 for EDGE and iDL. Partly intentional (sack as pressure-premium); partly real overlap.
-3. **Passer rating allowed ↔ PBU rate** for coverage positions — negative correlation because PBUs reduce PR allowed. Mechanism, not redundancy.
+Pairwise correlation of Component z-scores across Qualified player-seasons:
 
-See [audits/2026-05-14-correlation.md](audits/2026-05-14-correlation.md) for the cross-system numbers.
+- **|r| ≥ 0.85**: the same measurement twice.
+- **0.60–0.85**: meaningful overlap; decide which carries the skill.
+- **< 0.60**: independent enough.
 
-### Step 3 — YoY Noise Check (reliability)
+Classic patterns: EPA per X ↔ success rate per X (success rate is mostly
+smoothed EPA); pressure / sack / TFL for DL; passer rating allowed ↔ PBU rate
+(mechanism, not redundancy). See [audits/2026-05-14-correlation.md](audits/2026-05-14-correlation.md).
 
-For each component, compute year-over-year Pearson r across consecutive season pairs for the qualified cohort.
+### Step 3: Evaluate
 
-Interpretation:
+```bash
+# Baseline: the current Formula
+nflgrades evaluate --position QB
 
-- **YoY r > 0.40** — real skill signal, worth weighting meaningfully.
-- **0.20 < YoY r < 0.40** — modest signal, weight carefully.
-- **YoY r < 0.20** — needs the cross-sectional + validity check before deciding. Two failure modes:
-  1. **Pure noise** — also has low cross-sectional spread + low validity. Reject or weight ≤0.05.
-  2. **Context-dependent skill** — high cross-sectional spread + meaningful validity. Keep at chosen weight; document the limitation.
+# A weight change
+nflgrades evaluate --position QB --weight qb_success_rate=0.05
 
-**Symmetry rule:** the YoY noise check applies to *additions* as well as *removals*. In WR v1.1, it was applied to fumble_rate (removed) but skipped on drop_rate (added at over-weight). That gap is what triggered the cross-position audit. Symmetric application is the rule.
+# A Candidate Component (registered in grading/panels.py)
+nflgrades evaluate --position QB --candidate qb_sack_rate --weight qb_sack_rate=-0.10
+```
 
-**Measurement-error suppression caveat:** at small per-player denominators (TE catchable ~47, RB fumble counts, etc.), YoY r is mechanically depressed by measurement noise even if the underlying skill is perfectly stable. When YoY r is weak but face-check is strong year-over-year, the metric likely has real skill content. Land at light weight (≤0.05).
+Iterate on the fit window. When you have one proposal, read its hold-out
+verdict once. Re-tuning against the hold-out until it passes turns the
+hold-out into a fit window.
 
-### Step 4 — Downstream Predictive Validity (external truth)
+To score a new Candidate, add a `Candidate` to `grading/panels.py`: an
+extract that takes `(conn, season, week_parity)` and returns `player_id`,
+`raw` (the per-play rate) and `n` (its sample size), plus a shrinkage k.
 
-For each component (or candidate), compute correlation with **next-year Pro Bowl selection** across qualified player-seasons.
+### Step 4: Skill-tree review and face check
 
-This is the external check on whether the metric is measuring skill that the broader football world also recognizes. Expected range for healthy metrics: **+0.15 to +0.50** (Pro Bowl voting carries narrative bias; perfect grading can't reach r=1.0 even theoretically).
+1. Re-read the change against the skill tree: does the new weighting say what
+   a good player at this position does, and is it attributable to him?
+2. Preview it ([iteration-workflow.md](iteration-workflow.md)) and read the
+   top 10 and bottom 5 for a couple of seasons. If the names are implausible,
+   the Component is measuring something other than you think, or the data has
+   a gap.
+3. **Don't tune to flatter known players.** A good player grading low is a
+   documented limitation, not a reason to move weights.
 
-**Direction note:** "Bad QB" indicators (sack_rate_suffered, drop_rate, missed_tackle_rate) have *negative* validity correlations — that's expected and means they should enter the composite with a *negative* weight. The verdict logic looks at \|validity_r\| for direction-agnostic strength.
+### Step 5: Ship and record
 
-Baseline composite-grade Pro Bowl correlations per position are in [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md). These are the targets to beat (or at least not degrade) when shipping any weight change.
+Follow [iteration-workflow.md](iteration-workflow.md) (preview → sync web
+weights → regrade every season, including the in-progress one). Add an entry
+to the position's ADR revision history with the hold-out table from
+`nflgrades evaluate`: current, proposed and paired delta for every metric.
 
-### Step 5 — Honest Weight Sizing
+## Candidates: document every verdict
 
-Weight should be proportional to:
+When auditing a position, score every plausible Candidate from the
+[data inventory](data-inventory.md), not just the favourites, and record the
+verdict for each (shipped, rejected, and why) in
+`docs/grading/audits/YYYY-MM-DD-<pos>.md`. Anyone asking "why these stats?"
+should find the rejected ones too.
 
-1. **Signal strength** (YoY r and cross-sectional discrimination).
-2. **Skill-tree importance** (is this a core position skill or peripheral?).
-3. **Independence** (correlation with existing components — penalize overlap).
-4. **External validity** (does it predict consensus-elite performance?).
-5. **Data quality** (sample size, missing-value rate, source reliability).
+Don't add a stat because PFF or another public model has it. Many are
+unavailable in public data (YPRR, CROE) or are usage artifacts (RACR,
+contested rate). It goes through the same ship rule as anything else.
 
-Don't reverse-engineer weights to make the leaderboard match consensus. If a known elite player grades low, document the limitation rather than tuning the weights to flatter them.
+## Coverage
 
-### Step 6 — Pre-implementation Face-check
-
-Before committing a new formula:
-
-1. Use [iteration-workflow.md](iteration-workflow.md) to preview the change.
-2. Sort and inspect the top 10 and bottom 5.
-3. Verify the names track real-world reputation. If they don't, either:
-   - The stat is measuring something different than you think (revisit the mental model).
-   - The data has quality issues (check coverage gaps).
-   - Your prior on consensus is wrong (rare but possible).
-
-## Hold-out validation (process norm, 2026-05-14)
-
-For any major change (adding a component, removing a component, or any weight change touching ≥0.10 of formula weight), apply hold-out validation:
-
-1. **Define the change** based on data from 2016-2023 (or 2018-2023 for defensive positions).
-2. **Compute the change's effect on the held-out window 2024-2025** — does it improve face-check, predictive validity, or other metrics on data that didn't inform the decision?
-3. **Document the held-out performance** in the ADR revision history.
-
-This is a check against overfitting to "all data we've seen." Small weight tweaks (<0.10) and noise-removal cuts don't require formal hold-out — but anything where we're claiming the change "improves" the formula should be validated on data outside the audit window.
-
-## Don't add it just because someone else's grader has it
-
-Other agents / public formulas / PFF will often propose stats we don't have the data for (YPRR, CROE for WRs) or stats that look fancy but are usage artifacts (RACR, contested_rate). Always run them through the full four-criterion audit before adopting. Many "industry standard" WR stats turned out to be redundant with what we already compute. Check [data-inventory.md](data-inventory.md) first — many proposed stats aren't computable in our data.
-
-## The exhaustive candidate audit (article-worthy version)
-
-For each new position (K, P, OL) and for retroactive audits of shipped positions:
-
-1. **Pull every relevant column** from data inventory for that position type.
-2. **Filter by mechanical relevance.** Drop volume stats, pure usage markers, columns we already know can't be used (PFF-only with no nflverse equivalent).
-3. **Score every survivor on all four criteria** using `nflgrades audit-candidates --position <POS>`.
-4. **Skill-tree map the survivors.**
-5. **Decide per candidate** — confirm current pick, replace, add, or reject. **Document the verdict for every candidate**, not just the ones included.
-6. **Output to `docs/grading/audits/2026-XX-XX-exhaustive-<pos>.md`** so the audit log is reproducible.
-
-The point of documenting rejected candidates is making the methodology defensible. Anyone who asks "why these stats?" can look at the audit log and see exactly which stats were considered, what their four-criterion scores were, and why each non-included one was rejected.
+`nflgrades evaluate` covers QB today. RB/WR/TE (#13) and the defensive
+positions, specialists and OL (#14) follow. Until a position is covered, a
+Formula change there waits for its harness slice.
 
 ## Tooling
 
 | Tool | Purpose |
 |---|---|
-| `nflgrades preview` | What-if weight tweaks, read-only |
-| `nflgrades regrade` | Apply weight changes without re-extracting features |
-| `nflgrades validity` | Run the Pro Bowl predictive validity baseline |
-| `nflgrades audit-candidates --position POS` | Run the four-criterion audit on a position's candidate set |
+| `nflgrades evaluate --position P [--weight k=v] [--candidate name]` | The ship rule: Reliability, Portability, next-season prediction, fit vs hold-out, paired deltas |
+| `nflgrades preview` | What-if weights on one season's leaderboard (face check), read-only |
+| `pipeline/scripts/preview_extract.py` | Face check for grader code changes (Path B) |
+| `nflgrades regrade` | Apply weight changes from stored z-scores |
+| `nflgrades validity` | Same-season, position-matched Pro Bowl face-validity report (not a gate) |
+| `nflgrades audit-candidates --position P` | Legacy four-criterion table; its verdict hints predate ADR-0029. Use for redundancy (max_r) only |
 | `pipeline/scripts/sync_weights_to_web.py` | Keep `grades.ts` weights in sync with `weights.py` |
-| Cross-position YoY audit script | Per-component YoY check (see [audits/2026-05-14-cross-position-yoy.md](audits/2026-05-14-cross-position-yoy.md)) |
-| Pairwise correlation audit script | Per-position redundancy matrix (see [audits/2026-05-14-correlation.md](audits/2026-05-14-correlation.md)) |
+| `pipeline/scripts/audit_2026_09_27/` | The system audit's analysis scripts, frozen as run |

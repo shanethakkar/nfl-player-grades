@@ -1,5 +1,11 @@
 # Pending — exhaustive audit master plan
 
+> **Superseded.** The four-criterion framework below was retired by
+> [ADR-0029](../adr/0029-reputation-free-evaluation.md) and the
+> [rewritten audit playbook](audit-playbook.md) (ship rule via
+> `nflgrades evaluate`). Current work is the Grading v2 spec (GitHub #1).
+> Kept as a record of how the 2026-05-14 Formulas were chosen.
+
 Locked 2026-05-14. After running the YoY noise + pairwise correlation audits, the user committed to the "do it right" statistical approach: exhaustive candidate audit per position before any new component decision, using four criteria (reliability + cross-sectional discrimination + independence + downstream predictive validity). Goal is a methodology defensible enough for a published article.
 
 ## The full queue

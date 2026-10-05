@@ -236,6 +236,27 @@ class TestExtractFeatures:
         assert -0.10 < row["epa_per_dropback"] < 0.25
         assert 0.40 < row["success_rate"] < 0.60
 
+    def test_odd_and_even_weeks_partition_the_season(self, conn, has_2024_plays) -> None:
+        full = extract_features(conn, 2024).set_index("player_id")
+        odd = extract_features(conn, 2024, week_parity=1).set_index("player_id")
+        even = extract_features(conn, 2024, week_parity=0).set_index("player_id")
+
+        halves = odd[["n_dropbacks", "n_pass_attempts"]].add(
+            even[["n_dropbacks", "n_pass_attempts"]], fill_value=0
+        )
+        pd.testing.assert_frame_equal(
+            halves.astype(int).sort_index(),
+            full[["n_dropbacks", "n_pass_attempts"]].sort_index(),
+        )
+        # A half-season EPA/dropback is the mean over that half's plays.
+        mahomes = full.index[full["gsis_id"] == "00-0033873"][0]
+        n_odd, n_even = odd.loc[mahomes, "n_dropbacks"], even.loc[mahomes, "n_dropbacks"]
+        pooled = (
+            odd.loc[mahomes, "epa_per_dropback"] * n_odd
+            + even.loc[mahomes, "epa_per_dropback"] * n_even
+        ) / (n_odd + n_even)
+        assert pooled == pytest.approx(full.loc[mahomes, "epa_per_dropback"])
+
     def test_dropbacks_include_scrambles(self, conn, has_2024_plays) -> None:
         # nflverse leaves passer_player_id null on scrambles and credits the
         # QB as rusher. Jayden Daniels led the league in scrambles in 2024.

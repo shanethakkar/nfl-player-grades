@@ -27,6 +27,7 @@ worked example; others get filled in as we do each position's audit.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -155,6 +156,12 @@ def _max_r_with_existing(
     return best_r, best_partner
 
 
+@lru_cache(maxsize=1)
+def _validity_panel(engine: Engine) -> pd.DataFrame:
+    """The labeled Pro Bowl panel, built once per audit run."""
+    return build_validity_panel(engine)
+
+
 def _validity_r(
     panel: pd.DataFrame,
     position: str,
@@ -169,7 +176,7 @@ def _validity_r(
     """
     if panel.empty:
         return float("nan")
-    validity_panel = build_validity_panel(engine)
+    validity_panel = _validity_panel(engine)
     vp = validity_panel[validity_panel["position"] == position][
         ["player_id", "season", "pro_bowl"]
     ]

@@ -22,7 +22,11 @@ from sqlalchemy.engine import Connection
 from nfl_grades.db import pipeline_run, transaction
 from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
-from nfl_grades.grading.filters import QB_DROPBACK_FILTER_SQL, QB_DROPBACK_PLAYER_SQL
+from nfl_grades.grading.filters import (
+    QB_DROPBACK_FILTER_SQL,
+    QB_DROPBACK_PLAYER_SQL,
+    WEEK_PARITY_SQL,
+)
 from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     QB_V1_CONFIDENCE_FULL_DROPBACKS,
@@ -101,6 +105,7 @@ _FEATURES_SQL = text(f"""
         FROM plays
         WHERE season = :season
           AND {QB_DROPBACK_FILTER_SQL}
+          AND {WEEK_PARITY_SQL}
     )
     SELECT
         pl.gsis_id                               AS gsis_id,
@@ -119,15 +124,24 @@ _FEATURES_SQL = text(f"""
 """)
 
 
-def extract_features(conn: Connection, season: int) -> pd.DataFrame:
+def extract_features(
+    conn: Connection, season: int, *, week_parity: int | None = None
+) -> pd.DataFrame:
     """Pull per-QB raw components from ``plays``.
+
+    ``week_parity`` 1 or 0 keeps only odd or even weeks (the evaluation
+    harness's split halves); None (the default) keeps the whole season.
 
     Returns a DataFrame with columns:
         player_id, gsis_id, full_name,
         n_dropbacks, n_pass_attempts,
         epa_per_dropback, cpoe, success_rate
     """
-    rows = conn.execute(_FEATURES_SQL, {"season": season}).mappings().all()
+    rows = (
+        conn.execute(_FEATURES_SQL, {"season": season, "week_parity": week_parity})
+        .mappings()
+        .all()
+    )
     df = pd.DataFrame(rows)
     if df.empty:
         return df
@@ -152,6 +166,11 @@ _COMPONENT_SPECS: dict[str, tuple[str, str]] = {
 }
 
 
+def qualified(features: pd.DataFrame, progress: SeasonProgress = COMPLETE) -> pd.Series:
+    """Qualified QBs: enough dropbacks for the season so far (ADR-0013)."""
+    return features["n_dropbacks"] >= progress.scale(QB_V1_QUALIFIED_MIN_DROPBACKS)
+
+
 def compute_grades(
     features: pd.DataFrame,
     *,
@@ -170,7 +189,7 @@ def compute_grades(
         - qualified, confidence
     """
     df = features.copy()
-    df["qualified"] = df["n_dropbacks"] >= progress.scale(QB_V1_QUALIFIED_MIN_DROPBACKS)
+    df["qualified"] = qualified(df, progress)
     df["confidence"] = (
         df["n_dropbacks"].astype(float) / progress.scale(QB_V1_CONFIDENCE_FULL_DROPBACKS)
     ).clip(upper=1.0)

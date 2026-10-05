@@ -6,10 +6,10 @@ Design playbooks, research notes, audit reports, and checklists for the v1+ grad
 
 | File | What it is |
 |---|---|
-| [audit-playbook.md](audit-playbook.md) | The methodology for designing/auditing a position formula — skill-tree mapping, redundancy check, YoY noise check, weight sizing |
+| [audit-playbook.md](audit-playbook.md) | How to design and change a Formula: skill-tree mapping, redundancy check, and the ship rule (`nflgrades evaluate`: Reliability, Portability, next-season prediction on a 2023–2025 hold-out) |
 | [iteration-workflow.md](iteration-workflow.md) | **Canonical** shipping workflow for weight changes (preview → sync → regrade). ~30s end-to-end |
 | [data-inventory.md](data-inventory.md) | Which nflverse source has which column. Check before proposing any new component |
-| [pending.md](pending.md) | Queue of open audit / methodology tasks |
+| [pending.md](pending.md) | The 2026-05-14 audit queue (superseded by the Grading v2 spec, GitHub #1) |
 
 ### `checklists/`
 | File | What it is |
@@ -35,7 +35,8 @@ Dated diagnostic audits across the whole system.
 |---|---|
 | [audits/2026-05-14-cross-position-yoy.md](audits/2026-05-14-cross-position-yoy.md) | YoY noise check on every component × position. Flagged 3 noise components; all shipped as v1.x revisions |
 | [audits/2026-05-14-correlation.md](audits/2026-05-14-correlation.md) | Pairwise correlation matrix per position. Found QB EPA↔success_rate at r=0.88 (strongest redundancy) and other overlaps |
-| [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md) | Downstream predictive validity baseline. Composite-grade vs next-year Pro Bowl correlation per position. iDL strongest (+0.46), LB weakest (+0.18). Targets to beat for any future weight change. |
+| [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md) | Historical: composite vs next-year Pro Bowl per position, from the name-only join later found buggy. No longer a target (ADR-0029). |
+| [audits/2026-09-27-system-audit.md](audits/2026-09-27-system-audit.md) | Full system audit behind Grading v2: scale, team context, Pro Bowl gate, bugs. Scripts in `pipeline/scripts/audit_2026_09_27/` |
 
 ## Quick start
 

@@ -41,6 +41,7 @@ was already considered.
 | `pipeline/ingest/*` | DONE | One module per nflverse source, all through `ingest._cache` |
 | `pipeline/grading/*` | DONE | Graders for QB, RB, WR, TE, CB, S, EDGE, iDL, LB, K, P, OL (team-level) and team grades (ADRs 0013–0026). All score through `grading.scoring` (ADR-0028) |
 | Provisional grades | DONE | In-season grades "through week N", pro-rated thresholds (ADR-0031) |
+| Evaluation harness | PARTIAL | `nflgrades evaluate` scores a Formula on Reliability / Portability / next-season prediction, fit vs hold-out (ADR-0029, `docs/grading/audit-playbook.md`). QB only; RB/WR/TE in #13, the rest in #14 |
 | Weekly refresh | DONE | `nflgrades weekly --season N`; GitHub Actions schedule in `.github/workflows/weekly.yml` |
 | `pipeline/components/*` | UNUSED | Graders compute Components inline |
 | `pipeline/career/kalman.py` | STUB | `NotImplementedError` — build step 8 |

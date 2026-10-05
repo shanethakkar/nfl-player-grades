@@ -20,3 +20,8 @@ unadjusted grades. It does not improve rest-of-season prediction in-season,
 even with oracle defense ratings. It is therefore not applied in-season or
 at those positions. QB full-season adjustment (+0.022 YoY, mean 1.5 pts)
 stays a **Candidate**, and ships only if it wins on the hold-out.
+
+**Implementation** (#12): `nflgrades evaluate` (`grading/evaluation.py`,
+`grading/panels.py`) and the ship rule in `docs/grading/audit-playbook.md`.
+The Pro Bowl report (`nflgrades validity`) is same-season and joins on name
+and position group (#5).

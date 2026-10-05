@@ -350,8 +350,9 @@ simpler fixes above.
 
 ## Reproducibility
 
-Analysis scripts are in the session scratchpad and not committed:
+The analysis scripts are in
+[pipeline/scripts/audit_2026_09_27/](../../../pipeline/scripts/audit_2026_09_27/):
 `opp_adj/` (`common.py`, `build_offense.py`, `analyze_full.py`,
 `analyze_partial.py`, `analyze_defense.py`) and `reliability/`
-(`t1_scale.py` … `t6_zero.py`). Promote them into `pipeline/scripts/` if the
-step-3 harness is built from them.
+(`t1_scale.py` … `t6_zero.py`). They were promoted in #12 as the starting
+point for the evaluation harness (`nflgrades evaluate`).

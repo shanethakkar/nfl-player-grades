@@ -21,6 +21,13 @@ GARBAGE_TIME_SQL = """(
                  AND ABS(score_differential) > 14)
 )"""
 
+# Odd or even weeks only, for the evaluation harness's split-half panels.
+# Binds ``:week_parity``: NULL keeps every week, 1 odd weeks, 0 even weeks.
+WEEK_PARITY_SQL = """(
+       CAST(:week_parity AS INTEGER) IS NULL
+    OR MOD(week, 2) = CAST(:week_parity AS INTEGER)
+)"""
+
 # The QB who dropped back. nflverse leaves passer_player_id null on
 # scrambles and credits the QB as the rusher instead.
 QB_DROPBACK_PLAYER_SQL = "COALESCE(passer_player_id, rusher_player_id)"

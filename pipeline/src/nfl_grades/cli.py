@@ -598,6 +598,119 @@ def validity(diagnose: bool, next_season: bool) -> None:
         )
 
 
+@main.command()
+@click.option("--position", type=str, required=True, help="Position to evaluate (QB so far).")
+@click.option(
+    "--weight",
+    "weight_overrides",
+    multiple=True,
+    help="Proposed weight, e.g. --weight qb_success_rate=0.05. Repeatable. "
+    "Also sets a Candidate's weight.",
+)
+@click.option(
+    "--candidate",
+    "candidate_names",
+    multiple=True,
+    help="Add a Candidate Component to the panel (give it a weight with --weight). Repeatable.",
+)
+@click.option("--boot", "n_boot", type=int, default=2000, show_default=True,
+              help="Bootstrap draws for the paired deltas.")
+@click.option("--seed", type=int, default=0, show_default=True)
+def evaluate(
+    position: str,
+    weight_overrides: tuple[str, ...],
+    candidate_names: tuple[str, ...],
+    n_boot: int,
+    seed: int,
+) -> None:
+    """Score the current or a proposed Formula without reputation (ADR-0029).
+
+    Reports Reliability (odd vs even weeks, Spearman-Brown), Portability
+    (YoY for team changers) and next-season prediction, with CIs, for the
+    2016-2022 fit window and the 2023-2025 hold-out. With --weight or
+    --candidate, also scores the proposed Formula, prints paired deltas
+    and applies the ship rule to the hold-out. Read-only.
+
+    Examples:
+
+      nflgrades evaluate --position QB
+
+      nflgrades evaluate --position QB --weight qb_success_rate=0.05
+
+      nflgrades evaluate --position QB --candidate qb_sack_rate --weight qb_sack_rate=-0.10
+    """
+    from .db import get_engine
+    from .grading import evaluation, panels
+    from .grading.preview import parse_weight_overrides
+
+    source = panels.POSITIONS.get(position)
+    if source is None:
+        raise click.ClickException(
+            f"no evaluation panel for {position}; supported: {', '.join(panels.POSITIONS)}"
+        )
+    candidates = []
+    for name in dict.fromkeys(candidate_names):
+        cand = panels.CANDIDATES.get(name)
+        if cand is None or cand.position != position:
+            known = [c for c, v in panels.CANDIDATES.items() if v.position == position]
+            raise click.ClickException(f"unknown {position} Candidate {name!r}; known: {known}")
+        candidates.append(cand)
+
+    try:
+        overrides = parse_weight_overrides(weight_overrides)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    known_components = set(source.weights) | {c.name for c in candidates}
+    unknown = sorted(set(overrides) - known_components)
+    if unknown:
+        raise click.ClickException(
+            f"--weight names unknown Components {unknown}; add Candidates with --candidate"
+        )
+    unweighted = [c.name for c in candidates if c.name not in overrides]
+    if unweighted:
+        raise click.ClickException(f"give each Candidate a weight: --weight {unweighted[0]}=W")
+
+    proposed = None
+    if overrides:
+        proposed = evaluation.Formula(
+            weights={**source.weights, **overrides},
+            shrinkage_k={**source.shrinkage_k, **{c.name: c.shrinkage_k for c in candidates}},
+        )
+        click.echo("Proposed (vs current):")
+        for name, w in sorted(overrides.items()):
+            click.echo(f"  {name}: {source.weights.get(name, 0.0):+.3f} -> {w:+.3f}")
+        for c in candidates:
+            click.echo(f"  Candidate {c.name}: {c.description}")
+
+    click.echo(f"Reading {position} panels (full season, odd weeks, even weeks)...")
+    with get_engine().connect() as conn:
+        data = panels.load(conn, source, candidates=candidates)
+
+    reports = evaluation.evaluate(
+        data.panel,
+        data.roster,
+        source.formula,
+        proposed=proposed,
+        primary=source.primary,
+        pro_bowl=data.pro_bowl,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    click.echo(evaluation.format_report(reports))
+    click.echo(
+        f"\nCIs: Fisher-z per metric; deltas from {n_boot} player-clustered bootstrap draws. "
+        f"Primary Component: {source.primary}. Pro Bowl r is face validity only."
+    )
+    if proposed is not None:
+        holdout = next(r for r in reports if r.name == "holdout")
+        verdict = evaluation.ship_rule(holdout)
+        click.echo(f"\nShip rule (hold-out): {'PASS' if verdict.passes else 'FAIL'}")
+        for reason in verdict.reasons:
+            click.echo(f"  - {reason}")
+        if verdict.passes:
+            click.echo("  - still needs skill-tree / face-validity review before shipping")
+
+
 @main.command(name="audit-candidates")
 @click.option(
     "--position",
@@ -607,12 +720,12 @@ def validity(diagnose: bool, next_season: bool) -> None:
          "other positions get candidate fetchers added when their audit lands.",
 )
 def audit_candidates(position: str) -> None:
-    """Run the exhaustive candidate audit for a position.
+    """Legacy candidate table: YoY, spread, overlap and Pro Bowl r per stat.
 
-    Scores each candidate stat against four criteria (reliability, cross-
-    sectional discrimination, independence from existing components, and
-    downstream predictive validity). Prints a table with auto-generated
-    verdict hints.
+    The four-criterion verdict hints predate ADR-0029 and no longer decide
+    anything; use it for the redundancy column (max_r). Formula changes go
+    through ``nflgrades evaluate``. The Pro Bowl column is same-season and
+    position-matched.
 
     The candidate set per position is defined in
     ``grading/exhaustive_audit.py::<pos>_candidates()``. Expand that
