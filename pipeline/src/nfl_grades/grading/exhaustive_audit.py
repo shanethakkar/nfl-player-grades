@@ -7,8 +7,9 @@ For each candidate stat (current OR proposed), score it against four criteria:
      separate players in a single season (in z-units)?
   3. **Independence (max_r_with_existing)** — does it add new information
      vs currently-shipped components for this position?
-  4. **Predictive validity (validity_r)** — does it correlate with next-year
-     Pro Bowl selection?
+  4. **Face validity (validity_r)** — does it correlate with same-season,
+     position-matched Pro Bowl selection? Reported only: ADR-0029 retired
+     Pro Bowl as a gate, so treat the verdict hints below as historical.
 
 Verdicts that emerge from these four numbers:
 
@@ -159,21 +160,23 @@ def _validity_r(
     position: str,
     engine: Engine,
 ) -> float:
-    """Correlate candidate value at season t with Pro Bowl selection at t+1.
+    """Correlate candidate value with same-season Pro Bowl selection.
 
-    Uses ``validity.build_panel`` for the player_id × season × pro_bowl_next
-    flag, then merges in the candidate.
+    Uses ``validity.build_panel`` for the position-matched player_id ×
+    season × pro_bowl label. That panel holds only seasons with an
+    observable label, so the inner merge drops unlabeled seasons here
+    exactly as the composite report does.
     """
     if panel.empty:
         return float("nan")
     validity_panel = build_validity_panel(engine)
     vp = validity_panel[validity_panel["position"] == position][
-        ["player_id", "season", "pro_bowl_next_year"]
+        ["player_id", "season", "pro_bowl"]
     ]
     merged = panel.merge(vp, on=["player_id", "season"], how="inner")
     if len(merged) < 10 or merged["value"].std() == 0:
         return float("nan")
-    return float(merged["value"].corr(merged["pro_bowl_next_year"]))
+    return float(merged["value"].corr(merged["pro_bowl"]))
 
 
 def _verdict_hint(yoy_mean: float, xsect: float, max_r: float, validity: float) -> str:

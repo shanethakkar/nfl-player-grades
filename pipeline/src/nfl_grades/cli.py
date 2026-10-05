@@ -554,20 +554,26 @@ def regrade(season: int, position: str) -> None:
 
 @main.command()
 @click.option("--diagnose", is_flag=True, help="Print Pro Bowl name-match diagnostics.")
-def validity(diagnose: bool) -> None:
-    """Run the downstream predictive validity check for all positions.
+@click.option(
+    "--next-season",
+    is_flag=True,
+    help="Label each season with the following season's Pro Bowl instead of its own.",
+)
+def validity(diagnose: bool, next_season: bool) -> None:
+    """Pro Bowl face-validity report for all positions (ADR-0029).
 
-    Computes the Pearson correlation between this-year composite grade
-    and next-year Pro Bowl selection (0/1) for qualified player-seasons.
-    Useful as a baseline before any weight-change decision.
+    Pearson r between composite grade and same-season Pro Bowl selection
+    (0/1) for qualified player-seasons, joined on name and position group.
+    Seasons without a Pro Bowl roster are excluded. A sanity check only:
+    Formula changes are judged by the evaluation harness, not by this.
 
-    Pro Bowl data: pipeline/data/pro_bowl_selections.csv (2018-2024).
+    Pro Bowl data: pipeline/data/pro_bowl_selections.csv.
     """
     from .grading.validity import diagnose_match_rate, run_all
 
     if diagnose:
         diag = diagnose_match_rate()
-        click.echo("Pro Bowl name-match diagnostics:")
+        click.echo("Pro Bowl name-match diagnostics (name + position group):")
         click.echo(f"  n_pro_bowl_unique_players = {diag['n_pro_bowl_unique_players']}")
         click.echo(f"  n_matched_in_grades       = {diag['n_matched_in_grades']}")
         click.echo(f"  match_rate                = {diag['match_rate']:.1%}")
@@ -575,7 +581,8 @@ def validity(diagnose: bool) -> None:
         click.echo(f"  unmatched sample          = {diag['unmatched_sample']}")
         click.echo()
 
-    results = run_all()
+    results = run_all(next_season=next_season)
+    click.echo(f"Pro Bowl label: {'next' if next_season else 'same'} season")
     click.echo(
         f"{'POS':<6} {'n_qual':>7} {'n_PB':>5} {'PB_rate':>8} "
         f"{'pearson_r':>10}   seasons"
@@ -585,7 +592,7 @@ def validity(diagnose: bool) -> None:
         r_str = f"{r.pearson_r:>+10.3f}" if r.pearson_r == r.pearson_r else f"{'n/a':>10}"
         click.echo(
             f"{r.position:<6} {r.n_player_seasons:>7d} "
-            f"{r.n_pro_bowls_next_year:>5d} "
+            f"{r.n_pro_bowls:>5d} "
             f"{r.pro_bowl_rate:>7.1%} "
             f"{r_str}   {r.seasons_covered}"
         )

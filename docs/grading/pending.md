@@ -60,7 +60,7 @@ Implementation plan:
 
 ## Foundation complete (2026-05-14): what's available now
 
-- **`nflgrades validity`** — runs Pro Bowl correlation per position. Baseline numbers are in [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md). Use as decision criterion for weight changes (lower validity = back out the change).
+- **`nflgrades validity`** — Pro Bowl face-validity report per position: same-season selection (`--next-season` for the old label), joined on name and position group, unlabeled seasons excluded (#5). **Not a decision criterion** since ADR-0029. The 2026-05-14 baseline in [audits/2026-05-14-validity-baseline.md](audits/2026-05-14-validity-baseline.md) used the buggy next-year, name-only join.
 - **`nflgrades audit-candidates --position POS`** — runs the four-criterion audit on a position's candidate set. Framework in [pipeline/src/nfl_grades/grading/exhaustive_audit.py](../../pipeline/src/nfl_grades/grading/exhaustive_audit.py). QB has a starter set of 3 candidates as a worked example (NGS aggressiveness, time_to_throw, sack rate suffered). Expand `<pos>_candidates()` functions during each position's audit phase.
 - **`docs/grading/audit-playbook.md`** — now has the full four-criterion framework, hold-out validation norm, and the exhaustive-audit instructions.
 - **`pipeline/data/pro_bowl_selections.csv`** — 7 seasons of Pro Bowl rosters (2018-2024). Reproducible: re-pulled from Wikipedia Pro Bowl pages.
