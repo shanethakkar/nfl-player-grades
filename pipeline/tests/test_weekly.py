@@ -85,9 +85,7 @@ def _weekly_rows(through_week: int) -> pl.DataFrame:
 
 
 @pytest.fixture
-def fake_sources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> dict[str, int]:
+def fake_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """Every week-keyed source through week 3, schedule complete through
     week 3. Tests lower one source's week to make it lag."""
     monkeypatch.setattr(_cache, "_raw_root", lambda: tmp_path / "raw")
@@ -169,14 +167,46 @@ class TestRun:
         # NGS keeps a week=0 season-summary row. Capping can't remove a
         # partial week 4 from it, so the run refuses rather than mixing weeks.
         registry = _cache._get_sources()
-        summary_through_4 = pl.DataFrame(
-            {"season_type": ["REG"] * 5, "week": [0, 1, 2, 3, 4]}
-        )
+        summary_through_4 = pl.DataFrame({"season_type": ["REG"] * 5, "week": [0, 1, 2, 3, 4]})
         registry["ngs_rushing"] = SourceSpec(season_keyed=True, fetch=lambda _s: summary_through_4)
         monkeypatch.setattr(_cache, "_get_sources", lambda: registry)
         calls: list[str] = []
         with pytest.raises(SourceLagError, match="ngs_rushing"):
             weekly.run(SEASON, ingest=[_record(calls, "a")], grade=lambda _s: None)
+        assert calls == []
+
+    def test_allow_summary_ahead_runs_and_records_it(
+        self, local_db: None, fake_sources: dict[str, int], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _cache._get_sources()
+        summary_through_4 = pl.DataFrame({"season_type": ["REG"] * 5, "week": [0, 1, 2, 3, 4]})
+        registry["ngs_rushing"] = SourceSpec(season_keyed=True, fetch=lambda _s: summary_through_4)
+        monkeypatch.setattr(_cache, "_get_sources", lambda: registry)
+        calls: list[str] = []
+        result = weekly.run(
+            SEASON,
+            ingest=[_record(calls, "a")],
+            grade=lambda _s: calls.append("grade"),
+            allow_summary_ahead=True,
+        )
+        assert calls == ["a", "grade"]
+        assert result.through_week == 3
+        status, notes = _last_weekly_run()
+        assert status == "ok"
+        assert "ngs_rushing" in (notes or "")
+
+    def test_allow_summary_ahead_still_fails_a_lagging_source(
+        self, local_db: None, fake_sources: dict[str, int]
+    ) -> None:
+        fake_sources["pbp"] = 2
+        calls: list[str] = []
+        with pytest.raises(SourceLagError, match="pbp at week 2"):
+            weekly.run(
+                SEASON,
+                ingest=[_record(calls, "a")],
+                grade=lambda _s: calls.append("grade"),
+                allow_summary_ahead=True,
+            )
         assert calls == []
 
     def test_before_any_week_is_complete_nothing_runs(

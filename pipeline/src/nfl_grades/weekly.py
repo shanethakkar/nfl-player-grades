@@ -8,6 +8,10 @@ One command, in dependency order, with fresh data:
        on a Friday doesn't pick up Thursday night's game.
     3. Refuse to write anything unless every source is through that week,
        and no season summary (NGS week 0) already includes the next one.
+       ``allow_summary_ahead`` downgrades only the season-summary check to
+       a warning, for a one-off run between Thursday and Monday night: RB
+       RYOE and WR/TE separation then include the games already played in
+       the next week. The next clean run restates them.
     4. Ingest stages, each its own commit. Rosters and snap counts share
        one, since rosters recreate ``player_seasons`` with zero snaps.
     5. Grade every position, OL, team grades and team context in a single
@@ -148,10 +152,14 @@ def run(
     *,
     ingest: Sequence[Stage] | None = None,
     grade: Callable[[int], object] = grade_season,
+    allow_summary_ahead: bool = False,
 ) -> WeeklyResult:
     """Refresh ``season`` through its last completed regular-season week.
 
     ``ingest`` and ``grade`` default to the real stages; tests swap them.
+    ``allow_summary_ahead`` runs even when an NGS season summary already
+    includes games after the last completed week (logged and noted on the
+    run); every other alignment check still applies.
 
     Raises:
         SourceLagError: a source isn't through the last completed week.
@@ -171,10 +179,14 @@ def run(
             if summary_ahead(cache_or_fetch(source, season, refresh=True), season, through_week)
         ]
         if ahead:
-            raise SourceLagError(
+            message = (
                 f"{', '.join(ahead)} season summaries already include games after week "
-                f"{through_week}; re-run once week {through_week + 1} is complete"
+                f"{through_week}"
             )
+            if not allow_summary_ahead:
+                raise SourceLagError(f"{message}; re-run once week {through_week + 1} is complete")
+            logger.warning("%s; running anyway (--allow-ngs-ahead)", message)
+            handle.note(f"{message} (--allow-ngs-ahead)")
 
         with _cache.capped_at_week(season, through_week):
             source_weeks: dict[str, int | None] = {

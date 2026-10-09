@@ -48,7 +48,8 @@ GitHub emails you; the previous week's grades are still live.
   the day.
 - **`... season summaries already include games after week N`**: NGS has
   started the next week, and its season-summary row can't be capped. Re-run
-  once that week is complete (the Wednesday schedule avoids this).
+  once that week is complete (the Wednesday schedule avoids this), or see
+  the override below.
 - **Anything else**: the grade transaction rolled back, so grades are
   unchanged. Ingest tables may already hold the new week; the next
   successful run overwrites them. The failing stage is in `pipeline_runs`
@@ -67,5 +68,14 @@ $env:DATABASE_URL = "<Neon URL>"
 nflgrades weekly --season 2026
 ```
 
-Any day of the week is fine: sources are capped at the last completed week,
-so a partial week (Thursday night's game) is left out.
+Tuesday and Wednesday work as is. From Thursday night's game until Monday
+night's is final, NGS season summaries already include the next week's
+games and can't be capped, so the run refuses. Every other source is
+capped at the last completed week.
+
+To run anyway in that window, pass `--allow-ngs-ahead` (in Actions: tick
+"allow_ngs_ahead" on Run workflow). Everything is still graded through the
+last completed week, except RB RYOE and WR/TE separation, which include the
+games already played in the next week. The run notes this in
+`pipeline_runs`, and the next clean run (the Wednesday schedule) restates
+it. Every other check still applies.

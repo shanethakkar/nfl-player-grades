@@ -773,7 +773,14 @@ def audit_candidates(position: str) -> None:
 
 @main.command()
 @click.option("--season", type=int, required=True)
-def weekly(season: int) -> None:
+@click.option(
+    "--allow-ngs-ahead",
+    is_flag=True,
+    help="Run even if NGS season summaries already include games after the last "
+    "completed week (Thursday-Monday). RB RYOE and WR/TE separation then include "
+    "those games until the next clean run.",
+)
+def weekly(season: int, allow_ngs_ahead: bool) -> None:
     """Refresh a season end-to-end: fresh data, every ingest stage, then
     every grade in one transaction (ADR-0031).
 
@@ -783,7 +790,7 @@ def weekly(season: int) -> None:
     """
     from . import weekly as weekly_mod
 
-    result = weekly_mod.run(season)
+    result = weekly_mod.run(season, allow_summary_ahead=allow_ngs_ahead)
     if result.through_week is None:
         click.echo(f"season={season}: no regular-season week completed yet; nothing to do")
         return

@@ -22,6 +22,11 @@ on:
         description: "Season to refresh (blank: the current NFL season)"
         required: false
         type: string
+      allow_ngs_ahead:
+        description: "Run even if NGS already includes games after the last completed week (Thu-Mon runs; the next clean run restates)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: weekly-grades
@@ -70,4 +75,5 @@ jobs:
           # Fresh runner, fresh data: no cache is restored or saved.
           PIPELINE_CACHE_DIR: ${{ runner.temp }}/nflgrades-cache
           SEASON: ${{ steps.season.outputs.season }}
-        run: uv run --locked nflgrades weekly --season "$SEASON"
+          ALLOW_NGS_AHEAD: ${{ inputs.allow_ngs_ahead && '--allow-ngs-ahead' || '' }}
+        run: uv run --locked nflgrades weekly --season "$SEASON" $ALLOW_NGS_AHEAD
