@@ -498,7 +498,7 @@ def wr_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
       - ngs_receiving (avg_cushion, avg_intended_air_yards, NGS YAC,
         air-yards share — to confirm/refute earlier rejections under
         validity)
-      - ftn_receiving_charting (contested_catch_rate, created_reception_rate,
+      - ftn_receiving_weekly (contested_catch_rate, created_reception_rate,
         beyond the current drop_rate)
       - pfr_advstats rec (broken tackles per reception, PFR drop rate,
         receiver passer rating)
@@ -635,10 +635,12 @@ def wr_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
     # ---------- 5. FTN charting (2022+): contested + created rates ----------
     ftn_sql = text(
         """
-        SELECT player_id, season, catchable_balls, contested_balls,
-               created_receptions
-        FROM ftn_receiving_charting
-        WHERE catchable_balls > 0
+        SELECT player_id, season, SUM(catchable_balls) AS catchable_balls,
+               SUM(contested_balls) AS contested_balls,
+               SUM(created_receptions) AS created_receptions
+        FROM ftn_receiving_weekly
+        GROUP BY player_id, season
+        HAVING SUM(catchable_balls) > 0
         """
     )
     with engine.connect() as conn:
@@ -928,7 +930,7 @@ def te_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
       - stat_components (current TE formula components, re-scored)
       - nflvs_player_stats (per-season totals → rates)
       - ngs_receiving (separation, cushion, intended air yards, NGS YAC)
-      - ftn_receiving_charting (contested rate, created reception rate)
+      - ftn_receiving_weekly (contested rate, created reception rate)
       - pfr_advstats rec (broken tackles per reception, PFR drops)
     """
     import nflreadpy as nfl
@@ -1050,10 +1052,12 @@ def te_candidates(engine: Engine) -> list[tuple[str, pd.DataFrame, bool]]:
     # 5. FTN (2022+)
     ftn_sql = text(
         """
-        SELECT player_id, season, catchable_balls, contested_balls,
-               created_receptions
-        FROM ftn_receiving_charting
-        WHERE catchable_balls > 0
+        SELECT player_id, season, SUM(catchable_balls) AS catchable_balls,
+               SUM(contested_balls) AS contested_balls,
+               SUM(created_receptions) AS created_receptions
+        FROM ftn_receiving_weekly
+        GROUP BY player_id, season
+        HAVING SUM(catchable_balls) > 0
         """
     )
     with engine.connect() as conn:

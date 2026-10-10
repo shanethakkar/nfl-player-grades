@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from nfl_grades.db import get_engine
+from nfl_grades.grading.progress import SeasonProgress
 from nfl_grades.grading.te import (
     assign_te_role,
     compute_grades,
@@ -146,6 +147,27 @@ class TestExtractFeatures:
         assert (df["n_targets"] >= 15).all()
         assert "role" in df.columns
         assert "snaps_offense" in df.columns
+
+    def test_odd_and_even_weeks_partition_the_season(self, conn, has_te_data) -> None:
+        # A low bar keeps nearly every tight end in both halves.
+        low_bar = SeasonProgress(through_week=3, games=3)
+        full = extract_features(conn, 2024).set_index("player_id")
+        odd = extract_features(conn, 2024, low_bar, week_parity=1).set_index("player_id")
+        even = extract_features(conn, 2024, low_bar, week_parity=0).set_index("player_id")
+
+        counts = [
+            "n_targets",
+            "n_receptions",
+            "n_rec_with_xyac",
+            "n_team_pass_att_active",
+            "n_catchable_balls",
+            "n_drops",
+        ]
+        both = full.index.intersection(odd.index).intersection(even.index)
+        assert len(both) >= 40
+        pd.testing.assert_frame_equal(
+            odd.loc[both, counts] + even.loc[both, counts], full.loc[both, counts]
+        )
 
 
 class TestWriteResults:

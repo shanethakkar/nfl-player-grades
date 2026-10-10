@@ -1,15 +1,15 @@
-"""Ingest PFR advanced rushing stats for RBs into pfr_rb_rush.
+"""Ingest PFR advanced rushing stats for RBs into pfr_rb_rush_weekly.
 
-Source: ``pfr_advstats_rush`` (per-game rows; aggregated to season totals).
+Source: ``pfr_advstats_rush`` (per-game rows; one row per RB and REG week).
 Columns of interest:
-  - rushing_yards_after_contact: total post-contact yards across the season
+  - rushing_yards_after_contact: post-contact yards in the game
   - rushing_yards_before_contact: total pre-contact yards (mostly OL signal)
   - rushing_broken_tackles: total broken tackles on rushes
   - carries: rush attempts (denominator for per-carry rates)
 
 Used by RB v1.4+ grading (ADR-0014 revision) — `rb_yards_after_contact_per_carry`
-component, identified by the exhaustive audit as the highest-validity RB
-candidate (+0.192 vs next-year Pro Bowl).
+component, which sums the weeks over the season. The evaluation harness
+sums odd and even weeks separately (ADR-0029).
 
 Coverage begins 2018 (PFR per-player data limitation).
 """
@@ -67,7 +67,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
     pfr_agg = _aggregate_pfr(pfr_df, season)
 
     engine = get_engine()
-    with pipeline_run("ingest:pfr_rb_rush", season=season) as handle:
+    with pipeline_run("ingest:pfr_rb_rush_weekly", season=season) as handle:
         with engine.begin() as conn:
             pfr_to_player = _pfr_to_player_lookup(conn, season)
             rows, skipped_no_match, skipped_not_rb = _build_rows(
@@ -93,7 +93,7 @@ def run(season: int, *, refresh: bool = False) -> RunResult:
 
 
 def _aggregate_pfr(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
-    """Filter to REG and aggregate per-player season totals."""
+    """Filter to REG and aggregate per (player, week)."""
     if hasattr(df_raw, "to_pandas"):
         df_raw = df_raw.to_pandas()
     if "game_type" in df_raw.columns:
@@ -115,22 +115,10 @@ def _aggregate_pfr(df_raw: pd.DataFrame, season: int) -> pd.DataFrame:
             "Update _RUSH_SUM_COLS in ingest/pfr_rush.py."
         )
 
-    if "game_id" in df.columns:
-        games_per_player = (
-            df.groupby("pfr_player_id")["game_id"].nunique().rename("games")
-        )
-    else:
-        games_per_player = pd.Series(dtype=int, name="games")
-
     agg_dict: dict[str, tuple[str, str]] = {
         out: (src, "sum") for src, out in _RUSH_SUM_COLS.items()
     }
-    agg = df.groupby("pfr_player_id").agg(**agg_dict).reset_index()
-    if not games_per_player.empty:
-        agg = agg.join(games_per_player, on="pfr_player_id")
-    else:
-        agg["games"] = 0
-    return agg
+    return df.groupby(["pfr_player_id", "week"]).agg(**agg_dict).reset_index()
 
 
 def _pfr_to_player_lookup(
@@ -191,7 +179,7 @@ def _build_rows(
             {
                 "player_id":            player_id,
                 "season":               season,
-                "games":                _int_or_none(row.get("games")) or 0,
+                "week":                 int(row["week"]),
                 "carries":              _int_or_none(row.get("carries")),
                 "yards_after_contact":  _int_or_none(row.get("yards_after_contact")),
                 "yards_before_contact": _int_or_none(row.get("yards_before_contact")),
@@ -201,7 +189,7 @@ def _build_rows(
 
     if skipped_no_match:
         logger.warning(
-            "pfr_rb_rush season=%d: %d pfr_ids with no player record "
+            "pfr_rb_rush_weekly season=%d: %d player-weeks with no player record "
             "(run rosters ingest first)",
             season, skipped_no_match,
         )
@@ -210,11 +198,11 @@ def _build_rows(
 
 _INSERT_SQL = text(
     """
-    INSERT INTO pfr_rb_rush
-        (player_id, season, games, carries,
+    INSERT INTO pfr_rb_rush_weekly
+        (player_id, season, week, carries,
          yards_after_contact, yards_before_contact, broken_tackles)
     VALUES
-        (:player_id, :season, :games, :carries,
+        (:player_id, :season, :week, :carries,
          :yards_after_contact, :yards_before_contact, :broken_tackles)
     """
 )
@@ -222,7 +210,7 @@ _INSERT_SQL = text(
 
 def _upsert(conn: Connection, rows: list[dict[str, object]], season: int) -> int:
     conn.execute(
-        text("DELETE FROM pfr_rb_rush WHERE season = :season"),
+        text("DELETE FROM pfr_rb_rush_weekly WHERE season = :season"),
         {"season": season},
     )
     if rows:

@@ -46,6 +46,16 @@ export type FtnReceivingChartingRow = {
   created_receptions: number | null;
 };
 
+export type FtnReceivingWeeklyRow = {
+  player_id: number;
+  season: number;
+  week: number;
+  catchable_balls: number;
+  drops: number;
+  contested_balls: number;
+  created_receptions: number;
+};
+
 export type KickerStatsRow = {
   player_id: number;
   season: number;
@@ -205,6 +215,16 @@ export type PfrRbRushRow = {
   player_id: number;
   season: number;
   games: number | null;
+  carries: number | null;
+  yards_after_contact: number | null;
+  yards_before_contact: number | null;
+  broken_tackles: number | null;
+};
+
+export type PfrRbRushWeeklyRow = {
+  player_id: number;
+  season: number;
+  week: number;
   carries: number | null;
   yards_after_contact: number | null;
   yards_before_contact: number | null;

@@ -62,9 +62,10 @@ the CI reflects player-to-player variation, not just row count.
 
 - Per-metric CIs are Fisher-z and treat player-seasons as independent, so
   they run a little narrow. Trust the paired-delta CIs for decisions.
-- Portability rests on few rows (QB: ~24 team changers in the fit window,
-  ~11 in the hold-out). A wide Portability CI is normal; the rule only blocks
-  a change if Portability falls *beyond* noise.
+- Portability rests on few rows (hold-out team changers: QB ~11, RB ~14,
+  WR ~20, TE ~5). A wide Portability CI is normal; the rule only blocks a
+  change if Portability falls *beyond* noise. At TE it can neither block nor
+  support one.
 - Next-season prediction against the primary Component favours that
   Component. Read it alongside Composite YoY.
 - Split-half Reliability is an *upper* bound on individual skill: both halves
@@ -151,9 +152,14 @@ contested rate). It goes through the same ship rule as anything else.
 
 ## Coverage
 
-`nflgrades evaluate` covers QB today. RB/WR/TE (#13) and the defensive
-positions, specialists and OL (#14) follow. Until a position is covered, a
-Formula change there waits for its harness slice.
+`nflgrades evaluate` covers QB, RB, WR and TE. The defensive positions,
+specialists and OL (#14) follow. Until a position is covered, a Formula
+change there waits for its harness slice. Baselines for the current
+Formulas: [RB/WR/TE](audits/2026-10-10-evaluation-baseline-rb-wr-te.md).
+
+`scripts/verify_evaluation_panels.py` checks that a position's full-season
+panel still reproduces the stored Components and Composites. Run it after
+changing a grader's extract.
 
 ## Tooling
 

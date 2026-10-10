@@ -17,6 +17,15 @@ doc summarizes the shape and relationships; read the SQL for exact types and ind
 - **`stat_components`**: `used_in_composite` (boolean, default true) — false when
   a component was stored for audit/debug but omitted from the headline composite
   (e.g. TE `te_target_earn_rate` for `blocking_te` rows; ADR-0016).
+- **`ftn_receiving_weekly`**, **`pfr_rb_rush_weekly`** (migration 0028): FTN
+  receiver charting counts and PFR rush advanced stats, one row per player per
+  REG week. Graders sum them over the season; the evaluation harness sums odd
+  and even weeks separately (ADR-0029). They replace the season-grain
+  `ftn_receiving_charting` and `pfr_rb_rush`, which nothing writes any more
+  and a later migration drops. The migration creates them empty: after
+  applying it to a database, run `nflgrades ingest pfr-rb-rush` (2018+) and
+  `nflgrades ingest ftn-receiving` (2022+) for every season before grading,
+  or yards after contact and drop rate silently drop out of the Composites.
 
 ## Entities
 

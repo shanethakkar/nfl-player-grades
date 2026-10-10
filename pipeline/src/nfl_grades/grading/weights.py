@@ -55,7 +55,8 @@ QB_V1_CONFIDENCE_FULL_DROPBACKS: int = 300
 # RB component). YoY r +0.313, moderate overlap with RYOE (+0.596 —
 # RYOE includes pre-contact OL yards; yards_after_contact isolates the
 # post-contact RB-skill portion). Schema change: new pfr_rb_rush table
-# + ingest module (pipeline/ingest/pfr_rush.py).
+# (per week since migration 0028: pfr_rb_rush_weekly) + ingest module
+# (pipeline/ingest/pfr_rush.py).
 #
 # Coverage: PFR rush data starts 2018; for 2016-2017 seasons the
 # yards_after_contact component is missing and the composite is computed

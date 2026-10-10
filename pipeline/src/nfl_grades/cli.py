@@ -392,6 +392,7 @@ def ingest_all(season: int, refresh: bool) -> None:
         ctx.invoke(ingest_pfr_def_coverage_s, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_passrush, season=season, refresh=refresh)
         ctx.invoke(ingest_pfr_def_lb, season=season, refresh=refresh)
+        ctx.invoke(ingest_pfr_rb_rush, season=season, refresh=refresh)
         ctx.invoke(ingest_team_ol, season=season, refresh=refresh)
     if season >= 2022:
         ctx.invoke(ingest_ftn_receiving, season=season, refresh=refresh)
@@ -599,7 +600,7 @@ def validity(diagnose: bool, next_season: bool) -> None:
 
 
 @main.command()
-@click.option("--position", type=str, required=True, help="Position to evaluate (QB so far).")
+@click.option("--position", type=str, required=True, help="Position to evaluate (QB, RB, WR, TE).")
 @click.option(
     "--weight",
     "weight_overrides",
@@ -636,6 +637,8 @@ def evaluate(
       nflgrades evaluate --position QB
 
       nflgrades evaluate --position QB --weight qb_success_rate=0.05
+
+      nflgrades evaluate --position WR --weight wr_success_rate_per_target=0
 
       nflgrades evaluate --position QB --candidate qb_sack_rate --weight qb_sack_rate=-0.10
     """

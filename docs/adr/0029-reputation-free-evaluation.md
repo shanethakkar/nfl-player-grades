@@ -24,4 +24,6 @@ stays a **Candidate**, and ships only if it wins on the hold-out.
 **Implementation** (#12): `nflgrades evaluate` (`grading/evaluation.py`,
 `grading/panels.py`) and the ship rule in `docs/grading/audit-playbook.md`.
 The Pro Bowl report (`nflgrades validity`) is same-season and joins on name
-and position group (#5).
+and position group (#5). RB, WR and TE added in #13. FTN charting and PFR rush
+stats are now stored per week (migration 0028) so their halves can be
+extracted.

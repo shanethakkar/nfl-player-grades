@@ -28,7 +28,7 @@ from sqlalchemy.engine import Connection
 from nfl_grades.db import pipeline_run, transaction
 from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
-from nfl_grades.grading.filters import RB_REC_FILTER_SQL, RB_RUSH_FILTER_SQL
+from nfl_grades.grading.filters import RB_REC_FILTER_SQL, RB_RUSH_FILTER_SQL, WEEK_PARITY_SQL
 from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     RB_V1_CONFIDENCE_FULL_TOUCHES,
@@ -107,7 +107,10 @@ def run(season: int, *, conn: Connection | None = None) -> RunResult:
 #   through as 0 rather than NULL (pandas then treats them as int).
 # - NGS rushing season-summary rows use week=0. For players traded
 #   mid-season this can produce multiple rows (one per team stint), so
-#   we SUM the count columns and volume-weight the rate columns.
+#   we SUM the count columns and volume-weight the rate columns. A
+#   week-parity half (evaluation harness) can't use the summary, so it
+#   volume-weights the weekly rows instead; NGS publishes those only for
+#   games with 10+ carries.
 # - Fumble rate uses `fumble` (any fumble by the ball carrier, not just
 #   ones recovered by the defense). See ADR-0014 v1.1 refinement.
 #   Counted on both rushing and receiving plays because RBs can fumble
@@ -142,6 +145,7 @@ _FEATURES_SQL = text(f"""
           ON pl.rusher_player_id = r.gsis_id
          AND pl.season = :season
          AND ({RB_RUSH_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
         GROUP BY r.player_id, r.full_name, r.gsis_id
     ),
     rec_agg AS (
@@ -162,6 +166,7 @@ _FEATURES_SQL = text(f"""
           ON pl.receiver_player_id = r.gsis_id
          AND pl.season = :season
          AND ({RB_REC_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
         GROUP BY r.player_id
     ),
     rec_yac_agg AS (
@@ -183,6 +188,7 @@ _FEATURES_SQL = text(f"""
           ON pl.receiver_player_id = r.gsis_id
          AND pl.season = :season
          AND ({RB_REC_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
         GROUP BY r.player_id
     ),
     ngs_rush_agg AS (
@@ -192,20 +198,24 @@ _FEATURES_SQL = text(f"""
             SUM(rush_attempts)               AS ngs_rush_attempts,
             SUM(rush_yards_over_expected)    AS ngs_ryoe_total
         FROM ngs_rushing
-        WHERE season = :season AND season_type = 'REG' AND week = 0
+        WHERE season = :season AND season_type = 'REG'
+          AND CASE WHEN CAST(:week_parity AS INTEGER) IS NULL THEN week = 0
+                   ELSE week > 0 AND {WEEK_PARITY_SQL} END
         GROUP BY player_id
     ),
     pfr_rush_agg AS (
-        -- PFR rush advanced stats (2018+). Stores season totals; we derive
-        -- yards_after_contact_per_carry from the per-row carries denominator
-        -- (which may differ slightly from rush_agg.n_carries due to PFR/PBP
-        -- coverage differences — use PFR's own carries for the rate). Pre-
-        -- 2018 LEFT JOIN returns NULL → component drops out of the composite.
+        -- PFR rush advanced stats (2018+), one row per week. We derive
+        -- yards_after_contact_per_carry from PFR's own carries (which may
+        -- differ slightly from rush_agg.n_carries due to PFR/PBP coverage
+        -- differences). Pre-2018 LEFT JOIN returns NULL → component drops
+        -- out of the composite.
         SELECT player_id,
-               carries AS pfr_carries,
-               yards_after_contact
-        FROM pfr_rb_rush
+               SUM(carries)             AS pfr_carries,
+               SUM(yards_after_contact) AS yards_after_contact
+        FROM pfr_rb_rush_weekly
         WHERE season = :season
+          AND {WEEK_PARITY_SQL}
+        GROUP BY player_id
     )
     SELECT
         rush_agg.player_id,
@@ -216,6 +226,7 @@ _FEATURES_SQL = text(f"""
         rec_agg.n_receptions,
         rec_yac_agg.n_rec_with_xyac,
         COALESCE(pfr_rush_agg.pfr_carries, 0) AS n_pfr_carries,
+        COALESCE(ngs_rush_agg.ngs_rush_attempts, 0) AS n_ngs_rush_attempts,
         (rush_agg.n_carries + rec_agg.n_receptions) AS n_touches,
         (rush_agg.n_rush_fumbles + rec_agg.n_rec_fumbles)
             AS n_fumbles,
@@ -243,16 +254,24 @@ _FEATURES_SQL = text(f"""
 
 
 def extract_features(
-    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+    conn: Connection,
+    season: int,
+    progress: SeasonProgress = COMPLETE,
+    *,
+    week_parity: int | None = None,
 ) -> pd.DataFrame:
     """Pull per-RB raw components from plays + NGS rushing.
 
+    ``week_parity`` 1 or 0 keeps only odd or even weeks (the evaluation
+    harness's split halves); None (the default) keeps the whole season.
+
     Returns a DataFrame with one row per RB who reached
-    ``RB_V1_MIN_TOUCHES_TO_GRADE`` touches. Columns:
+    ``RB_V1_MIN_TOUCHES_TO_GRADE`` touches (pro-rated to ``progress``).
+    Columns:
 
         player_id, gsis_id, full_name,
         n_carries, n_targets, n_receptions, n_rec_with_xyac,
-        n_touches, n_fumbles,
+        n_pfr_carries, n_ngs_rush_attempts, n_touches, n_fumbles,
         rush_epa_per_attempt, rush_success_rate, rec_epa_per_target,
         ryoe_per_attempt, yac_over_expected_per_rec,
         fumble_rate
@@ -260,7 +279,11 @@ def extract_features(
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_touches": progress.scale(RB_V1_MIN_TOUCHES_TO_GRADE)},
+            {
+                "season": season,
+                "week_parity": week_parity,
+                "min_touches": progress.scale(RB_V1_MIN_TOUCHES_TO_GRADE),
+            },
         )
         .mappings()
         .all()
@@ -291,6 +314,7 @@ def extract_features(
         "n_receptions",
         "n_rec_with_xyac",
         "n_pfr_carries",
+        "n_ngs_rush_attempts",
         "n_touches",
         "n_fumbles",
     )
@@ -302,6 +326,18 @@ def extract_features(
 # ---------------------------------------------------------------------------
 # 2. Compute grades
 # ---------------------------------------------------------------------------
+
+
+# Map (component_name -> (raw_value_col, sample_size_col)).
+_COMPONENT_SPECS: dict[str, tuple[str, str]] = {
+    component: (raw_col, RB_V1_SAMPLE_SIZE_COLS[component])
+    for component, raw_col in RB_V1_RAW_VALUE_COLS.items()
+}
+
+
+def qualified(features: pd.DataFrame, progress: SeasonProgress = COMPLETE) -> pd.Series:
+    """Qualified RBs: enough touches for the season so far (ADR-0014)."""
+    return features["n_touches"] >= progress.scale(RB_V1_QUALIFIED_MIN_TOUCHES)
 
 
 def compute_grades(
@@ -321,7 +357,7 @@ def compute_grades(
     df = features.copy()
 
     # --- qualification flags ---
-    df["qualified"] = df["n_touches"] >= progress.scale(RB_V1_QUALIFIED_MIN_TOUCHES)
+    df["qualified"] = qualified(df, progress)
     df["rushing_sub_qualified"] = df["n_carries"] >= progress.scale(RB_V1_RUSHING_SUB_MIN_CARRIES)
     df["receiving_sub_qualified"] = df["n_targets"] >= progress.scale(
         RB_V1_RECEIVING_SUB_MIN_TARGETS
@@ -332,8 +368,7 @@ def compute_grades(
 
     # --- per-component: shrink + z-score ---
     z_frame = pd.DataFrame(index=df.index)
-    for component, raw_col in RB_V1_RAW_VALUE_COLS.items():
-        n_col = RB_V1_SAMPLE_SIZE_COLS[component]
+    for component, (raw_col, n_col) in _COMPONENT_SPECS.items():
         raw = df[raw_col]
         n = df[n_col]
         k = RB_V1_SHRINKAGE_K[component]
@@ -458,6 +493,7 @@ __all__ = [
     "RunResult",
     "compute_grades",
     "extract_features",
+    "qualified",
     "run",
     "write_results",
 ]

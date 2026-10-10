@@ -19,7 +19,7 @@ from sqlalchemy.engine import Connection
 from nfl_grades.db import pipeline_run, transaction
 from nfl_grades.grading import empirical_bayes, preview, progress, scoring, zscore
 from nfl_grades.grading.era_tier import _era_tier_for_season
-from nfl_grades.grading.filters import RB_REC_FILTER_SQL
+from nfl_grades.grading.filters import RB_REC_FILTER_SQL, WEEK_PARITY_SQL
 from nfl_grades.grading.progress import COMPLETE, SeasonProgress
 from nfl_grades.grading.weights import (
     TE_COMPONENT_TARGET_EARN_RATE,
@@ -125,6 +125,7 @@ _FEATURES_SQL = text(f"""
           ON pl.receiver_player_id = t.gsis_id
          AND pl.season = :season
          AND ({RB_REC_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
         GROUP BY t.player_id, t.full_name, t.gsis_id
     ),
     rec_yac_agg AS (
@@ -141,6 +142,7 @@ _FEATURES_SQL = text(f"""
           ON pl.receiver_player_id = t.gsis_id
          AND pl.season = :season
          AND ({RB_REC_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
         GROUP BY t.player_id
     ),
     te_games_agg AS (
@@ -153,6 +155,7 @@ _FEATURES_SQL = text(f"""
           ON pl.receiver_player_id = t.gsis_id
          AND pl.season = :season
          AND ({RB_REC_FILTER_SQL})
+         AND {WEEK_PARITY_SQL}
     ),
     team_pass_agg AS (
         SELECT
@@ -162,6 +165,7 @@ _FEATURES_SQL = text(f"""
         FROM plays pl
         WHERE pl.season = :season
           AND ({RB_REC_FILTER_SQL})
+          AND {WEEK_PARITY_SQL}
         GROUP BY pl.posteam, pl.game_id
     ),
     earn_rate_agg AS (
@@ -179,6 +183,17 @@ _FEATURES_SQL = text(f"""
             SUM(avg_separation * targets) AS ngs_separation_times_targets
         FROM ngs_receiving
         WHERE season = :season AND season_type = 'REG' AND week > 0
+          AND {WEEK_PARITY_SQL}
+        GROUP BY player_id
+    ),
+    ftn_agg AS (
+        -- FTN charting (2022+), one row per week.
+        SELECT player_id,
+               SUM(catchable_balls) AS catchable_balls,
+               SUM(drops)           AS drops
+        FROM ftn_receiving_weekly
+        WHERE season = :season
+          AND {WEEK_PARITY_SQL}
         GROUP BY player_id
     )
     SELECT
@@ -212,8 +227,8 @@ _FEATURES_SQL = text(f"""
     LEFT JOIN earn_rate_agg USING (player_id)
     LEFT JOIN ngs_sep_agg USING (player_id)
     LEFT JOIN snap_agg USING (player_id)
-    LEFT JOIN ftn_receiving_charting ftn
-        ON ftn.player_id = rec_agg.player_id AND ftn.season = :season
+    LEFT JOIN ftn_agg ftn
+        ON ftn.player_id = rec_agg.player_id
     WHERE rec_agg.n_targets >= :min_targets
 """)
 
@@ -246,12 +261,28 @@ def compute_te_data_tier_and_reason(season: int, role: str) -> tuple[int, str | 
 
 
 def extract_features(
-    conn: Connection, season: int, progress: SeasonProgress = COMPLETE
+    conn: Connection,
+    season: int,
+    progress: SeasonProgress = COMPLETE,
+    *,
+    week_parity: int | None = None,
 ) -> pd.DataFrame:
+    """Pull per-TE raw components from plays, NGS receiving, FTN charting
+    and offensive snaps, plus each TE's role.
+
+    ``week_parity`` 1 or 0 keeps only odd or even weeks (the evaluation
+    harness's split halves); None (the default) keeps the whole season.
+    Snaps are season totals (``player_seasons``), so ``role`` is only
+    meaningful for the whole season.
+    """
     rows = (
         conn.execute(
             _FEATURES_SQL,
-            {"season": season, "min_targets": progress.scale(TE_V1_MIN_TARGETS_TO_GRADE)},
+            {
+                "season": season,
+                "week_parity": week_parity,
+                "min_targets": progress.scale(TE_V1_MIN_TARGETS_TO_GRADE),
+            },
         )
         .mappings()
         .all()
@@ -292,6 +323,18 @@ def extract_features(
     return df
 
 
+# Map (component_name -> (raw_value_col, sample_size_col)).
+_COMPONENT_SPECS: dict[str, tuple[str, str]] = {
+    component: (raw_col, TE_V1_SAMPLE_SIZE_COLS[component])
+    for component, raw_col in TE_V1_RAW_VALUE_COLS.items()
+}
+
+
+def qualified(features: pd.DataFrame, progress: SeasonProgress = COMPLETE) -> pd.Series:
+    """Qualified TEs: enough targets for the season so far (ADR-0016)."""
+    return features["n_targets"] >= progress.scale(TE_V1_QUALIFIED_MIN_TARGETS)
+
+
 def compute_grades(
     features: pd.DataFrame,
     season: int,
@@ -300,7 +343,7 @@ def compute_grades(
     composite_sd: float | None = None,
 ) -> pd.DataFrame:
     df = features.copy()
-    df["qualified"] = df["n_targets"] >= progress.scale(TE_V1_QUALIFIED_MIN_TARGETS)
+    df["qualified"] = qualified(df, progress)
     df["confidence"] = (
         df["n_targets"].astype(float) / progress.scale(TE_V1_CONFIDENCE_FULL_TARGETS)
     ).clip(upper=1.0)
@@ -315,8 +358,7 @@ def compute_grades(
     df["data_tier_reason"] = data_r
 
     z_frame = pd.DataFrame(index=df.index)
-    for component, raw_col in TE_V1_RAW_VALUE_COLS.items():
-        n_col = TE_V1_SAMPLE_SIZE_COLS[component]
+    for component, (raw_col, n_col) in _COMPONENT_SPECS.items():
         raw = df[raw_col]
         n = df[n_col]
         k = TE_V1_SHRINKAGE_K[component]
@@ -440,6 +482,7 @@ __all__ = [
     "compute_grades",
     "compute_te_data_tier_and_reason",
     "extract_features",
+    "qualified",
     "run",
     "write_results",
 ]

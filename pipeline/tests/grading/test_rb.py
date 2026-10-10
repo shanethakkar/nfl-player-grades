@@ -20,6 +20,7 @@ from nfl_grades.grading.rb import (
     POSITION,
     compute_grades,
     extract_features,
+    qualified,
     write_results,
 )
 
@@ -388,6 +389,40 @@ class TestExtractFeatures:
         df = extract_features(conn, 2024)
         total = int(df["n_fumbles"].sum())
         assert 20 <= total <= 250, f"RB fumble total out of band: {total}"
+
+    def test_odd_and_even_weeks_partition_the_season(self, conn, has_2024_rb_data) -> None:
+        # A low bar keeps nearly every back in both halves.
+        low_bar = SeasonProgress(through_week=3, games=3)
+        full = extract_features(conn, 2024).set_index("player_id")
+        odd = extract_features(conn, 2024, low_bar, week_parity=1).set_index("player_id")
+        even = extract_features(conn, 2024, low_bar, week_parity=0).set_index("player_id")
+
+        counts = ["n_carries", "n_targets", "n_rec_with_xyac", "n_pfr_carries", "n_fumbles"]
+        both = full.index.intersection(odd.index).intersection(even.index)
+        assert len(both) >= 60
+        pd.testing.assert_frame_equal(
+            odd.loc[both, counts] + even.loc[both, counts], full.loc[both, counts]
+        )
+        # Yards after contact sums per week, so the halves pool to the season.
+        yac = (
+            odd.loc[both, "yards_after_contact_per_carry"] * odd.loc[both, "n_pfr_carries"]
+            + even.loc[both, "yards_after_contact_per_carry"] * even.loc[both, "n_pfr_carries"]
+        ) / full.loc[both, "n_pfr_carries"]
+        pd.testing.assert_series_equal(
+            yac.dropna(),
+            full.loc[both, "yards_after_contact_per_carry"].dropna(),
+            check_names=False,
+        )
+
+    def test_half_season_ryoe_comes_from_weekly_ngs_rows(self, conn, has_2024_rb_data) -> None:
+        # The week-0 season summary can't be split, so halves read the
+        # weekly rows (games with 10+ carries).
+        full = extract_features(conn, 2024)
+        starters = full.loc[qualified(full) & full["ryoe_per_attempt"].notna(), "player_id"]
+        for parity in (1, 0):
+            half = extract_features(conn, 2024, week_parity=parity).set_index("player_id")
+            covered = half["ryoe_per_attempt"].reindex(starters).notna().mean()
+            assert covered >= 0.9, f"parity {parity}: {covered:.0%} of starters have RYOE"
 
 
 class TestWriteResults:

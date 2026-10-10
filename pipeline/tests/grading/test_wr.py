@@ -15,10 +15,12 @@ from sqlalchemy.exc import OperationalError
 
 from nfl_grades.db import get_engine
 from nfl_grades.grading.era_tier import REASON_ERA_PRE_NGS, _era_tier_for_season
+from nfl_grades.grading.progress import SeasonProgress
 from nfl_grades.grading.wr import (
     POSITION,
     compute_grades,
     extract_features,
+    qualified,
     write_results,
 )
 
@@ -381,13 +383,13 @@ class TestExtractFeatures:
 
     def test_drop_totals_are_sane(self, conn, has_2024_wr_data) -> None:
         """WR drop totals land in a plausible band when FTN data is
-        present (2022+). Guards against ftn_receiving_charting not
+        present (2022+). Guards against ftn_receiving_weekly not
         being ingested for this season."""
         df = extract_features(conn, 2024)
         # FTN data joined via player_id; skip if local DB has no FTN
         # ingestion (matches WR v1.1 NaN-neutralization for pre-2022).
         if df["n_catchable_balls"].sum() == 0:
-            pytest.skip("ftn_receiving_charting not ingested for 2024")
+            pytest.skip("ftn_receiving_weekly not ingested for 2024")
         total = int(df["n_drops"].sum())
         assert 50 <= total <= 500, f"WR drop total out of band: {total}"
 
@@ -400,6 +402,32 @@ class TestExtractFeatures:
         assert 0.10 <= median <= 0.25, (
             f"qualified-WR median target earn rate out of band: {median:.3f}"
         )
+
+
+    def test_odd_and_even_weeks_partition_the_season(self, conn, has_2024_wr_data) -> None:
+        # A low bar keeps nearly every receiver in both halves.
+        low_bar = SeasonProgress(through_week=3, games=3)
+        full = extract_features(conn, 2024).set_index("player_id")
+        odd = extract_features(conn, 2024, low_bar, week_parity=1).set_index("player_id")
+        even = extract_features(conn, 2024, low_bar, week_parity=0).set_index("player_id")
+
+        counts = [
+            "n_targets",
+            "n_receptions",
+            "n_rec_with_xyac",
+            "n_team_pass_att_active",
+            "n_catchable_balls",
+            "n_drops",
+        ]
+        both = full.index.intersection(odd.index).intersection(even.index)
+        assert len(both) >= 100
+        pd.testing.assert_frame_equal(
+            odd.loc[both, counts] + even.loc[both, counts], full.loc[both, counts]
+        )
+        # NGS weekly rows (5+ targets) give nearly every starter separation in each half.
+        starters = full.index[qualified(full.reset_index())]
+        for half in (odd, even):
+            assert half["separation"].reindex(starters).notna().mean() >= 0.9
 
 
 class TestWriteResults:
