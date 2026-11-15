@@ -46,6 +46,29 @@ const nextConfig = {
         destination: "/teams/:abbr/:season",
         permanent: true,
       },
+      // Homepage: both params first so `?season=&position=` doesn't
+      // get swallowed by the single-param rules.
+      {
+        source: "/",
+        has: [
+          { type: "query", key: "season", value: "(?<season>\\d{4})" },
+          { type: "query", key: "position", value: "(?<position>[^&]+)" },
+        ],
+        destination: "/season/:season/position/:position",
+        permanent: true,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "season", value: "(?<season>\\d{4})" }],
+        destination: "/season/:season",
+        permanent: true,
+      },
+      {
+        source: "/",
+        has: [{ type: "query", key: "position", value: "(?<position>[^&]+)" }],
+        destination: "/position/:position",
+        permanent: true,
+      },
     ];
   },
 };

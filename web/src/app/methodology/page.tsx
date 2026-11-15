@@ -1,7 +1,7 @@
 import type React from "react";
 import Link from "next/link";
 
-import { teamHref, teamsIndexHref } from "@/lib/paths";
+import { homeHref, teamHref, teamsIndexHref } from "@/lib/paths";
 
 import {
   MethodologyTOCDesktop,
@@ -444,10 +444,7 @@ function CurrentTopBlock({ data }: { data: PositionCardData }) {
         ))}
       </ol>
       <Link
-        href={{
-          pathname: "/",
-          query: { season: data.top.season, position: data.position },
-        }}
+        href={homeHref(data.top.season, data.position)}
         className="mt-3 inline-block text-xs text-neutral-400 hover:text-neutral-100 hover:underline"
       >
         See full {data.position} leaderboard →

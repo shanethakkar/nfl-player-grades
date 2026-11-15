@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { homeHref } from "@/lib/paths";
+
 type Props = {
   positions: readonly string[];
   activePosition: string;
   /**
-   * When set, links include `season=` so clicking a position preserves the
-   * currently-selected season.
+   * When set, links include the season path so clicking a position
+   * preserves the currently-selected season.
    */
   activeSeason?: number;
+  /** Latest graded season; used to keep `/` canonical for that year. */
+  latestSeason?: number;
 };
 
 /**
@@ -19,32 +23,25 @@ type Props = {
  * - Mobile: compact `<select>` dropdown so the picker doesn't overflow the
  *   viewport when there are 12 positions.
  * - Desktop: server-rendered pill tabs via plain `<Link>`. `"QB"` links omit
- *   `?position=` so the default URL (`/`) stays clean.
+ *   the position segment so the default URL (`/`) stays clean.
  */
 export function PositionPicker({
   positions,
   activePosition,
   activeSeason,
+  latestSeason,
 }: Props) {
   const router = useRouter();
 
   if (positions.length === 0) return null;
 
-  function buildQuery(position: string): Record<string, string | number> {
-    const q: Record<string, string | number> = {};
-    if (position !== "QB") q.position = position;
-    if (activeSeason !== undefined) q.season = activeSeason;
-    return q;
+  function hrefFor(position: string) {
+    return homeHref(activeSeason, position, latestSeason);
   }
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const q = buildQuery(e.target.value);
-    const qs = new URLSearchParams(
-      Object.entries(q).map(([k, v]) => [k, String(v)]),
-    ).toString();
-    const url = qs ? `/?${qs}` : "/";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.push(url as any);
+    router.push(hrefFor(e.target.value) as any);
   }
 
   return (
@@ -78,13 +75,10 @@ export function PositionPicker({
       <div className="hidden md:inline-flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-950 p-1">
         {positions.map((position) => {
           const isActive = position === activePosition;
-          const query: Record<string, string | number> = {};
-          if (position !== "QB") query.position = position;
-          if (activeSeason !== undefined) query.season = activeSeason;
           return (
             <Link
               key={position}
-              href={{ pathname: "/", query }}
+              href={hrefFor(position)}
               className={
                 isActive
                   ? "rounded-md bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-900"
