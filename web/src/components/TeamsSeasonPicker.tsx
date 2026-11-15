@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { teamsIndexHref } from "@/lib/paths";
+
 type Props = {
   seasons: number[];
   activeSeason: number;
@@ -18,9 +20,8 @@ export function TeamsSeasonPicker({ seasons, activeSeason }: Props) {
   if (seasons.length === 0) return null;
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const qs = new URLSearchParams({ season: e.target.value }).toString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.push(`/teams?${qs}` as any);
+    router.push(teamsIndexHref(Number(e.target.value)) as any);
   }
 
   return (
@@ -53,7 +54,7 @@ export function TeamsSeasonPicker({ seasons, activeSeason }: Props) {
           return (
             <Link
               key={season}
-              href={{ pathname: "/teams", query: { season } }}
+              href={teamsIndexHref(season)}
               className={
                 isActive
                   ? "rounded-md bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-900"

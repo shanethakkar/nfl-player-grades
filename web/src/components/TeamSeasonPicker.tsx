@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { teamHref } from "@/lib/paths";
+
 /**
  * Season picker for /teams/[abbr]. Mirrors the leaderboard SeasonPicker
  * (mobile select + desktop pill tabs) but the pathname is team-aware so
@@ -18,8 +20,8 @@ export function TeamSeasonPicker({ abbr, seasons, activeSeason }: Props) {
   const router = useRouter();
   if (seasons.length === 0) return null;
 
-  function hrefFor(season: number): string {
-    return `/teams/${abbr}?season=${season}`;
+  function hrefFor(season: number) {
+    return teamHref(abbr, season);
   }
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {

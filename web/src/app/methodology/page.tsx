@@ -1,6 +1,8 @@
 import type React from "react";
 import Link from "next/link";
 
+import { teamHref, teamsIndexHref } from "@/lib/paths";
+
 import {
   MethodologyTOCDesktop,
   MethodologyTOCMobile,
@@ -663,7 +665,7 @@ function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
           <li key={e.team_id} className="flex items-center gap-2">
             <span className="w-4 text-neutral-600">{i + 1}.</span>
             <Link
-              href={{ pathname: `/teams/${e.abbr}`, query: { season: data.top.season } }}
+              href={teamHref(e.abbr, data.top.season)}
               className="text-neutral-200 hover:text-neutral-100 hover:underline"
             >
               {e.name}
@@ -675,7 +677,7 @@ function TopTeamsBlock({ data }: { data: TeamPhaseCardData }) {
         ))}
       </ol>
       <Link
-        href={{ pathname: "/teams", query: { season: data.top.season } }}
+        href={teamsIndexHref(data.top.season)}
         className="mt-3 inline-block text-xs text-neutral-400 hover:text-neutral-100 hover:underline"
       >
         See full team leaderboard →

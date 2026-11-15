@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import "@/styles/globals.css";
+import { Analytics } from "@vercel/analytics/next";
+
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import "@/styles/globals.css";
 
 const geistSans = localFont({
   src: "../fonts/GeistSans.woff2",
@@ -50,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             mid-viewport — long pages flow naturally. */}
         <div className="flex-1">{children}</div>
         <SiteFooter />
+        <Analytics />
       </body>
     </html>
   );

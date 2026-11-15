@@ -9,12 +9,28 @@ import { PlayerHeadshot } from "@/components/PlayerHeadshot";
 import { SeasonGradesSection } from "@/components/SeasonGradesSection";
 import { TeamLogo } from "@/components/TeamLogo";
 import { gradeColor } from "@/lib/grades";
-import { getPlayerDetailBySlug } from "@/lib/queries";
+import { getAllPlayerSlugs, getPlayerDetailBySlug } from "@/lib/queries";
 
-// ISR — page HTML cached at the edge for an hour. Player profiles
-// only change when the grading pipeline reruns; until then every
-// visit can come from the edge cache with zero server work.
-export const revalidate = 3600;
+// ISR. All known slugs are prerendered at build so crawler walks
+// of unique player URLs hit the CDN instead of a function. Pages
+// revalidate daily; the weekly pipeline is the real data cadence.
+// Unknown slugs call notFound() after a single indexed slug lookup
+// and do not load the full player-detail query.
+export const revalidate = 86400;
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const slugs = await getAllPlayerSlugs();
+    return slugs.map((slug) => ({ slug }));
+  } catch (err) {
+    console.error(
+      "generateStaticParams for /players/[slug] failed; falling back to on-demand ISR",
+      err,
+    );
+    return [];
+  }
+}
 
 type PageProps = {
   params: Promise<{ slug: string }>;

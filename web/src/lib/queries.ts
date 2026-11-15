@@ -368,6 +368,27 @@ export const getTeamSeasons = unstable_cache(
   { revalidate: 3600 },
 );
 
+
+/**
+ * Every team abbreviation × graded season, for `generateStaticParams`
+ * on `/teams/[abbr]/[season]`. Same season filter as {@link getTeamSeasons}.
+ */
+async function _getAllTeamSeasonParams(): Promise<{ abbr: string; season: number }[]> {
+  const rows = await sql<{ abbr: string; season: number }[]>`
+    SELECT DISTINCT t.abbr, ps.season
+    FROM player_seasons ps
+    JOIN teams t ON t.team_id = ps.team_id
+    WHERE ps.season IN (SELECT DISTINCT season FROM season_grades)
+    ORDER BY t.abbr, ps.season DESC
+  `;
+  return rows.map((r) => ({ abbr: r.abbr, season: Number(r.season) }));
+}
+export const getAllTeamSeasonParams = unstable_cache(
+  _getAllTeamSeasonParams,
+  ["all-team-season-params"],
+  { revalidate: 3600 },
+);
+
 /**
  * Minimal team metadata for the header on /teams/[abbr]. Returns null
  * when no team matches the abbr (e.g. typo in URL).
@@ -2273,6 +2294,27 @@ export const getLeaderboard = unstable_cache(
 export const getPlayerDetail = unstable_cache(
   _getPlayerDetail,
   ["player-detail-v2"],  // v2: grades carry through_week (ADR-0031)
+  { revalidate: 3600 },
+);
+
+
+/**
+ * Every player slug used by `generateStaticParams` on `/players/[slug]`.
+ * Unknown slugs never reach this list; the page 404s after a single
+ * indexed lookup and does not load the full player detail.
+ */
+async function _getAllPlayerSlugs(): Promise<string[]> {
+  const rows = await sql<{ slug: string }[]>`
+    SELECT slug
+    FROM players
+    WHERE slug IS NOT NULL AND slug <> ''
+    ORDER BY slug
+  `;
+  return rows.map((r) => r.slug);
+}
+export const getAllPlayerSlugs = unstable_cache(
+  _getAllPlayerSlugs,
+  ["all-player-slugs"],
   { revalidate: 3600 },
 );
 
