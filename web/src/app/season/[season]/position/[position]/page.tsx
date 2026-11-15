@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { getGradedPositions, getGradedSeasons } from "@/lib/queries";
 
 import {
-  DEFAULT_POSITION,
   generateHomeMetadata,
   HomeLeaderboard,
   POSITION_ORDER,
 } from "../../../../_lib/home";
 
-// ISR. Every graded season × non-default position is prerendered.
+// ISR. Every graded season × position is prerendered, including QB
+// at `/season/[season]/position/QB`.
 export const revalidate = 86400;
+export const dynamic = "force-static";
 export const dynamicParams = true;
 
 type PageProps = {
@@ -24,9 +24,7 @@ export async function generateStaticParams() {
       getGradedSeasons(),
       getGradedPositions(),
     ]);
-    const positions = POSITION_ORDER.filter(
-      (p) => p !== DEFAULT_POSITION && graded.includes(p),
-    );
+    const positions = POSITION_ORDER.filter((p) => graded.includes(p));
     return seasons.flatMap((season) =>
       positions.map((position) => ({ season: String(season), position })),
     );
@@ -48,9 +46,5 @@ export async function generateMetadata({
 
 export default async function SeasonPositionPage({ params }: PageProps) {
   const { season, position } = await params;
-  // QB is already represented by `/season/[season]`.
-  if (position.toUpperCase() === DEFAULT_POSITION) {
-    redirect(`/season/${season}`);
-  }
   return <HomeLeaderboard seasonRaw={season} positionRaw={position} />;
 }
