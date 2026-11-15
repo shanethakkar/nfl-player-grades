@@ -3,34 +3,38 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { homeHref } from "@/lib/paths";
+
 type Props = {
   seasons: number[];
   activeSeason: number;
   /**
-   * When set, links include `position=` so switching seasons preserves the
-   * currently-selected position. `"QB"` is omitted (it's the default).
+   * When set, links include the position path so switching seasons
+   * preserves the currently-selected position. `"QB"` is omitted
+   * (it's the default).
    */
   activePosition?: string;
+  /** Latest graded season; used to keep `/` canonical for that year. */
+  latestSeason?: number;
 };
 
-export function SeasonPicker({ seasons, activeSeason, activePosition }: Props) {
+export function SeasonPicker({
+  seasons,
+  activeSeason,
+  activePosition,
+  latestSeason,
+}: Props) {
   const router = useRouter();
 
   if (seasons.length === 0) return null;
 
-  function buildQuery(season: number): Record<string, string | number> {
-    const q: Record<string, string | number> = { season };
-    if (activePosition && activePosition !== "QB") q.position = activePosition;
-    return q;
+  function hrefFor(season: number) {
+    return homeHref(season, activePosition, latestSeason);
   }
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const q = buildQuery(Number(e.target.value));
-    const qs = new URLSearchParams(
-      Object.entries(q).map(([k, v]) => [k, String(v)]),
-    ).toString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    router.push(`/?${qs}` as any);
+    router.push(hrefFor(Number(e.target.value)) as any);
   }
 
   return (
@@ -65,7 +69,7 @@ export function SeasonPicker({ seasons, activeSeason, activePosition }: Props) {
           return (
             <Link
               key={season}
-              href={{ pathname: "/", query: buildQuery(season) }}
+              href={hrefFor(season)}
               className={
                 isActive
                   ? "rounded-md bg-neutral-100 px-3 py-1 text-sm font-semibold text-neutral-900"

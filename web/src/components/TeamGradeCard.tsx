@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { homeHref } from "@/lib/paths";
+
 import { ProvisionalBadge } from "@/components/ProvisionalBadge";
 import { TeamCareerGradeChart } from "@/components/TeamCareerGradeChart";
 import { gradeColor } from "@/lib/grades";
@@ -193,13 +195,11 @@ function PositionChip({
   // methodology; the chip is for ranking strengths/weaknesses at a glance).
   // The chip is a Link to the corresponding position leaderboard for
   // this season — clicking "QB 89" jumps to the QB Grades page so users
-  // can see who actually drove the number. QB omits `position=` since
-  // it's the default.
-  const query: Record<string, string | number> = { season };
-  if (row.position !== "QB") query.position = row.position;
+  // can see who actually drove the number. QB omits the position
+  // segment since it's the default.
   return (
     <Link
-      href={{ pathname: "/", query }}
+      href={homeHref(season, row.position)}
       className="group/chip inline-flex items-baseline gap-1.5 rounded-md border border-neutral-800/80 bg-neutral-900/50 px-2.5 py-1 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
     >
       <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 group-hover/chip:text-neutral-200">
