@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
+import { teamHref } from "@/lib/paths";
 import type { Conference, Division, Team } from "@/types";
 
 /**
@@ -10,9 +11,9 @@ import type { Conference, Division, Team } from "@/types";
  * page. Native select with optgroups (division-aware) so it stays
  * mobile-friendly and accessible for free.
  *
- * Preserves the current ?season=N query param so switching teams keeps
- * you on the same year (assuming the new team has data for that year —
- * the team page falls back to its latest season if not).
+ * Preserves the current season (now a path segment) so switching teams
+ * keeps you on the same year (assuming the new team has data for that
+ * year — the team page falls back to its latest season if not).
  */
 type Props = {
   teams: Team[];
@@ -38,10 +39,7 @@ export function TeamSwitcher({ teams, activeAbbr, activeSeason }: Props) {
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const next = e.target.value;
     if (!next || next === activeAbbr) return;
-    const url =
-      activeSeason !== null
-        ? `/teams/${next}?season=${activeSeason}`
-        : `/teams/${next}`;
+    const url = teamHref(next, activeSeason);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.push(url as any);
   }

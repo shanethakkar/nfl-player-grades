@@ -8,6 +8,7 @@ import { SparklinePopover } from "@/components/SparklinePopover";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Tooltip } from "@/components/Tooltip";
 import { cbRoleLabel, gradeColor } from "@/lib/grades";
+import { teamHref } from "@/lib/paths";
 import type { LeaderboardEntry } from "@/types";
 
 type Props = {
@@ -1350,7 +1351,7 @@ function Row({
           // highlight — it would just clash with the row's alternating
           // bg color.
           <Link
-            href={{ pathname: `/teams/${e.team_abbr}`, query: { season } }}
+            href={teamHref(e.team_abbr, season)}
             className="group/team inline-flex items-center gap-1.5"
           >
             <TeamLogo abbr={e.team_abbr} size={20} />

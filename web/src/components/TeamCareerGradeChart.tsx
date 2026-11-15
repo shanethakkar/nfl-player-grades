@@ -29,7 +29,7 @@ const HIT_R = 22;
  * `season_grades.composite_grade`.
  *
  * Two interaction layers stack:
- *   - The currently-selected season (driven by `?season=`) always
+ *   - The currently-selected season (driven by the path) always
  *     wears an outline ring so readers can see "you're looking at
  *     this year on the timeline."
  *   - Hovering any dot reveals a popover with season + grade and

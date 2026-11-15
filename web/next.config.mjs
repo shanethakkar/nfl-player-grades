@@ -30,6 +30,24 @@ const nextConfig = {
       },
     ],
   },
+  // Old `?season=` links (in-app shares, crawler indexes) move to
+  // path-based URLs so the team pages can stay static/ISR.
+  async redirects() {
+    return [
+      {
+        source: "/teams",
+        has: [{ type: "query", key: "season", value: "(?<season>\\d{4})" }],
+        destination: "/teams/season/:season",
+        permanent: true,
+      },
+      {
+        source: "/teams/:abbr",
+        has: [{ type: "query", key: "season", value: "(?<season>\\d{4})" }],
+        destination: "/teams/:abbr/:season",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -7,8 +7,9 @@ import { ScrollableTableWrapper } from "@/components/ScrollableTableWrapper";
 import { SparklinePopover } from "@/components/SparklinePopover";
 import { TeamLogo } from "@/components/TeamLogo";
 import { Tooltip } from "@/components/Tooltip";
-import { gradeColor } from "@/lib/grades";
 import { fmtSignedInt } from "@/lib/format";
+import { gradeColor } from "@/lib/grades";
+import { teamHref } from "@/lib/paths";
 import type { TeamLeaderboardEntry } from "@/types";
 
 type Props = {
@@ -35,7 +36,7 @@ type SortableCol = {
  * sticky entity column + sortable numeric columns + click row to drill
  * down. Differences:
  *  - Entity is a team (logo + name), and the whole row is a single
- *    <Link> to /teams/[abbr]?season=N
+ *    <Link> to /teams/[abbr]/[season]
  *  - No "FORMULA / CONTEXT" group banner — every column is treated
  *    equally; the per-position composite already lives on the team page
  *  - No sparklines for v1 (career-grade trend across years is a v2
@@ -211,7 +212,7 @@ function Row({
           {/* Chevron after the team name mirrors the player-row
               treatment — signals "click for the team profile." */}
           <Link
-            href={{ pathname: `/teams/${e.abbr}`, query: { season } }}
+            href={teamHref(e.abbr, season)}
             className="group inline-flex items-center gap-2 hover:text-white"
           >
             <TeamLogo abbr={e.abbr} size={20} />
